@@ -1,3 +1,13 @@
+>*Changes in this clone:* This should build out of the box with
+>MSVC on Win32.
+>
+>  - Added MSVC 9 project files in `VC9/`.
+>  - Added some pre-cooked header files in `VC9/`.
+>  - Moved declarations in front of statements in several `*.c`
+>    files, so pre-C99 compilers (like VC9) can have a go.
+
+****
+
 cmark
 =====
 
