@@ -32,3 +32,6 @@ bstrlib.txt
 build
 cmark.dSYM/*
 cmark
+/VC9/Release
+/VC9/Debug
+/VC9/*.ncb
