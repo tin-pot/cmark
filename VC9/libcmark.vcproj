@@ -2,9 +2,9 @@
 <VisualStudioProject
 	ProjectType="Visual C++"
 	Version="9,00"
-	Name="cmark"
-	ProjectGUID="{0FFFDD0F-2662-4E80-90F2-DCE35926410C}"
-	RootNamespace="cmark"
+	Name="libcmark"
+	ProjectGUID="{A66595B9-2FD4-4103-8D61-3A93AD304D78}"
+	RootNamespace="libcmark"
 	TargetFrameworkVersion="196613"
 	>
 	<Platforms>
@@ -19,7 +19,7 @@
 			Name="Debug|Win32"
 			OutputDirectory="$(SolutionDir)$(ConfigurationName)"
 			IntermediateDirectory="$(ConfigurationName)"
-			ConfigurationType="1"
+			ConfigurationType="4"
 			CharacterSet="2"
 			>
 			<Tool
@@ -44,6 +44,7 @@
 				MinimalRebuild="true"
 				BasicRuntimeChecks="3"
 				RuntimeLibrary="3"
+				ProgramDataBaseFileName="$(IntDir)\libcmark.pdb"
 				WarningLevel="3"
 				DebugInformationFormat="4"
 				DisableSpecificWarnings="4996"
@@ -58,16 +59,10 @@
 				Name="VCPreLinkEventTool"
 			/>
 			<Tool
-				Name="VCLinkerTool"
-				GenerateDebugInformation="true"
-				SubSystem="1"
-				TargetMachine="1"
+				Name="VCLibrarianTool"
 			/>
 			<Tool
 				Name="VCALinkTool"
-			/>
-			<Tool
-				Name="VCManifestTool"
 			/>
 			<Tool
 				Name="VCXDCMakeTool"
@@ -79,9 +74,6 @@
 				Name="VCFxCopTool"
 			/>
 			<Tool
-				Name="VCAppVerifierTool"
-			/>
-			<Tool
 				Name="VCPostBuildEventTool"
 			/>
 		</Configuration>
@@ -89,7 +81,7 @@
 			Name="Release|Win32"
 			OutputDirectory="$(SolutionDir)$(ConfigurationName)"
 			IntermediateDirectory="$(ConfigurationName)"
-			ConfigurationType="1"
+			ConfigurationType="4"
 			CharacterSet="2"
 			WholeProgramOptimization="1"
 			>
@@ -115,6 +107,7 @@
 				AdditionalIncludeDirectories=".\;..\src"
 				RuntimeLibrary="0"
 				EnableFunctionLevelLinking="true"
+				ProgramDataBaseFileName="$(IntDir)\libcmark.pdb"
 				WarningLevel="3"
 				DebugInformationFormat="0"
 				DisableSpecificWarnings="4996"
@@ -129,17 +122,10 @@
 				Name="VCPreLinkEventTool"
 			/>
 			<Tool
-				Name="VCLinkerTool"
-				SubSystem="1"
-				OptimizeReferences="2"
-				EnableCOMDATFolding="2"
-				TargetMachine="1"
+				Name="VCLibrarianTool"
 			/>
 			<Tool
 				Name="VCALinkTool"
-			/>
-			<Tool
-				Name="VCManifestTool"
 			/>
 			<Tool
 				Name="VCXDCMakeTool"
@@ -149,9 +135,6 @@
 			/>
 			<Tool
 				Name="VCFxCopTool"
-			/>
-			<Tool
-				Name="VCAppVerifierTool"
 			/>
 			<Tool
 				Name="VCPostBuildEventTool"
@@ -167,7 +150,79 @@
 			UniqueIdentifier="{4FC737F1-C7A5-4376-A066-2A32D752A2FF}"
 			>
 			<File
-				RelativePath="..\src\main.c"
+				RelativePath="..\src\blocks.c"
+				>
+			</File>
+			<File
+				RelativePath="..\src\buffer.c"
+				>
+			</File>
+			<File
+				RelativePath="..\src\cmark.c"
+				>
+			</File>
+			<File
+				RelativePath="..\src\cmark_ctype.c"
+				>
+			</File>
+			<File
+				RelativePath="..\src\commonmark.c"
+				>
+			</File>
+			<File
+				RelativePath="..\src\houdini_href_e.c"
+				>
+			</File>
+			<File
+				RelativePath="..\src\houdini_html_e.c"
+				>
+			</File>
+			<File
+				RelativePath="..\src\houdini_html_u.c"
+				>
+			</File>
+			<File
+				RelativePath="..\src\html.c"
+				>
+			</File>
+			<File
+				RelativePath="..\src\inlines.c"
+				>
+			</File>
+			<File
+				RelativePath="..\src\iterator.c"
+				>
+			</File>
+			<File
+				RelativePath="..\src\latex.c"
+				>
+			</File>
+			<File
+				RelativePath="..\src\man.c"
+				>
+			</File>
+			<File
+				RelativePath="..\src\node.c"
+				>
+			</File>
+			<File
+				RelativePath="..\src\references.c"
+				>
+			</File>
+			<File
+				RelativePath="..\src\render.c"
+				>
+			</File>
+			<File
+				RelativePath="..\src\scanners.c"
+				>
+			</File>
+			<File
+				RelativePath="..\src\utf8.c"
+				>
+			</File>
+			<File
+				RelativePath="..\src\xml.c"
 				>
 			</File>
 		</Filter>
@@ -176,6 +231,84 @@
 			Filter="h;hpp;hxx;hm;inl;inc;xsd"
 			UniqueIdentifier="{93995380-89BD-4b04-88EB-625FBE52EBFB}"
 			>
+			<File
+				RelativePath="..\src\bench.h"
+				>
+			</File>
+			<File
+				RelativePath="..\src\buffer.h"
+				>
+			</File>
+			<File
+				RelativePath="..\src\chunk.h"
+				>
+			</File>
+			<File
+				RelativePath="..\src\cmark.h"
+				>
+			</File>
+			<File
+				RelativePath="..\src\cmark_ctype.h"
+				>
+			</File>
+			<File
+				RelativePath="..\src\houdini.h"
+				>
+			</File>
+			<File
+				RelativePath="..\src\inlines.h"
+				>
+			</File>
+			<File
+				RelativePath="..\src\iterator.h"
+				>
+			</File>
+			<File
+				RelativePath="..\src\node.h"
+				>
+			</File>
+			<File
+				RelativePath="..\src\parser.h"
+				>
+			</File>
+			<File
+				RelativePath="..\src\references.h"
+				>
+			</File>
+			<File
+				RelativePath="..\src\render.h"
+				>
+			</File>
+			<File
+				RelativePath="..\src\scanners.h"
+				>
+			</File>
+			<File
+				RelativePath="..\src\utf8.h"
+				>
+			</File>
+		</Filter>
+		<Filter
+			Name="Ressourcendateien"
+			Filter="rc;ico;cur;bmp;dlg;rc2;rct;bin;rgs;gif;jpg;jpeg;jpe;resx;tiff;tif;png;wav"
+			UniqueIdentifier="{67DA6AB6-F800-4c08-8B7A-83BB121AAD01}"
+			>
+		</Filter>
+		<Filter
+			Name="Config"
+			>
+			<File
+				RelativePath=".\cmark_export.h"
+				>
+			</File>
+			<File
+				RelativePath=".\cmark_version.h"
+				>
+			</File>
+			<File
+				RelativePath=".\config.h"
+				>
+			</File>
 		</Filter>
 	</Files>
 	<Globals>
