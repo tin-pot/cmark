@@ -47,6 +47,7 @@
 				ProgramDataBaseFileName="$(IntDir)\libcmark.pdb"
 				WarningLevel="3"
 				DebugInformationFormat="4"
+				CompileAs="1"
 				DisableSpecificWarnings="4996"
 			/>
 			<Tool
@@ -110,6 +111,7 @@
 				ProgramDataBaseFileName="$(IntDir)\libcmark.pdb"
 				WarningLevel="3"
 				DebugInformationFormat="0"
+				CompileAs="1"
 				DisableSpecificWarnings="4996"
 			/>
 			<Tool
