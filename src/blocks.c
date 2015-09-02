@@ -237,6 +237,7 @@ static cmark_node *finalize(cmark_parser *parser, cmark_node *b) {
       remove_trailing_blank_lines(&b->string_content);
       cmark_strbuf_putc(&b->string_content, '\n');
     } else {
+      cmark_strbuf tmp = GH_BUF_INIT;
 
       // first line of contents becomes info
       for (pos = 0; pos < b->string_content.size; ++pos) {
@@ -245,7 +246,6 @@ static cmark_node *finalize(cmark_parser *parser, cmark_node *b) {
       }
       assert(pos < b->string_content.size);
 
-      cmark_strbuf tmp = GH_BUF_INIT;
       houdini_unescape_html_f(&tmp, b->string_content.ptr, pos);
       cmark_strbuf_trim(&tmp);
       cmark_strbuf_unescape(&tmp);
@@ -301,6 +301,7 @@ static cmark_node *finalize(cmark_parser *parser, cmark_node *b) {
 // Add a node as child of another.  Return pointer to child.
 static cmark_node *add_child(cmark_parser *parser, cmark_node *parent,
                              cmark_node_type block_type, int start_column) {
+  cmark_node *child;
   assert(parent);
 
   // if 'parent' isn't the kind of node that can accept this child,
@@ -309,7 +310,7 @@ static cmark_node *add_child(cmark_parser *parser, cmark_node *parent,
     parent = finalize(parser, parent);
   }
 
-  cmark_node *child = make_block(block_type, parser->line_number, start_column);
+  child = make_block(block_type, parser->line_number, start_column);
   child->parent = parent;
 
   if (parent->last_child) {
@@ -749,15 +750,16 @@ static void S_process_line(cmark_parser *parser, const unsigned char *buffer,
 
     } else if (!indented && (matched = scan_atx_header_start(
                                  &input, parser->first_nonspace))) {
+      bufsize_t hashpos;
+      int level;
 
       S_advance_offset(parser, &input,
                        parser->first_nonspace + matched - parser->offset,
                        false);
       container = add_child(parser, container, NODE_HEADER, parser->offset + 1);
 
-      bufsize_t hashpos =
-          cmark_chunk_strchr(&input, '#', parser->first_nonspace);
-      int level = 0;
+      hashpos = cmark_chunk_strchr(&input, '#', parser->first_nonspace);
+      level = 0;
 
       while (peek_at(&input, hashpos) == '#') {
         level++;
@@ -902,10 +904,12 @@ static void S_process_line(cmark_parser *parser, const unsigned char *buffer,
        !(container->type == NODE_ITEM && container->first_child == NULL &&
          container->start_line == parser->line_number));
 
-  cmark_node *cont = container;
-  while (cont->parent) {
-    cont->parent->last_line_blank = false;
-    cont = cont->parent;
+  {
+      cmark_node *cont = container;
+      while (cont->parent) {
+        cont->parent->last_line_blank = false;
+        cont = cont->parent;
+      }
   }
 
   if (parser->current != last_matched_container &&
@@ -929,9 +933,10 @@ static void S_process_line(cmark_parser *parser, const unsigned char *buffer,
 
     } else if (container->type == NODE_HTML) {
 
+      int matches_end_condition;
+
       add_line(container, &input, parser->offset);
 
-      int matches_end_condition;
       switch (container->as.html_block_type) {
       case 1:
         // </script>, </style>, </pre>

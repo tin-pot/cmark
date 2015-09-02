@@ -225,13 +225,16 @@ static bufsize_t scan_to_closing_backticks(subject *subj,
                                            bufsize_t openticklength) {
   // read non backticks
   unsigned char c;
+  bufsize_t numticks;
+
   while ((c = peek_char(subj)) && c != '`') {
     advance(subj);
   }
   if (is_eof(subj)) {
     return 0; // did not find closing ticks, return 0
   }
-  bufsize_t numticks = 0;
+
+  numticks = 0;
   while (peek_char(subj) == '`') {
     advance(subj);
     numticks++;
@@ -409,7 +412,12 @@ static cmark_node *handle_delim(subject *subj, unsigned char c, bool smart) {
 
 // Assumes we have a hyphen at the current position.
 static cmark_node *handle_hyphen(subject *subj, bool smart) {
+  cmark_strbuf buf = GH_BUF_INIT;
   int startpos = subj->pos;
+  int numhyphens;
+  int en_count = 0;
+  int em_count = 0;
+  int i;
 
   advance(subj);
 
@@ -421,12 +429,7 @@ static cmark_node *handle_hyphen(subject *subj, bool smart) {
     advance(subj);
   }
 
-  int numhyphens = subj->pos - startpos;
-  int en_count = 0;
-  int em_count = 0;
-  int i;
-  cmark_strbuf buf = GH_BUF_INIT;
-
+  numhyphens = subj->pos - startpos;
   if (numhyphens % 3 == 0) { // if divisible by 3, use all em dashes
     em_count = numhyphens / 3;
   } else if (numhyphens % 2 == 0) { // if divisible by 2, use all en dashes
@@ -624,8 +627,11 @@ static delimiter *S_insert_emph(subject *subj, delimiter *opener,
 
 // Parse backslash-escape or just a backslash, returning an inline.
 static cmark_node *handle_backslash(subject *subj) {
+  unsigned char nextchar;
+
   advance(subj);
-  unsigned char nextchar = peek_char(subj);
+  nextchar = peek_char(subj);
+
   if (cmark_ispunct(
           nextchar)) { // only ascii symbols and newline can be escaped
     advance(subj);

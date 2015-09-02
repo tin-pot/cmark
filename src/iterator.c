@@ -13,10 +13,13 @@ static const int S_leaf_mask =
     (1 << CMARK_NODE_CODE) | (1 << CMARK_NODE_INLINE_HTML);
 
 cmark_iter *cmark_iter_new(cmark_node *root) {
+  cmark_iter *iter;
+
   if (root == NULL) {
     return NULL;
   }
-  cmark_iter *iter = (cmark_iter *)malloc(sizeof(cmark_iter));
+
+  iter = (cmark_iter *)malloc(sizeof(cmark_iter));
   if (iter == NULL) {
     return NULL;
   }

@@ -230,7 +230,8 @@ static int S_render_node(cmark_renderer *renderer, cmark_node *node,
 
   case CMARK_NODE_HEADER:
     if (entering) {
-      for (int i = cmark_node_get_header_level(node); i > 0; i--) {
+      int i;
+      for (i = cmark_node_get_header_level(node); i > 0; i--) {
         LIT("#");
       }
       LIT(" ");

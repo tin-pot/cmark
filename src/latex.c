@@ -145,7 +145,10 @@ static inline void outc(cmark_renderer *renderer, cmark_escaping escape,
 typedef enum { NO_LINK, URL_AUTOLINK, EMAIL_AUTOLINK, NORMAL_LINK } link_type;
 
 static link_type get_link_type(cmark_node *node) {
+  const char *url;
+  const char *title;
   size_t title_len, url_len;
+  cmark_chunk url_chunk;
   cmark_node *link_text;
   char *realurl;
   int realurllen;
@@ -155,15 +158,15 @@ static link_type get_link_type(cmark_node *node) {
     return NO_LINK;
   }
 
-  const char *url = cmark_node_get_url(node);
-  cmark_chunk url_chunk = cmark_chunk_literal(url);
+  url = cmark_node_get_url(node);
+  url_chunk = cmark_chunk_literal(url);
 
   url_len = safe_strlen(url);
   if (url_len == 0 || scan_scheme(&url_chunk, 0) == 0) {
     return NO_LINK;
   }
 
-  const char *title = cmark_node_get_title(node);
+  title = cmark_node_get_title(node);
   title_len = safe_strlen(title);
   // if it has a title, we can't treat it as an autolink:
   if (title_len > 0) {

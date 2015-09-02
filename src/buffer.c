@@ -49,6 +49,7 @@ static inline void S_strbuf_grow_by(cmark_strbuf *buf, size_t add) {
 
 void cmark_strbuf_grow(cmark_strbuf *buf, bufsize_t target_size) {
   unsigned char *new_ptr;
+  size_t new_size;
 
   if (target_size < buf->asize)
     return;
@@ -61,7 +62,7 @@ void cmark_strbuf_grow(cmark_strbuf *buf, bufsize_t target_size) {
 
   /* Oversize the buffer by 50% to guarantee amortized linear time
    * complexity on append operations. */
-  size_t new_size = (size_t)target_size + (size_t)target_size / 2;
+  new_size = (size_t)target_size + (size_t)target_size / 2;
 
   /* Account for terminating null byte. */
   new_size += 1;
@@ -198,13 +199,14 @@ int cmark_strbuf_cmp(const cmark_strbuf *a, const cmark_strbuf *b) {
 }
 
 bufsize_t cmark_strbuf_strchr(const cmark_strbuf *buf, int c, bufsize_t pos) {
+  const unsigned char *p;
+
   if (pos >= buf->size)
     return -1;
   if (pos < 0)
     pos = 0;
 
-  const unsigned char *p =
-      (unsigned char *)memchr(buf->ptr + pos, c, buf->size - pos);
+  p = (unsigned char *)memchr(buf->ptr + pos, c, buf->size - pos);
   if (!p)
     return -1;
 
@@ -212,12 +214,14 @@ bufsize_t cmark_strbuf_strchr(const cmark_strbuf *buf, int c, bufsize_t pos) {
 }
 
 bufsize_t cmark_strbuf_strrchr(const cmark_strbuf *buf, int c, bufsize_t pos) {
+  bufsize_t i;
+
   if (pos < 0 || buf->size == 0)
     return -1;
   if (pos >= buf->size)
     pos = buf->size - 1;
 
-  for (bufsize_t i = pos; i >= 0; i--) {
+  for (i = pos; i >= 0; i--) {
     if (buf->ptr[i] == (unsigned char)c)
       return i;
   }

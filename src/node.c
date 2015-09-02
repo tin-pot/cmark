@@ -554,6 +554,8 @@ int cmark_node_get_end_column(cmark_node *node) {
 
 // Unlink a node without adjusting its next, prev, and parent pointers.
 static void S_node_unlink(cmark_node *node) {
+  cmark_node *parent;
+
   if (node == NULL) {
     return;
   }
@@ -566,7 +568,7 @@ static void S_node_unlink(cmark_node *node) {
   }
 
   // Adjust first_child and last_child of parent.
-  cmark_node *parent = node->parent;
+  parent = node->parent;
   if (parent) {
     if (parent->first_child == node) {
       parent->first_child = node->next;
@@ -586,6 +588,9 @@ void cmark_node_unlink(cmark_node *node) {
 }
 
 int cmark_node_insert_before(cmark_node *node, cmark_node *sibling) {
+  cmark_node *old_prev;
+  cmark_node *parent;
+
   if (node == NULL || sibling == NULL) {
     return 0;
   }
@@ -596,7 +601,7 @@ int cmark_node_insert_before(cmark_node *node, cmark_node *sibling) {
 
   S_node_unlink(sibling);
 
-  cmark_node *old_prev = node->prev;
+  old_prev = node->prev;
 
   // Insert 'sibling' between 'old_prev' and 'node'.
   if (old_prev) {
@@ -607,7 +612,7 @@ int cmark_node_insert_before(cmark_node *node, cmark_node *sibling) {
   node->prev = sibling;
 
   // Set new parent.
-  cmark_node *parent = node->parent;
+  parent = node->parent;
   sibling->parent = parent;
 
   // Adjust first_child of parent if inserted as first child.
@@ -619,6 +624,9 @@ int cmark_node_insert_before(cmark_node *node, cmark_node *sibling) {
 }
 
 int cmark_node_insert_after(cmark_node *node, cmark_node *sibling) {
+  cmark_node *parent;
+  cmark_node *old_next;
+
   if (node == NULL || sibling == NULL) {
     return 0;
   }
@@ -629,7 +637,7 @@ int cmark_node_insert_after(cmark_node *node, cmark_node *sibling) {
 
   S_node_unlink(sibling);
 
-  cmark_node *old_next = node->next;
+  old_next = node->next;
 
   // Insert 'sibling' between 'node' and 'old_next'.
   if (old_next) {
@@ -640,7 +648,7 @@ int cmark_node_insert_after(cmark_node *node, cmark_node *sibling) {
   node->next = sibling;
 
   // Set new parent.
-  cmark_node *parent = node->parent;
+  parent = node->parent;
   sibling->parent = parent;
 
   // Adjust last_child of parent if inserted as last child.
@@ -652,13 +660,15 @@ int cmark_node_insert_after(cmark_node *node, cmark_node *sibling) {
 }
 
 int cmark_node_prepend_child(cmark_node *node, cmark_node *child) {
+  cmark_node *old_first_child;
+
   if (!S_can_contain(node, child)) {
     return 0;
   }
 
   S_node_unlink(child);
 
-  cmark_node *old_first_child = node->first_child;
+  old_first_child = node->first_child;
 
   child->next = old_first_child;
   child->prev = NULL;
@@ -676,13 +686,15 @@ int cmark_node_prepend_child(cmark_node *node, cmark_node *child) {
 }
 
 int cmark_node_append_child(cmark_node *node, cmark_node *child) {
+  cmark_node *old_last_child;
+
   if (!S_can_contain(node, child)) {
     return 0;
   }
 
   S_node_unlink(child);
 
-  cmark_node *old_last_child = node->last_child;
+  old_last_child = node->last_child;
 
   child->next = NULL;
   child->prev = old_last_child;
