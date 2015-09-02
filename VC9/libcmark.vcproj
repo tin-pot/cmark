@@ -222,6 +222,10 @@
 				>
 			</File>
 			<File
+				RelativePath="..\src\xhtml.c"
+				>
+			</File>
+			<File
 				RelativePath="..\src\xml.c"
 				>
 			</File>

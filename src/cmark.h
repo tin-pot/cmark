@@ -432,6 +432,12 @@ char *cmark_render_xml(cmark_node *root, int options);
 CMARK_EXPORT
 char *cmark_render_html(cmark_node *root, int options);
 
+/** Render a 'node' tree as an XHTML fragment.  It is up to the user
+ * to add an appropriate header and footer.
+ */
+CMARK_EXPORT
+char *cmark_render_xhtml(cmark_node *root, int options);
+
 /** Render a 'node' tree as a groff man page, without the header.
  */
 CMARK_EXPORT

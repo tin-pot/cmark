@@ -14,6 +14,7 @@
 typedef enum {
   FORMAT_NONE,
   FORMAT_HTML,
+  FORMAT_XHTML,
   FORMAT_XML,
   FORMAT_MAN,
   FORMAT_COMMONMARK,
@@ -23,7 +24,7 @@ typedef enum {
 void print_usage() {
   printf("Usage:   cmark [FILE*]\n");
   printf("Options:\n");
-  printf("  --to, -t FORMAT  Specify output format (html, xml, man, "
+  printf("  --to, -t FORMAT  Specify output format (html, xhtml, xml, man, "
          "commonmark, latex)\n");
   printf("  --width WIDTH    Specify wrap width (default 0 = nowrap)\n");
   printf("  --sourcepos      Include source position attribute\n");
@@ -42,6 +43,9 @@ static void print_document(cmark_node *document, writer_format writer,
   switch (writer) {
   case FORMAT_HTML:
     result = cmark_render_html(document, options);
+    break;
+  case FORMAT_XHTML:
+    result = cmark_render_xhtml(document, options);
     break;
   case FORMAT_XML:
     result = cmark_render_xml(document, options);
@@ -122,6 +126,8 @@ int main(int argc, char *argv[]) {
           writer = FORMAT_MAN;
         } else if (strcmp(argv[i], "html") == 0) {
           writer = FORMAT_HTML;
+        } else if (strcmp(argv[i], "xhtml") == 0) {
+          writer = FORMAT_XHTML;
         } else if (strcmp(argv[i], "xml") == 0) {
           writer = FORMAT_XML;
         } else if (strcmp(argv[i], "commonmark") == 0) {

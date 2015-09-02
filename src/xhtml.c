@@ -43,8 +43,8 @@ static int S_render_node(cmark_node *node, cmark_event_type ev_type,
   cmark_node *parent;
   cmark_node *grandparent;
   cmark_strbuf *html = state->html;
-  char start_header[] = "<H0";
-  char end_header[] = "</H0";
+  char start_header[] = "<h0";
+  char end_header[] = "</h0";
   bool tight;
   char buffer[100];
 
@@ -80,12 +80,12 @@ static int S_render_node(cmark_node *node, cmark_event_type ev_type,
   case CMARK_NODE_BLOCK_QUOTE:
     if (entering) {
       cr(html);
-      cmark_strbuf_puts(html, "<BLOCKQUOTE");
+      cmark_strbuf_puts(html, "<blockquote");
       S_render_sourcepos(node, html, options);
       cmark_strbuf_puts(html, ">\n");
     } else {
       cr(html);
-      cmark_strbuf_puts(html, "</BLOCKQUOTE>\n");
+      cmark_strbuf_puts(html, "</blockquote>\n");
     }
     break;
 
@@ -96,22 +96,22 @@ static int S_render_node(cmark_node *node, cmark_event_type ev_type,
     if (entering) {
       cr(html);
       if (list_type == CMARK_BULLET_LIST) {
-        cmark_strbuf_puts(html, "<UL");
+        cmark_strbuf_puts(html, "<ul");
         S_render_sourcepos(node, html, options);
         cmark_strbuf_puts(html, ">\n");
       } else if (start == 1) {
-        cmark_strbuf_puts(html, "<OL");
+        cmark_strbuf_puts(html, "<ol");
         S_render_sourcepos(node, html, options);
         cmark_strbuf_puts(html, ">\n");
       } else {
-        sprintf(buffer, "<OL start=\"%d\"", start);
+        sprintf(buffer, "<ol start=\"%d\"", start);
         cmark_strbuf_puts(html, buffer);
         S_render_sourcepos(node, html, options);
         cmark_strbuf_puts(html, ">\n");
       }
     } else {
       cmark_strbuf_puts(html,
-                        list_type == CMARK_BULLET_LIST ? "</UL>\n" : "</OL>\n");
+                        list_type == CMARK_BULLET_LIST ? "</ul>\n" : "</ol>\n");
     }
     break;
   }
@@ -119,11 +119,11 @@ static int S_render_node(cmark_node *node, cmark_event_type ev_type,
   case CMARK_NODE_ITEM:
     if (entering) {
       cr(html);
-      cmark_strbuf_puts(html, "<LI");
+      cmark_strbuf_puts(html, "<li");
       S_render_sourcepos(node, html, options);
       cmark_strbuf_putc(html, '>');
     } else {
-      cmark_strbuf_puts(html, "</LI>\n");
+      cmark_strbuf_puts(html, "</li>\n");
     }
     break;
 
@@ -145,7 +145,7 @@ static int S_render_node(cmark_node *node, cmark_event_type ev_type,
     cr(html);
 
     if (!node->as.code.fenced || node->as.code.info.len == 0) {
-      cmark_strbuf_puts(html, "<PRE");
+      cmark_strbuf_puts(html, "<pre");
       S_render_sourcepos(node, html, options);
       cmark_strbuf_puts(html, "><code>");
     } else {
@@ -155,7 +155,7 @@ static int S_render_node(cmark_node *node, cmark_event_type ev_type,
         first_tag += 1;
       }
 
-      cmark_strbuf_puts(html, "<PRE");
+      cmark_strbuf_puts(html, "<pre");
       S_render_sourcepos(node, html, options);
       cmark_strbuf_puts(html, "><code class=\"language-");
       escape_html(html, node->as.code.info.data, first_tag);
@@ -163,7 +163,7 @@ static int S_render_node(cmark_node *node, cmark_event_type ev_type,
     }
 
     escape_html(html, node->as.code.literal.data, node->as.code.literal.len);
-    cmark_strbuf_puts(html, "</CODE></PRE>\n");
+    cmark_strbuf_puts(html, "</code></pre>\n");
     break;
 
   case CMARK_NODE_HTML:
@@ -178,9 +178,9 @@ static int S_render_node(cmark_node *node, cmark_event_type ev_type,
 
   case CMARK_NODE_HRULE:
     cr(html);
-    cmark_strbuf_puts(html, "<HR");
+    cmark_strbuf_puts(html, "<hr");
     S_render_sourcepos(node, html, options);
-    cmark_strbuf_puts(html, ">\n");
+    cmark_strbuf_puts(html, " />\n");
     break;
 
   case CMARK_NODE_PARAGRAPH:
@@ -194,11 +194,11 @@ static int S_render_node(cmark_node *node, cmark_event_type ev_type,
     if (!tight) {
       if (entering) {
         cr(html);
-        cmark_strbuf_puts(html, "<P");
+        cmark_strbuf_puts(html, "<p");
         S_render_sourcepos(node, html, options);
         cmark_strbuf_putc(html, '>');
       } else {
-        cmark_strbuf_puts(html, "</P>\n");
+        cmark_strbuf_puts(html, "</p>\n");
       }
     }
     break;
@@ -208,21 +208,21 @@ static int S_render_node(cmark_node *node, cmark_event_type ev_type,
     break;
 
   case CMARK_NODE_LINEBREAK:
-    cmark_strbuf_puts(html, "<BR>\n");
+    cmark_strbuf_puts(html, "<br />\n");
     break;
 
   case CMARK_NODE_SOFTBREAK:
     if (options & CMARK_OPT_HARDBREAKS) {
-      cmark_strbuf_puts(html, "<BR>\n");
+      cmark_strbuf_puts(html, "<br />\n");
     } else {
       cmark_strbuf_putc(html, '\n');
     }
     break;
 
   case CMARK_NODE_CODE:
-    cmark_strbuf_puts(html, "<CODE>");
+    cmark_strbuf_puts(html, "<code>");
     escape_html(html, node->as.literal.data, node->as.literal.len);
-    cmark_strbuf_puts(html, "</CODE>");
+    cmark_strbuf_puts(html, "</code>");
     break;
 
   case CMARK_NODE_INLINE_HTML:
@@ -235,23 +235,23 @@ static int S_render_node(cmark_node *node, cmark_event_type ev_type,
 
   case CMARK_NODE_STRONG:
     if (entering) {
-      cmark_strbuf_puts(html, "<STRONG>");
+      cmark_strbuf_puts(html, "<strong>");
     } else {
-      cmark_strbuf_puts(html, "</STRONG>");
+      cmark_strbuf_puts(html, "</strong>");
     }
     break;
 
   case CMARK_NODE_EMPH:
     if (entering) {
-      cmark_strbuf_puts(html, "<EM>");
+      cmark_strbuf_puts(html, "<em>");
     } else {
-      cmark_strbuf_puts(html, "</EM>");
+      cmark_strbuf_puts(html, "</em>");
     }
     break;
 
   case CMARK_NODE_LINK:
     if (entering) {
-      cmark_strbuf_puts(html, "<A href=\"");
+      cmark_strbuf_puts(html, "<a href=\"");
       if (!((options & CMARK_OPT_SAFE) &&
             scan_dangerous_url(&node->as.link.url, 0))) {
         houdini_escape_href(html, node->as.link.url.data,
@@ -263,13 +263,13 @@ static int S_render_node(cmark_node *node, cmark_event_type ev_type,
       }
       cmark_strbuf_puts(html, "\">");
     } else {
-      cmark_strbuf_puts(html, "</A>");
+      cmark_strbuf_puts(html, "</a>");
     }
     break;
 
   case CMARK_NODE_IMAGE:
     if (entering) {
-      cmark_strbuf_puts(html, "<IMG src=\"");
+      cmark_strbuf_puts(html, "<img src=\"");
       if (!((options & CMARK_OPT_SAFE) &&
             scan_dangerous_url(&node->as.link.url, 0))) {
         houdini_escape_href(html, node->as.link.url.data,
@@ -283,7 +283,7 @@ static int S_render_node(cmark_node *node, cmark_event_type ev_type,
         escape_html(html, node->as.link.title.data, node->as.link.title.len);
       }
 
-      cmark_strbuf_puts(html, "\">");
+      cmark_strbuf_puts(html, "\" />");
     }
     break;
 
@@ -296,7 +296,7 @@ static int S_render_node(cmark_node *node, cmark_event_type ev_type,
   return 1;
 }
 
-char *cmark_render_html(cmark_node *root, int options) {
+char *cmark_render_xhtml(cmark_node *root, int options) {
   char *result;
   cmark_strbuf html = GH_BUF_INIT;
   cmark_event_type ev_type;
