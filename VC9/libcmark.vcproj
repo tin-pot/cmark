@@ -171,10 +171,6 @@
 				>
 			</File>
 			<File
-				RelativePath="..\src\entities.inc"
-				>
-			</File>
-			<File
 				RelativePath="..\src\houdini_href_e.c"
 				>
 			</File>
@@ -259,6 +255,24 @@
 			<File
 				RelativePath="..\src\cmark_ctype.h"
 				>
+			</File>
+			<File
+				RelativePath="..\src\entities.inc"
+				>
+				<FileConfiguration
+					Name="Debug|Win32"
+					>
+					<Tool
+						Name="VCCustomBuildTool"
+					/>
+				</FileConfiguration>
+				<FileConfiguration
+					Name="Release|Win32"
+					>
+					<Tool
+						Name="VCCustomBuildTool"
+					/>
+				</FileConfiguration>
 			</File>
 			<File
 				RelativePath="..\src\houdini.h"
