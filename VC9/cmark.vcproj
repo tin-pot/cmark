@@ -44,9 +44,10 @@
 				MinimalRebuild="true"
 				BasicRuntimeChecks="3"
 				RuntimeLibrary="3"
-				WarningLevel="3"
+				WarningLevel="4"
 				DebugInformationFormat="4"
-				DisableSpecificWarnings="4996"
+				CompileAs="1"
+				DisableSpecificWarnings="4996; 4001"
 			/>
 			<Tool
 				Name="VCManagedResourceCompilerTool"
@@ -60,6 +61,7 @@
 			<Tool
 				Name="VCLinkerTool"
 				GenerateDebugInformation="true"
+				MapExports="true"
 				SubSystem="1"
 				TargetMachine="1"
 			/>
@@ -113,11 +115,11 @@
 				Optimization="2"
 				EnableIntrinsicFunctions="true"
 				AdditionalIncludeDirectories=".\;..\src"
-				RuntimeLibrary="0"
 				EnableFunctionLevelLinking="true"
 				WarningLevel="3"
 				DebugInformationFormat="0"
-				DisableSpecificWarnings="4996"
+				CompileAs="1"
+				DisableSpecificWarnings="4996; 4001"
 			/>
 			<Tool
 				Name="VCManagedResourceCompilerTool"
@@ -130,6 +132,8 @@
 			/>
 			<Tool
 				Name="VCLinkerTool"
+				GenerateMapFile="true"
+				MapExports="true"
 				SubSystem="1"
 				OptimizeReferences="2"
 				EnableCOMDATFolding="2"
