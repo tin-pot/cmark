@@ -45,7 +45,7 @@
 				BasicRuntimeChecks="3"
 				RuntimeLibrary="3"
 				ProgramDataBaseFileName="$(IntDir)\libcmark.pdb"
-				WarningLevel="4"
+				WarningLevel="3"
 				DebugInformationFormat="4"
 				CompileAs="1"
 				DisableSpecificWarnings="4996; 4001"
@@ -168,6 +168,10 @@
 			</File>
 			<File
 				RelativePath="..\src\commonmark.c"
+				>
+			</File>
+			<File
+				RelativePath="..\src\entities.inc"
 				>
 			</File>
 			<File
