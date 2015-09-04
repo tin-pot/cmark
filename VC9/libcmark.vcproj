@@ -48,7 +48,7 @@
 				WarningLevel="3"
 				DebugInformationFormat="4"
 				CompileAs="1"
-				DisableSpecificWarnings="4996"
+				DisableSpecificWarnings="4996; 4001"
 			/>
 			<Tool
 				Name="VCManagedResourceCompilerTool"
@@ -106,13 +106,12 @@
 				Optimization="2"
 				EnableIntrinsicFunctions="true"
 				AdditionalIncludeDirectories=".\;..\src"
-				RuntimeLibrary="0"
 				EnableFunctionLevelLinking="true"
 				ProgramDataBaseFileName="$(IntDir)\libcmark.pdb"
 				WarningLevel="3"
 				DebugInformationFormat="0"
 				CompileAs="1"
-				DisableSpecificWarnings="4996"
+				DisableSpecificWarnings="4996; 4001"
 			/>
 			<Tool
 				Name="VCManagedResourceCompilerTool"
@@ -258,6 +257,24 @@
 				>
 			</File>
 			<File
+				RelativePath="..\src\entities.inc"
+				>
+				<FileConfiguration
+					Name="Debug|Win32"
+					>
+					<Tool
+						Name="VCCustomBuildTool"
+					/>
+				</FileConfiguration>
+				<FileConfiguration
+					Name="Release|Win32"
+					>
+					<Tool
+						Name="VCCustomBuildTool"
+					/>
+				</FileConfiguration>
+			</File>
+			<File
 				RelativePath="..\src\houdini.h"
 				>
 			</File>
@@ -293,12 +310,6 @@
 				RelativePath="..\src\utf8.h"
 				>
 			</File>
-		</Filter>
-		<Filter
-			Name="Ressourcendateien"
-			Filter="rc;ico;cur;bmp;dlg;rc2;rct;bin;rgs;gif;jpg;jpeg;jpe;resx;tiff;tif;png;wav"
-			UniqueIdentifier="{67DA6AB6-F800-4c08-8B7A-83BB121AAD01}"
-			>
 		</Filter>
 		<Filter
 			Name="Config"

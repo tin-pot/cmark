@@ -2,9 +2,9 @@
 <VisualStudioProject
 	ProjectType="Visual C++"
 	Version="9,00"
-	Name="cmark"
-	ProjectGUID="{0FFFDD0F-2662-4E80-90F2-DCE35926410C}"
-	RootNamespace="cmark"
+	Name="cmarkhtml"
+	ProjectGUID="{0DF9F1FC-9A93-498B-BB5D-0A6948284CA5}"
+	RootNamespace="cm2html"
 	TargetFrameworkVersion="196613"
 	>
 	<Platforms>
@@ -61,8 +61,6 @@
 			<Tool
 				Name="VCLinkerTool"
 				GenerateDebugInformation="true"
-				MapExports="true"
-				SubSystem="1"
 				TargetMachine="1"
 			/>
 			<Tool
@@ -117,7 +115,7 @@
 				AdditionalIncludeDirectories=".\;..\src"
 				EnableFunctionLevelLinking="true"
 				WarningLevel="3"
-				DebugInformationFormat="0"
+				DebugInformationFormat="3"
 				CompileAs="1"
 				DisableSpecificWarnings="4996; 4001"
 			/>
@@ -132,9 +130,7 @@
 			/>
 			<Tool
 				Name="VCLinkerTool"
-				GenerateMapFile="true"
-				MapExports="true"
-				SubSystem="1"
+				GenerateDebugInformation="true"
 				OptimizeReferences="2"
 				EnableCOMDATFolding="2"
 				TargetMachine="1"
@@ -171,7 +167,7 @@
 			UniqueIdentifier="{4FC737F1-C7A5-4376-A066-2A32D752A2FF}"
 			>
 			<File
-				RelativePath="..\src\main.c"
+				RelativePath="..\src\cmarkhtml.c"
 				>
 			</File>
 		</Filter>
