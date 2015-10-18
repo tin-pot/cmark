@@ -18,12 +18,14 @@
 		<Configuration
 			Name="Debug|Win32"
 			OutputDirectory="$(SolutionDir)$(ConfigurationName)"
-			IntermediateDirectory="$(ConfigurationName)"
+			IntermediateDirectory="$(ConfigurationName)\$(ProjectName)"
 			ConfigurationType="1"
 			CharacterSet="2"
 			>
 			<Tool
 				Name="VCPreBuildEventTool"
+				Description="Getting Git revision."
+				CommandLine="for /f %%i in (&apos;git show-ref -s16 origin/master ^&quot;$(ProjectDir)..&apos;) do ( echo #define GITIDENT &quot;%%i&quot; &gt; &quot;..\src\gitident.h&quot; )"
 			/>
 			<Tool
 				Name="VCCustomBuildTool"
@@ -88,13 +90,15 @@
 		<Configuration
 			Name="Release|Win32"
 			OutputDirectory="$(SolutionDir)$(ConfigurationName)"
-			IntermediateDirectory="$(ConfigurationName)"
+			IntermediateDirectory="$(ConfigurationName)\$(ProjectName)"
 			ConfigurationType="1"
 			CharacterSet="2"
 			WholeProgramOptimization="1"
 			>
 			<Tool
 				Name="VCPreBuildEventTool"
+				Description="Getting Git revision."
+				CommandLine="for /f %%i in (&apos;git show-ref -s16 origin/master ^&quot;$(ProjectDir)..&apos;) do ( echo #define GITIDENT &quot;%%i&quot; &gt; &quot;..\src\gitident.h&quot; )"
 			/>
 			<Tool
 				Name="VCCustomBuildTool"
@@ -176,6 +180,10 @@
 			Filter="h;hpp;hxx;hm;inl;inc;xsd"
 			UniqueIdentifier="{93995380-89BD-4b04-88EB-625FBE52EBFB}"
 			>
+			<File
+				RelativePath="..\src\repourl.h"
+				>
+			</File>
 		</Filter>
 	</Files>
 	<Globals>
