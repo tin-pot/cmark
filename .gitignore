@@ -38,3 +38,4 @@ cmark
 /VC9/*.suo
 /VC9/*.user
 /src/gitident.h
+/src/repourl.h
