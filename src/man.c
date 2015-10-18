@@ -70,7 +70,7 @@ static void S_outc(cmark_renderer *renderer, cmark_escaping escape, int32_t c,
 }
 
 static int S_render_node(cmark_renderer *renderer, cmark_node *node,
-                         cmark_event_type ev_type, int options) {
+                         cmark_event_type ev_type, cmark_option_t options) {
   cmark_node *tmp;
   int list_number;
   bool entering = (ev_type == CMARK_EVENT_ENTER);
@@ -231,6 +231,6 @@ static int S_render_node(cmark_renderer *renderer, cmark_node *node,
   return 1;
 }
 
-char *cmark_render_man(cmark_node *root, int options, int width) {
+char *cmark_render_man(cmark_node *root, cmark_option_t options, int width) {
   return cmark_render(root, options, width, S_outc, S_render_node);
 }

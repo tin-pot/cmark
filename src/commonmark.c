@@ -144,7 +144,7 @@ static cmark_node *get_containing_block(cmark_node *node) {
 }
 
 static int S_render_node(cmark_renderer *renderer, cmark_node *node,
-                         cmark_event_type ev_type, int options) {
+                         cmark_event_type ev_type, cmark_option_t options) {
   cmark_node *tmp;
   int list_number;
   cmark_delim_type list_delim;
@@ -418,7 +418,7 @@ static int S_render_node(cmark_renderer *renderer, cmark_node *node,
   return 1;
 }
 
-char *cmark_render_commonmark(cmark_node *root, int options, int width) {
+char *cmark_render_commonmark(cmark_node *root, cmark_option_t options, int width) {
   if (options & CMARK_OPT_HARDBREAKS) {
     // disable breaking on width, since it has
     // a different meaning with OPT_HARDBREAKS

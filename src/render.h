@@ -33,12 +33,12 @@ void cmark_render_ascii(cmark_renderer *renderer, const char *s);
 
 void cmark_render_code_point(cmark_renderer *renderer, uint32_t c);
 
-char *cmark_render(cmark_node *root, int options, int width,
+char *cmark_render(cmark_node *root, cmark_option_t options, int width,
                    void (*outc)(cmark_renderer *, cmark_escaping, int32_t,
                                 unsigned char),
                    int (*render_node)(cmark_renderer *renderer,
                                       cmark_node *node,
-                                      cmark_event_type ev_type, int options));
+                                      cmark_event_type ev_type, cmark_option_t options));
 
 #ifdef __cplusplus
 }

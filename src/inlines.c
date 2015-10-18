@@ -55,11 +55,11 @@ static inline bool S_is_line_end_char(char c) {
 static delimiter *S_insert_emph(subject *subj, delimiter *opener,
                                 delimiter *closer);
 
-static int parse_inline(subject *subj, cmark_node *parent, int options);
+static int parse_inline(subject *subj, cmark_node *parent, cmark_option_t options);
 
 static void subject_from_buf(subject *e, cmark_strbuf *buffer,
                              cmark_reference_map *refmap);
-static bufsize_t subject_find_special_char(subject *subj, int options);
+static bufsize_t subject_find_special_char(subject *subj, cmark_option_t options);
 
 // Create an inline with a literal string value.
 static inline cmark_node *make_literal(cmark_node_type t, cmark_chunk s) {
@@ -965,7 +965,7 @@ static cmark_node *handle_newline(subject *subj) {
   }
 }
 
-static bufsize_t subject_find_special_char(subject *subj, int options) {
+static bufsize_t subject_find_special_char(subject *subj, cmark_option_t options) {
   // "\r\n\\`&_*[]<!"
   static const int8_t SPECIAL_CHARS[256] = {
       0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
@@ -1010,7 +1010,7 @@ static bufsize_t subject_find_special_char(subject *subj, int options) {
 
 // Parse an inline, advancing subject, and add it as a child of parent.
 // Return 0 if no inline can be parsed, 1 otherwise.
-static int parse_inline(subject *subj, cmark_node *parent, int options) {
+static int parse_inline(subject *subj, cmark_node *parent, cmark_option_t options) {
   cmark_node *new_inl = NULL;
   cmark_chunk contents;
   unsigned char c;
@@ -1087,7 +1087,7 @@ static int parse_inline(subject *subj, cmark_node *parent, int options) {
 
 // Parse inlines from parent's string_content, adding as children of parent.
 extern void cmark_parse_inlines(cmark_node *parent, cmark_reference_map *refmap,
-                                int options) {
+                                cmark_option_t options) {
   subject subj;
   subject_from_buf(&subj, &parent->string_content, refmap);
   cmark_chunk_rtrim(&subj.input);

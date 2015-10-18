@@ -52,7 +52,7 @@ static cmark_node *make_document() {
   return e;
 }
 
-cmark_parser *cmark_parser_new(int options) {
+cmark_parser *cmark_parser_new(cmark_option_t options) {
   cmark_parser *parser = (cmark_parser *)malloc(sizeof(cmark_parser));
   cmark_node *document = make_document();
   cmark_strbuf *line = (cmark_strbuf *)malloc(sizeof(cmark_strbuf));
@@ -327,7 +327,7 @@ static cmark_node *add_child(cmark_parser *parser, cmark_node *parent,
 // Walk through node and all children, recursively, parsing
 // string content into inline content where appropriate.
 static void process_inlines(cmark_node *root, cmark_reference_map *refmap,
-                            int options) {
+                            cmark_option_t options) {
   cmark_iter *iter = cmark_iter_new(root);
   cmark_node *cur;
   cmark_event_type ev_type;
@@ -433,7 +433,7 @@ static cmark_node *finalize_document(cmark_parser *parser) {
   return parser->root;
 }
 
-cmark_node *cmark_parse_file(FILE *f, int options) {
+cmark_node *cmark_parse_file(FILE *f, cmark_option_t options) {
   unsigned char buffer[4096];
   cmark_parser *parser = cmark_parser_new(options);
   size_t bytes;
@@ -452,7 +452,7 @@ cmark_node *cmark_parse_file(FILE *f, int options) {
   return document;
 }
 
-cmark_node *cmark_parse_document(const char *buffer, size_t len, int options) {
+cmark_node *cmark_parse_document(const char *buffer, size_t len, cmark_option_t options) {
   cmark_parser *parser = cmark_parser_new(options);
   cmark_node *document;
 

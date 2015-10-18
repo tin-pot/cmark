@@ -2,6 +2,7 @@
 #define CMARK_H
 
 #include <stdio.h>
+#include <stdint.h>
 #include <cmark_export.h>
 #include <cmark_version.h>
 
@@ -19,12 +20,14 @@ extern "C" {
  * ## Simple Interface
  */
 
+typedef uint64_t cmark_option_t;
+
 /** Convert 'text' (assumed to be a UTF-8 encoded string with length
  * 'len' from CommonMark Markdown to HTML, returning a null-terminated,
  * UTF-8-encoded string.
  */
 CMARK_EXPORT
-char *cmark_markdown_to_html(const char *text, size_t len, int options);
+char *cmark_markdown_to_html(const char *text, size_t len, cmark_option_t options);
 
 /** ## Node Structure
  */
@@ -388,7 +391,7 @@ CMARK_EXPORT void cmark_consolidate_text_nodes(cmark_node *root);
 /** Creates a new parser object.
  */
 CMARK_EXPORT
-cmark_parser *cmark_parser_new(int options);
+cmark_parser *cmark_parser_new(cmark_option_t options);
 
 /** Frees memory allocated for a parser object.
  */
@@ -409,13 +412,13 @@ cmark_node *cmark_parser_finish(cmark_parser *parser);
  * Returns a pointer to a tree of nodes.
  */
 CMARK_EXPORT
-cmark_node *cmark_parse_document(const char *buffer, size_t len, int options);
+cmark_node *cmark_parse_document(const char *buffer, size_t len, cmark_option_t options);
 
 /** Parse a CommonMark document in file 'f', returning a pointer to
  * a tree of nodes.
  */
 CMARK_EXPORT
-cmark_node *cmark_parse_file(FILE *f, int options);
+cmark_node *cmark_parse_file(FILE *f, cmark_option_t options);
 
 /**
  * ## Rendering
@@ -424,34 +427,34 @@ cmark_node *cmark_parse_file(FILE *f, int options);
 /** Render a 'node' tree as XML.
  */
 CMARK_EXPORT
-char *cmark_render_xml(cmark_node *root, int options);
+char *cmark_render_xml(cmark_node *root, cmark_option_t options);
 
 /** Render a 'node' tree as an HTML fragment.  It is up to the user
  * to add an appropriate header and footer.
  */
 CMARK_EXPORT
-char *cmark_render_html(cmark_node *root, int options);
+char *cmark_render_html(cmark_node *root, cmark_option_t options);
 
 /** Render a 'node' tree as an XHTML fragment.  It is up to the user
  * to add an appropriate header and footer.
  */
 CMARK_EXPORT
-char *cmark_render_xhtml(cmark_node *root, int options);
+char *cmark_render_xhtml(cmark_node *root, cmark_option_t options);
 
 /** Render a 'node' tree as a groff man page, without the header.
  */
 CMARK_EXPORT
-char *cmark_render_man(cmark_node *root, int options, int width);
+char *cmark_render_man(cmark_node *root, cmark_option_t options, int width);
 
 /** Render a 'node' tree as a commonmark document.
  */
 CMARK_EXPORT
-char *cmark_render_commonmark(cmark_node *root, int options, int width);
+char *cmark_render_commonmark(cmark_node *root, cmark_option_t options, int width);
 
 /** Render a 'node' tree as a LaTeX document.
  */
 CMARK_EXPORT
-char *cmark_render_latex(cmark_node *root, int options, int width);
+char *cmark_render_latex(cmark_node *root, cmark_option_t options, int width);
 
 /** Default writer options.
  */

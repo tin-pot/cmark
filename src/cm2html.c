@@ -34,7 +34,7 @@ void print_usage() {
 }
 
 static void print_document(cmark_node *document,
-                           int options, 
+                           cmark_option_t options, 
                            char *css,
                            char *title,
                            struct dcdata *pdc
@@ -151,7 +151,7 @@ int main(int argc, char *argv[]) {
   cmark_parser *parser;
   size_t bytes;
   cmark_node *document;
-  int options = CMARK_OPT_DEFAULT | CMARK_OPT_ISO;
+  cmark_option_t options = CMARK_OPT_DEFAULT | CMARK_OPT_ISO;
 
 #if defined(_WIN32) && !defined(__CYGWIN__)
   _setmode(_fileno(stdout), _O_BINARY);
