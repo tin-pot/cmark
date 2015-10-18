@@ -486,6 +486,11 @@ char *cmark_render_latex(cmark_node *root, int options, int width);
  */
 #define CMARK_OPT_SAFE 32
 
+/** Generate ISO HTML, eg suppress the `start` attribute in `<ol>`.
+ * (Added <mh@tin-pot.net> 2015-10-18.)
+ */
+#define CMARK_OPT_ISO 64
+
 /**
  * ## Version information
  */

@@ -104,7 +104,10 @@ static int S_render_node(cmark_node *node, cmark_event_type ev_type,
         S_render_sourcepos(node, html, options);
         cmark_strbuf_puts(html, ">\n");
       } else {
-        sprintf(buffer, "<OL start=\"%d\"", start);
+        if (options & CMARK_OPT_ISO)
+          sprintf(buffer, "<OL"); /* ISO HTML has no `start` attrib. */
+        else
+          sprintf(buffer, "<OL start=\"%d\"", start);
         cmark_strbuf_puts(html, buffer);
         S_render_sourcepos(node, html, options);
         cmark_strbuf_puts(html, ">\n");

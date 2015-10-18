@@ -62,7 +62,7 @@ int main(int argc, char *argv[]) {
   cmark_parser *parser;
   size_t bytes;
   cmark_node *document;
-  int options = CMARK_OPT_DEFAULT;
+  int options = CMARK_OPT_DEFAULT | CMARK_OPT_ISO;
 
 #if defined(_WIN32) && !defined(__CYGWIN__)
   _setmode(_fileno(stdout), _O_BINARY);
@@ -72,7 +72,8 @@ int main(int argc, char *argv[]) {
 
   for (i = 1; i < argc; i++) {
     if (strcmp(argv[i], "--version") == 0) {
-      printf("cmark %s", CMARK_VERSION_STRING);
+      printf("cmark %s", CMARK_VERSION_STRING
+	                               " (" REPOURL " " GITIDENT ")\n");
       printf(" - CommonMark converter\n(C) 2014, 2015 John MacFarlane\n");
       exit(0);
     } else if ((strcmp(argv[i], "--title") == 0) ||
