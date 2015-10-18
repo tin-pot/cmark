@@ -2,9 +2,21 @@
 >MSVC on Win32.
 >
 >  - Added MSVC 9 project files in `VC9/`.
+>
 >  - Added some pre-cooked header files in `VC9/`.
+>
 >  - Moved declarations in front of statements in several `*.c`
 >    files, so pre-C99 compilers (like VC9) can have a go.
+>
+>  - Added a command-line tool `cm2html` which generates complete [ISO
+>    HTML][ih] documents from _CommonMark_ input. As a little extension,
+>    when the first input lines are a ["pandoc-like"][pd] header, they
+>    will set the HTML document `<TITLE>` and [Dublin Core][dc] `<META>`
+>    elements for _title_, _creator_, and _date_ accordingly.
+
+[ih]:https://www.cs.tcd.ie/misc/15445/15445.html
+[pd]:http://pandoc.org/README.html#metadata-blocks
+[dc]:https://en.wikipedia.org/wiki/Dublin_Core
 
 ****
 
