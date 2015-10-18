@@ -37,3 +37,4 @@ cmark
 /VC9/*.ncb
 /VC9/*.suo
 /VC9/*.user
+/src/gitident.h
