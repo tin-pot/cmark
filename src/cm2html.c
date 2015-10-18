@@ -103,7 +103,7 @@ size_t do_pandoc(char *buffer, size_t nbuf, struct dcdata *pdc)
         char *p;
         size_t ifield;
         
-	/* Field starts after '%', ends before *p = EOL. */
+	/* Field starts after '%', ends before *p = LF. */
         if (buffer[ibol] != '%')
 	    break;
         ifield = ibol + 1U;
@@ -122,15 +122,16 @@ size_t do_pandoc(char *buffer, size_t nbuf, struct dcdata *pdc)
          * terminator, of course.
          */
         nalloc = ibol - ifield;
-        pdc->item[iter] = malloc(nalloc);
-        if (pdc->item[iter] == NULL)
-	    break;
-        memcpy(pdc->item[iter], buffer+ifield, nalloc-1);
-        pdc->item[iter][nalloc-1] = '\0';
-        
+        if (nalloc > 1) {
+            pdc->item[iter] = malloc(nalloc);
+            if (pdc->item[iter] == NULL)
+    		break;
+            memcpy(pdc->item[iter], buffer+ifield, nalloc-1);
+            pdc->item[iter][nalloc-1] = '\0';
+        }
         /*
-         * Next line, if any, starts after '\n', 
-         * at `buffer[ibol]`. We have used all what comes before.
+         * The next line, if any, starts after '\n', at 
+         * `buffer[ibol]`. We have used all what came before.
          */
         nused = ibol;
         if (nused >= nbuf)
