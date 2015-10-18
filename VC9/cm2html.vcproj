@@ -2,7 +2,7 @@
 <VisualStudioProject
 	ProjectType="Visual C++"
 	Version="9,00"
-	Name="cmarkhtml"
+	Name="cm2html"
 	ProjectGUID="{0DF9F1FC-9A93-498B-BB5D-0A6948284CA5}"
 	RootNamespace="cm2html"
 	TargetFrameworkVersion="196613"
@@ -171,7 +171,7 @@
 			UniqueIdentifier="{4FC737F1-C7A5-4376-A066-2A32D752A2FF}"
 			>
 			<File
-				RelativePath="..\src\cmarkhtml.c"
+				RelativePath="..\src\cm2html.c"
 				>
 			</File>
 		</Filter>
