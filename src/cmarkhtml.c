@@ -6,6 +6,9 @@
 #include "cmark.h"
 #include "bench.h"
 
+#include "repourl.h"
+#include "gitident.h"
+
 #if defined(_WIN32) && !defined(__CYGWIN__)
 #include <io.h>
 #include <fcntl.h>
@@ -34,7 +37,7 @@ static void print_document(cmark_node *document,
   puts("<HEAD>");
   puts("  <META name=\"GENERATOR\" content=\"cmark "
        CMARK_VERSION_STRING
-       " (http://github.com/tin-pot/cmark)\">");
+       " (" REPOURL " " GITIDENT ")\">");
   puts("  <META http-equiv=\"Content-Type\"\n"
        "        content=\"text/html; charset=UTF-8\">");
   puts("  <LINK rel=\"stylesheet\"\n"
