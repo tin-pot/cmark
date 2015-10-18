@@ -42,9 +42,9 @@ static void print_document(cmark_node *document,
   char *result;
   unsigned iter;
   static const char *dcitem[NUM_DCITEM] = {
-    "dc:title",
-    "dc:creator",
-    "dc:date",
+    "\"DC.title\"  ",
+    "\"DC.creator\"",
+    "\"DC.date\"   ",
   };
 
   if (css == NULL) css = "default.css";
@@ -61,16 +61,20 @@ static void print_document(cmark_node *document,
   puts("  <META name=\"GENERATOR\"\n"
        "        content=\"cmark " CMARK_VERSION_STRING
                                     " (" REPOURL " " GITIDENT ")\">");
-  puts("  <META http-equiv=\"Content-Type\"\n"
-       "        content=\"text/html; charset=UTF-8\">");
-  for (iter = 0; iter < NUM_DCITEM; ++iter)
+  puts("  <META http-equiv=\"Content-Type\" content=\"text/html; charset=UTF-8\">");
+       
+  for (iter = 0; iter < NUM_DCITEM; ++iter) {
+    if (iter == 0) {
+       puts("  <LINK rel=\"schema.DC\"   href=\"http://purl.org/dc/elements/1.1/\">");
+       puts("  <META name=\"DC.format\"  scheme=\"DCTERMS.IMT\"      content=\"text/html\">");
+       puts("  <META name=\"DC.type\"    scheme=\"DCTERMS.DCMIType\" content=\"Text\">");
+    }
     if (pdc->item[iter] != NULL)
-       printf("  <META name=\"%s\"\n"
-              "        content=\"%s\">\n",
+       printf("  <META name=%s content=\"%s\">\n",
               dcitem[iter], pdc->item[iter]);
+  }
               
-  printf("  <LINK rel=\"stylesheet\"\n"
-         "        type=\"text/css\"\n"
+  printf("  <LINK rel=\"stylesheet\"  type=\"text/css\"\n"
          "        href=\"%s\">\n", css);
   printf("  <TITLE>%s</TITLE>\n", title);
   puts("</HEAD>");
@@ -203,12 +207,15 @@ int main(int argc, char *argv[]) {
 
     start_timer();
     while ((bytes = fread(buffer, 1, sizeof(buffer), fp)) > 0) {
-      size_t hbytes = (in_header) ?
-                         do_pandoc(buffer, sizeof buffer, &dc) : 0U;
-                         
-      cmark_parser_feed(parser, buffer, bytes - hbytes);
+      size_t hbytes = 0U;
+      
+      if (in_header)
+        hbytes = do_pandoc(buffer, sizeof buffer, &dc);
       in_header = false;
-          
+                         
+      if (hbytes < bytes)
+        cmark_parser_feed(parser, buffer + hbytes, bytes - hbytes);
+        
       if (bytes < sizeof(buffer)) {
         break;
       }
