@@ -14,11 +14,16 @@
 #include <fcntl.h>
 #endif
 
+#define NUM_DCITEM 3
+struct dcdata {
+  char *item[NUM_DCITEM]; /* Title, author, date */
+};
 
 void print_usage() {
   printf("Usage:   cm2html [FILE*]\n");
   printf("Options:\n");
   printf("  -t --title TITLE Set the document title\n");
+  printf("  -c --css CSS     Set the document style sheet to CSS\n");
   printf("  --sourcepos      Include source position attribute\n");
   printf("  --hardbreaks     Treat newlines as hard line breaks\n");
   printf("  --safe           Suppress raw HTML and dangerous URLs\n");
@@ -29,20 +34,44 @@ void print_usage() {
 }
 
 static void print_document(cmark_node *document,
-                           int options, const char *title) {
+                           int options, 
+                           char *css,
+                           char *title,
+                           struct dcdata *pdc
+                           ) {
   char *result;
+  unsigned iter;
+  static const char *dcitem[NUM_DCITEM] = {
+    "dc:title",
+    "dc:creator",
+    "dc:date",
+  };
 
+  if (css == NULL) css = "default.css";
+  
+  if (title == NULL && pdc->item[0] != NULL)
+      title = pdc->item[0];
+  else if (pdc->item[0] == NULL && title != NULL)
+      pdc->item[0] = title;
+  if (title == NULL) title = "Untitled Document";
+  
   puts("<!DOCTYPE HTML PUBLIC \"ISO/IEC 15445:2000//DTD HTML//EN\">");
   puts("<HTML>");
   puts("<HEAD>");
-  puts("  <META name=\"GENERATOR\" content=\"cmark "
-       CMARK_VERSION_STRING
-       " (" REPOURL " " GITIDENT ")\">");
+  puts("  <META name=\"GENERATOR\"\n"
+       "        content=\"cmark " CMARK_VERSION_STRING
+                                    " (" REPOURL " " GITIDENT ")\">");
   puts("  <META http-equiv=\"Content-Type\"\n"
        "        content=\"text/html; charset=UTF-8\">");
-  puts("  <LINK rel=\"stylesheet\"\n"
-       "        type=\"text/css\"\n"
-       "        href=\"default.css\">");
+  for (iter = 0; iter < NUM_DCITEM; ++iter)
+    if (pdc->item[iter] != NULL)
+       printf("  <META name=\"%s\"\n"
+              "        content=\"%s\">\n",
+              dcitem[iter], pdc->item[iter]);
+              
+  printf("  <LINK rel=\"stylesheet\"\n"
+         "        type=\"text/css\"\n"
+         "        href=\"%s\">\n", css);
   printf("  <TITLE>%s</TITLE>\n", title);
   puts("</HEAD>");
   puts("<BODY>");
@@ -54,11 +83,66 @@ static void print_document(cmark_node *document,
   puts("</HTML>");
 }
 
+size_t do_pandoc(char *buffer, size_t nbuf, struct dcdata *pdc)
+{
+    size_t nused, nalloc;
+    size_t ibol;
+    unsigned iter;
+
+    for (iter = 0; iter < NUM_DCITEM; ++iter)
+	pdc->item[iter] = NULL;
+    
+    ibol = 0U;
+    nused = 0U;
+    
+    for (iter = 0; iter < 3; ++iter) {
+        char *p;
+        size_t ifield;
+        
+	/* Field starts after '%', ends before *p = EOL. */
+        if (buffer[ibol] != '%')
+	    break;
+        ifield = ibol + 1U;
+        if (buffer[ifield] == ' ') ++ifield;
+        if (ifield >= nbuf)
+            break;
+        p = memchr(buffer+ifield, '\n', nbuf - ifield);
+        if (p == NULL)
+            break;
+            
+        ibol = p - buffer + 1; /* One after '\n'. */
+        
+        /*
+         * We copy buffer[ifield .. ibol-2], ie the line content
+         * from ifield to just before the '\n', and append a NUL 
+         * terminator, of course.
+         */
+        nalloc = ibol - ifield;
+        pdc->item[iter] = malloc(nalloc);
+        if (pdc->item[iter] == NULL)
+	    break;
+        memcpy(pdc->item[iter], buffer+ifield, nalloc-1);
+        pdc->item[iter][nalloc-1] = '\0';
+        
+        /*
+         * Next line, if any, starts after '\n', 
+         * at `buffer[ibol]`. We have used all what comes before.
+         */
+        nused = ibol;
+        if (nused >= nbuf)
+            break;
+    }
+    return nused;
+}
+
 int main(int argc, char *argv[]) {
   int i, numfps = 0;
   int *files;
   char buffer[4096];
-  const char *title = "Untitled Document";
+  char *title = NULL;
+  char *css = NULL;
+  struct dcdata dc;
+  
   cmark_parser *parser;
   size_t bytes;
   cmark_node *document;
@@ -79,6 +163,9 @@ int main(int argc, char *argv[]) {
     } else if ((strcmp(argv[i], "--title") == 0) ||
                (strcmp(argv[i], "-t") == 0)) {
       title = argv[++i];
+    } else if ((strcmp(argv[i], "--css") == 0) ||
+               (strcmp(argv[i], "-c") == 0)) {
+      css = argv[++i];
     } else if (strcmp(argv[i], "--sourcepos") == 0) {
       options |= CMARK_OPT_SOURCEPOS;
     } else if (strcmp(argv[i], "--hardbreaks") == 0) {
@@ -106,6 +193,8 @@ int main(int argc, char *argv[]) {
   parser = cmark_parser_new(options);
   for (i = 0; i < numfps; i++) {
     FILE *fp = fopen(argv[files[i]], "r");
+    bool in_header = true;
+    
     if (fp == NULL) {
       fprintf(stderr, "Error opening file %s: %s\n", argv[files[i]],
               strerror(errno));
@@ -114,7 +203,12 @@ int main(int argc, char *argv[]) {
 
     start_timer();
     while ((bytes = fread(buffer, 1, sizeof(buffer), fp)) > 0) {
-      cmark_parser_feed(parser, buffer, bytes);
+      size_t hbytes = (in_header) ?
+                         do_pandoc(buffer, sizeof buffer, &dc) : 0U;
+                         
+      cmark_parser_feed(parser, buffer, bytes - hbytes);
+      in_header = false;
+          
       if (bytes < sizeof(buffer)) {
         break;
       }
@@ -140,7 +234,7 @@ int main(int argc, char *argv[]) {
   cmark_parser_free(parser);
 
   start_timer();
-  print_document(document, options, title);
+  print_document(document, options, css, title, &dc);
   end_timer("print_document");
 
   start_timer();
