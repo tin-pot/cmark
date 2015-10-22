@@ -13,6 +13,13 @@ Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "cm2html", "cm2html.vcproj",
 		{A66595B9-2FD4-4103-8D61-3A93AD304D78} = {A66595B9-2FD4-4103-8D61-3A93AD304D78}
 	EndProjectSection
 EndProject
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "cmesis", "cmesis.vcproj", "{A91867FB-695E-4C6C-8B6B-AB0019351FB9}"
+	ProjectSection(ProjectDependencies) = postProject
+		{A66595B9-2FD4-4103-8D61-3A93AD304D78} = {A66595B9-2FD4-4103-8D61-3A93AD304D78}
+	EndProjectSection
+EndProject
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "xmlout", "xmlout.vcproj", "{6E5CA77E-75E6-49D5-97D2-0E710248F059}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Win32 = Debug|Win32
@@ -31,6 +38,14 @@ Global
 		{0DF9F1FC-9A93-498B-BB5D-0A6948284CA5}.Debug|Win32.Build.0 = Debug|Win32
 		{0DF9F1FC-9A93-498B-BB5D-0A6948284CA5}.Release|Win32.ActiveCfg = Release|Win32
 		{0DF9F1FC-9A93-498B-BB5D-0A6948284CA5}.Release|Win32.Build.0 = Release|Win32
+		{A91867FB-695E-4C6C-8B6B-AB0019351FB9}.Debug|Win32.ActiveCfg = Debug|Win32
+		{A91867FB-695E-4C6C-8B6B-AB0019351FB9}.Debug|Win32.Build.0 = Debug|Win32
+		{A91867FB-695E-4C6C-8B6B-AB0019351FB9}.Release|Win32.ActiveCfg = Release|Win32
+		{A91867FB-695E-4C6C-8B6B-AB0019351FB9}.Release|Win32.Build.0 = Release|Win32
+		{6E5CA77E-75E6-49D5-97D2-0E710248F059}.Debug|Win32.ActiveCfg = Debug|Win32
+		{6E5CA77E-75E6-49D5-97D2-0E710248F059}.Debug|Win32.Build.0 = Debug|Win32
+		{6E5CA77E-75E6-49D5-97D2-0E710248F059}.Release|Win32.ActiveCfg = Release|Win32
+		{6E5CA77E-75E6-49D5-97D2-0E710248F059}.Release|Win32.Build.0 = Release|Win32
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
