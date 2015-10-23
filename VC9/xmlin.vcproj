@@ -46,9 +46,12 @@
 				Name="VCCLCompilerTool"
 				Optimization="0"
 				AdditionalIncludeDirectories="&quot;$(SolutionDir)..\esisio&quot;;&quot;$(SolutionDir)..\expat\xmlparse&quot;"
-				PreprocessorDefinitions="WIN32;_DEBUG;_CONSOLE"
+				PreprocessorDefinitions="WIN32;_DEBUG;_CONSOLE;XML_STATIC"
 				BasicRuntimeChecks="3"
 				RuntimeLibrary="3"
+				AssemblerListingLocation=".\..\win32\tmp\Debug-xmlin/"
+				ObjectFile=".\..\win32\tmp\Debug-xmlin/"
+				ProgramDataBaseFileName=".\..\win32\tmp\Debug-xmlin/"
 				BrowseInformation="1"
 				WarningLevel="3"
 				SuppressStartupBanner="true"
@@ -88,6 +91,7 @@
 			<Tool
 				Name="VCBscMakeTool"
 				SuppressStartupBanner="true"
+				OutputFile=".\..\win32\bin\Debug/xmlin.bsc"
 			/>
 			<Tool
 				Name="VCFxCopTool"
@@ -135,6 +139,9 @@
 				StringPooling="true"
 				RuntimeLibrary="2"
 				EnableFunctionLevelLinking="true"
+				AssemblerListingLocation=".\..\win32\tmp\Release-xmlin/"
+				ObjectFile=".\..\win32\tmp\Release-xmlin/"
+				ProgramDataBaseFileName=".\..\win32\tmp\Release-xmlin/"
 				WarningLevel="3"
 				SuppressStartupBanner="true"
 			/>
@@ -171,6 +178,7 @@
 			<Tool
 				Name="VCBscMakeTool"
 				SuppressStartupBanner="true"
+				OutputFile=".\..\win32\bin\Release/xmlin.bsc"
 			/>
 			<Tool
 				Name="VCFxCopTool"
@@ -217,6 +225,9 @@
 				PreprocessorDefinitions="WIN32;NDEBUG;_CONSOLE;XML_STATIC"
 				StringPooling="true"
 				EnableFunctionLevelLinking="true"
+				AssemblerListingLocation=".\..\win32\tmp\Release-xmlin/"
+				ObjectFile=".\..\win32\tmp\Release-xmlin/"
+				ProgramDataBaseFileName=".\..\win32\tmp\Release-xmlin/"
 				WarningLevel="3"
 				SuppressStartupBanner="true"
 			/>
@@ -253,6 +264,7 @@
 			<Tool
 				Name="VCBscMakeTool"
 				SuppressStartupBanner="true"
+				OutputFile=".\..\win32\bin\Release/xmlin.bsc"
 			/>
 			<Tool
 				Name="VCFxCopTool"
@@ -273,7 +285,7 @@
 			Filter="cpp;c;cxx;rc;def;r;odl;idl;hpj;bat"
 			>
 			<File
-				RelativePath="..\esis\xmlin.c"
+				RelativePath="..\chain\xmlin.c"
 				>
 			</File>
 		</Filter>
