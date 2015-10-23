@@ -16,8 +16,8 @@
 	<Configurations>
 		<Configuration
 			Name="Release|Win32"
-			OutputDirectory=".\Release"
-			IntermediateDirectory=".\Release"
+			OutputDirectory="$(SolutionDir)$(ConfigurationName)"
+			IntermediateDirectory="$(ConfigurationName)\$(ProjectName)"
 			ConfigurationType="1"
 			InheritedPropertySheets="$(VCInstallDir)VCProjectDefaults\UpgradeFromVC60.vsprops"
 			UseOfMFC="0"
@@ -37,22 +37,22 @@
 			/>
 			<Tool
 				Name="VCMIDLTool"
-				TypeLibraryName=".\Release/xmlwf.tlb"
+				TypeLibraryName="$(OutDir)\xmlwf.tlb"
 				HeaderFileName=""
 			/>
 			<Tool
 				Name="VCCLCompilerTool"
 				Optimization="2"
 				InlineFunctionExpansion="1"
-				AdditionalIncludeDirectories="..\xmlparse"
+				AdditionalIncludeDirectories="..\expat;..\expat\xmltok,..\expat\xmlwf"
 				PreprocessorDefinitions="NDEBUG;WIN32;_CONSOLE;XMLTOKAPI=__declspec(dllimport);XMLPARSEAPI=__declspec(dllimport)"
 				StringPooling="true"
 				RuntimeLibrary="0"
 				EnableFunctionLevelLinking="true"
-				PrecompiledHeaderFile=".\Release/xmlwf.pch"
-				AssemblerListingLocation=".\Release/"
-				ObjectFile=".\Release/"
-				ProgramDataBaseFileName=".\Release/"
+				PrecompiledHeaderFile="$(IntDir)\xmlwf.pch"
+				AssemblerListingLocation="$(IntDir)\"
+				ObjectFile="$(IntDir)\"
+				ProgramDataBaseFileName="$(IntDir)\"
 				WarningLevel="3"
 				SuppressStartupBanner="true"
 			/>
@@ -70,10 +70,10 @@
 			<Tool
 				Name="VCLinkerTool"
 				AdditionalDependencies="setargv.obj odbc32.lib odbccp32.lib"
-				OutputFile="..\bin\xmlwf.exe"
+				OutputFile="$(OutDir)\xmlwf.exe"
 				LinkIncremental="1"
 				SuppressStartupBanner="true"
-				ProgramDatabaseFile=".\Release/xmlwf.pdb"
+				ProgramDatabaseFile="$(OutDir)\xmlwf.pdb"
 				SubSystem="1"
 				RandomizedBaseAddress="1"
 				DataExecutionPrevention="0"
@@ -91,7 +91,7 @@
 			<Tool
 				Name="VCBscMakeTool"
 				SuppressStartupBanner="true"
-				OutputFile=".\Release/xmlwf.bsc"
+				OutputFile="$(IntDir)\xmlwf.bsc"
 			/>
 			<Tool
 				Name="VCFxCopTool"
@@ -105,8 +105,8 @@
 		</Configuration>
 		<Configuration
 			Name="Debug|Win32"
-			OutputDirectory=".\Debug"
-			IntermediateDirectory=".\Debug"
+			OutputDirectory="$(SolutionDir)$(ConfigurationName)"
+			IntermediateDirectory="$(ConfigurationName)\$(ProjectName)"
 			ConfigurationType="1"
 			InheritedPropertySheets="$(VCInstallDir)VCProjectDefaults\UpgradeFromVC60.vsprops"
 			UseOfMFC="0"
@@ -126,20 +126,20 @@
 			/>
 			<Tool
 				Name="VCMIDLTool"
-				TypeLibraryName=".\Debug/xmlwf.tlb"
+				TypeLibraryName="$(OutDir)\xmlwf.tlb"
 				HeaderFileName=""
 			/>
 			<Tool
 				Name="VCCLCompilerTool"
 				Optimization="0"
-				AdditionalIncludeDirectories=".\xmlparse,..\xmlparse"
+				AdditionalIncludeDirectories="..\expat;..\expat\xmltok,..\expat\xmlwf"
 				PreprocessorDefinitions="_DEBUG;WIN32;_CONSOLE;XMLTOKAPI=__declspec(dllimport);XMLPARSEAPI=__declspec(dllimport)"
 				MinimalRebuild="true"
 				RuntimeLibrary="3"
-				PrecompiledHeaderFile=".\Debug/xmlwf.pch"
-				AssemblerListingLocation=".\Debug/"
-				ObjectFile=".\Debug/"
-				ProgramDataBaseFileName=".\Debug/"
+				PrecompiledHeaderFile="$(IntDir)\xmlwf.pch"
+				AssemblerListingLocation="$(IntDir)\"
+				ObjectFile="$(IntDir)\"
+				ProgramDataBaseFileName="$(IntDir)\"
 				WarningLevel="3"
 				SuppressStartupBanner="true"
 				DebugInformationFormat="4"
@@ -158,11 +158,11 @@
 			<Tool
 				Name="VCLinkerTool"
 				AdditionalDependencies="setargv.obj odbc32.lib odbccp32.lib"
-				OutputFile="..\dbgbin\xmlwf.exe"
+				OutputFile="$(OutDir)\xmlwf.exe"
 				LinkIncremental="2"
 				SuppressStartupBanner="true"
 				GenerateDebugInformation="true"
-				ProgramDatabaseFile=".\Debug/xmlwf.pdb"
+				ProgramDatabaseFile="$(OutDir)\xmlwf.pdb"
 				SubSystem="1"
 				RandomizedBaseAddress="1"
 				DataExecutionPrevention="0"
@@ -180,7 +180,7 @@
 			<Tool
 				Name="VCBscMakeTool"
 				SuppressStartupBanner="true"
-				OutputFile=".\Debug/xmlwf.bsc"
+				OutputFile="$(IntDir)\xmlwf.bsc"
 			/>
 			<Tool
 				Name="VCFxCopTool"
@@ -201,7 +201,7 @@
 			Filter="cpp;c;cxx;rc;def;r;odl;idl;hpj;bat;for;f90"
 			>
 			<File
-				RelativePath="codepage.c"
+				RelativePath="..\expat\xmlwf\codepage.c"
 				>
 				<FileConfiguration
 					Name="Release|Win32"
@@ -223,31 +223,7 @@
 				</FileConfiguration>
 			</File>
 			<File
-				RelativePath="readfilemap.c"
-				>
-				<FileConfiguration
-					Name="Release|Win32"
-					ExcludedFromBuild="true"
-					>
-					<Tool
-						Name="VCCLCompilerTool"
-						AdditionalIncludeDirectories=""
-						PreprocessorDefinitions=""
-					/>
-				</FileConfiguration>
-				<FileConfiguration
-					Name="Debug|Win32"
-					ExcludedFromBuild="true"
-					>
-					<Tool
-						Name="VCCLCompilerTool"
-						AdditionalIncludeDirectories=""
-						PreprocessorDefinitions=""
-					/>
-				</FileConfiguration>
-			</File>
-			<File
-				RelativePath="unixfilemap.c"
+				RelativePath="..\expat\xmlwf\readfilemap.c"
 				>
 				<FileConfiguration
 					Name="Release|Win32"
@@ -271,7 +247,31 @@
 				</FileConfiguration>
 			</File>
 			<File
-				RelativePath="win32filemap.c"
+				RelativePath="..\expat\xmlwf\unixfilemap.c"
+				>
+				<FileConfiguration
+					Name="Release|Win32"
+					ExcludedFromBuild="true"
+					>
+					<Tool
+						Name="VCCLCompilerTool"
+						AdditionalIncludeDirectories=""
+						PreprocessorDefinitions=""
+					/>
+				</FileConfiguration>
+				<FileConfiguration
+					Name="Debug|Win32"
+					ExcludedFromBuild="true"
+					>
+					<Tool
+						Name="VCCLCompilerTool"
+						AdditionalIncludeDirectories=""
+						PreprocessorDefinitions=""
+					/>
+				</FileConfiguration>
+			</File>
+			<File
+				RelativePath="..\expat\xmlwf\win32filemap.c"
 				>
 				<FileConfiguration
 					Name="Release|Win32"
@@ -293,7 +293,7 @@
 				</FileConfiguration>
 			</File>
 			<File
-				RelativePath="xmlfile.c"
+				RelativePath="..\expat\xmlwf\xmlfile.c"
 				>
 				<FileConfiguration
 					Name="Release|Win32"
@@ -315,7 +315,7 @@
 				</FileConfiguration>
 			</File>
 			<File
-				RelativePath="xmlwf.c"
+				RelativePath="..\expat\xmlwf\xmlwf.c"
 				>
 				<FileConfiguration
 					Name="Release|Win32"
@@ -342,15 +342,15 @@
 			Filter="h;hpp;hxx;hm;inl;fi;fd"
 			>
 			<File
-				RelativePath="codepage.h"
+				RelativePath="..\expat\xmlwf\codepage.h"
 				>
 			</File>
 			<File
-				RelativePath="xmlfile.h"
+				RelativePath="..\expat\xmlwf\xmlfile.h"
 				>
 			</File>
 			<File
-				RelativePath="xmltchar.h"
+				RelativePath="..\expat\xmlwf\xmltchar.h"
 				>
 			</File>
 		</Filter>
