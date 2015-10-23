@@ -24,8 +24,8 @@
 			>
 			<Tool
 				Name="VCPreBuildEventTool"
-				Description="Getting Git revision."
-				CommandLine="for /f %%i in (&apos;git ls-remote --get-url&apos;) do ( echo #define REPOURL &quot;%%i&quot; &gt; &quot;..\src\repourl.h&quot; )&#x0D;&#x0A;for /f %%i in (&apos;git show-ref -s12 origin/master&apos;) do ( echo #define GITIDENT &quot;%%i&quot; &gt; &quot;..\src\gitident.h&quot; )&#x0D;&#x0A;"
+				Description="Getting Git info..."
+				CommandLine="gitinfo.cmd"
 			/>
 			<Tool
 				Name="VCCustomBuildTool"
@@ -42,7 +42,7 @@
 			<Tool
 				Name="VCCLCompilerTool"
 				Optimization="0"
-				AdditionalIncludeDirectories=".\;..\src"
+				AdditionalIncludeDirectories="&quot;$(ProjectDir)&quot;;&quot;$(SolutionDir)src&quot;"
 				MinimalRebuild="true"
 				BasicRuntimeChecks="3"
 				RuntimeLibrary="3"
@@ -98,8 +98,8 @@
 			>
 			<Tool
 				Name="VCPreBuildEventTool"
-				Description="Getting Git revision."
-				CommandLine="for /f %%i in (&apos;git ls-remote --get-url&apos;) do ( echo #define REPOURL &quot;%%i&quot; &gt; &quot;..\src\repourl.h&quot; )&#x0D;&#x0A;for /f %%i in (&apos;git show-ref -s12 origin/master&apos;) do ( echo #define GITIDENT &quot;%%i&quot; &gt; &quot;..\src\gitident.h&quot; )&#x0D;&#x0A;"
+				Description="Getting Git info..."
+				CommandLine="gitinfo.cmd"
 			/>
 			<Tool
 				Name="VCCustomBuildTool"
@@ -117,7 +117,7 @@
 				Name="VCCLCompilerTool"
 				Optimization="2"
 				EnableIntrinsicFunctions="true"
-				AdditionalIncludeDirectories=".\;..\src"
+				AdditionalIncludeDirectories="&quot;$(ProjectDir)&quot;;&quot;$(SolutionDir)src&quot;"
 				RuntimeLibrary="2"
 				EnableFunctionLevelLinking="true"
 				WarningLevel="3"
@@ -173,8 +173,8 @@
 			>
 			<Tool
 				Name="VCPreBuildEventTool"
-				Description="Getting Git revision."
-				CommandLine="for /f %%i in (&apos;git ls-remote --get-url&apos;) do ( echo #define REPOURL &quot;%%i&quot; &gt; &quot;..\src\repourl.h&quot; )&#x0D;&#x0A;for /f %%i in (&apos;git show-ref -s12 origin/master&apos;) do ( echo #define GITIDENT &quot;%%i&quot; &gt; &quot;..\src\gitident.h&quot; )&#x0D;&#x0A;"
+				Description="Getting Git info..."
+				CommandLine="gitinfo.cmd"
 			/>
 			<Tool
 				Name="VCCustomBuildTool"
@@ -192,7 +192,7 @@
 				Name="VCCLCompilerTool"
 				Optimization="2"
 				EnableIntrinsicFunctions="true"
-				AdditionalIncludeDirectories=".\;..\src"
+				AdditionalIncludeDirectories="&quot;$(ProjectDir)&quot;;&quot;$(SolutionDir)src&quot;"
 				EnableFunctionLevelLinking="true"
 				WarningLevel="3"
 				DebugInformationFormat="3"
