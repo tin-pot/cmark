@@ -3,7 +3,7 @@
 	ProjectType="Visual C++"
 	Version="9,00"
 	Name="xmlout"
-	ProjectGUID="{74473D16-608A-469f-B010-E68C6BF7A88D}"
+	ProjectGUID="{74473D16-608A-469F-B010-E68C6BF7A88D}"
 	RootNamespace="xmlout"
 	TargetFrameworkVersion="196613"
 	>
@@ -24,8 +24,6 @@
 			>
 			<Tool
 				Name="VCPreBuildEventTool"
-				Description="Getting Git revision."
-				CommandLine="for /f %%i in (&apos;git ls-remote --get-url&apos;) do ( echo #define REPOURL &quot;%%i&quot; &gt; &quot;..\src\repourl.h&quot; )&#x0D;&#x0A;for /f %%i in (&apos;git show-ref -s12 origin/master&apos;) do ( echo #define GITIDENT &quot;%%i&quot; &gt; &quot;..\src\gitident.h&quot; )&#x0D;&#x0A;"
 			/>
 			<Tool
 				Name="VCCustomBuildTool"
@@ -98,8 +96,6 @@
 			>
 			<Tool
 				Name="VCPreBuildEventTool"
-				Description="Getting Git revision."
-				CommandLine="for /f %%i in (&apos;git ls-remote --get-url&apos;) do ( echo #define REPOURL &quot;%%i&quot; &gt; &quot;..\src\repourl.h&quot; )&#x0D;&#x0A;for /f %%i in (&apos;git show-ref -s12 origin/master&apos;) do ( echo #define GITIDENT &quot;%%i&quot; &gt; &quot;..\src\gitident.h&quot; )&#x0D;&#x0A;"
 			/>
 			<Tool
 				Name="VCCustomBuildTool"
@@ -173,8 +169,6 @@
 			>
 			<Tool
 				Name="VCPreBuildEventTool"
-				Description="Getting Git revision."
-				CommandLine="for /f %%i in (&apos;git ls-remote --get-url&apos;) do ( echo #define REPOURL &quot;%%i&quot; &gt; &quot;..\src\repourl.h&quot; )&#x0D;&#x0A;for /f %%i in (&apos;git show-ref -s12 origin/master&apos;) do ( echo #define GITIDENT &quot;%%i&quot; &gt; &quot;..\src\gitident.h&quot; )&#x0D;&#x0A;"
 			/>
 			<Tool
 				Name="VCCustomBuildTool"
