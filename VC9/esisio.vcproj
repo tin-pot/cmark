@@ -224,6 +224,10 @@
 				RelativePath="..\esisio\esisrd.c"
 				>
 			</File>
+			<File
+				RelativePath="..\src\gitident.c"
+				>
+			</File>
 		</Filter>
 		<Filter
 			Name="Headerdateien"

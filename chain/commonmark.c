@@ -10,8 +10,8 @@
 #include "houdini.h"
 #include "scanners.h"
 
-#include "repourl.h"
-#include "gitident.h"
+extern const char cmark_gitident[];
+extern const char cmark_repourl[];
 
 #if defined(_WIN32) && !defined(__CYGWIN__)
 #include <io.h>
@@ -257,7 +257,8 @@ int main(int argc, char *argv[]) {
   for (i = 1; i < argc; i++) {
     if (strcmp(argv[i], "--version") == 0) {
       printf("cmesis %s", CMARK_VERSION_STRING
-	                               " (" REPOURL " " GITIDENT ")\n");
+                                    " ( %s %s )\n",
+                                    cmark_repourl, cmark_gitident);
       printf(" - CommonMark converter\n(C) 2014, 2015 John MacFarlane\n");
       exit(0);
     } else if (strcmp(argv[i], "--sourcepos") == 0) {

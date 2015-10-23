@@ -6,8 +6,8 @@
 #include "cmark.h"
 #include "bench.h"
 
-#include "repourl.h"
-#include "gitident.h"
+extern const char cmark_gitident[];
+extern const char cmark_repourl[];
 
 #if defined(_WIN32) && !defined(__CYGWIN__)
 #include <io.h>
@@ -58,9 +58,10 @@ static void print_document(cmark_node *document,
   puts("<!DOCTYPE HTML PUBLIC \"ISO/IEC 15445:2000//DTD HTML//EN\">");
   puts("<HTML>");
   puts("<HEAD>");
-  puts("  <META name=\"GENERATOR\"\n"
+printf("  <META name=\"GENERATOR\"\n"
        "        content=\"cmark " CMARK_VERSION_STRING
-                                    " (" REPOURL " " GITIDENT ")\">");
+                                    " ( %s %s )\">",
+                                    cmark_repourl, cmark_gitident);
   puts("  <META http-equiv=\"Content-Type\" content=\"text/html; charset=UTF-8\">");
        
   for (iter = 0; iter < NUM_DCITEM; ++iter) {
@@ -162,7 +163,8 @@ int main(int argc, char *argv[]) {
   for (i = 1; i < argc; i++) {
     if (strcmp(argv[i], "--version") == 0) {
       printf("cmark %s", CMARK_VERSION_STRING
-	                               " (" REPOURL " " GITIDENT ")\n");
+                                    " ( %s %s )\n",
+                                    cmark_repourl, cmark_gitident);
       printf(" - CommonMark converter\n(C) 2014, 2015 John MacFarlane\n");
       exit(0);
     } else if ((strcmp(argv[i], "--title") == 0) ||
