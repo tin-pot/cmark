@@ -1,0 +1,1 @@
+#define GITIDENT "unknown revision"  
