@@ -306,8 +306,8 @@
 					>
 					<Tool
 						Name="VCCustomBuildTool"
-						Description="Creating nametab.h"
-						CommandLine="$(OutDir)\gennmtab &gt;$(SolutionDir)..\expat\xmltok\nametab.h&#x0D;&#x0A;"
+						Description="Checking that nametab.h exists..."
+						CommandLine="if exist &quot;$(SolutionDir)..\expat\xmltok\nametab.h&quot; (echo ... using existing nametab.h) else (echo ... creating new nametab.h &amp;&amp; $(OutDir)\gennmtab &gt;$(SolutionDir)..\expat\xmltok\nametab.h)"
 						Outputs="$(ProjectDir)nametab.h"
 					/>
 				</FileConfiguration>
@@ -316,8 +316,8 @@
 					>
 					<Tool
 						Name="VCCustomBuildTool"
-						Description="Looking for nametab.h ..."
-						CommandLine="if exist &quot;$(SolutionDir)..\expat\xmltok\nametab.h&quot; (echo Using existing nametab.h) else (echo Creating nametab.h &amp;&amp; $(OutDir)\gennmtab &gt;$(SolutionDir)..\expat\xmltok\nametab.h)&#x0D;&#x0A;"
+						Description="Checking that nametab.h exists..."
+						CommandLine="if exist &quot;$(SolutionDir)..\expat\xmltok\nametab.h&quot; (echo ... existing nametab.h) else (echo ... creating new nametab.h &amp;&amp; $(OutDir)\gennmtab &gt;$(SolutionDir)..\expat\xmltok\nametab.h)"
 						Outputs="$(ProjectDir)nametab.h"
 					/>
 				</FileConfiguration>
@@ -326,8 +326,8 @@
 					>
 					<Tool
 						Name="VCCustomBuildTool"
-						Description="Looking for nametab.h ..."
-						CommandLine="if exist &quot;$(SolutionDir)..\expat\xmltok\nametab.h&quot; (echo Using existing nametab.h) else (echo Creating nametab.h &amp;&amp; $(OutDir)\gennmtab &gt;$(SolutionDir)..\expat\xmltok\nametab.h)&#x0D;&#x0A;"
+						Description="Checking that nametab.h exists..."
+						CommandLine="if exist &quot;$(SolutionDir)..\expat\xmltok\nametab.h&quot; (echo ... existing nametab.h) else (echo ... creating new nametab.h &amp;&amp; $(OutDir)\gennmtab &gt;$(SolutionDir)..\expat\xmltok\nametab.h)"
 						Outputs="$(ProjectDir)nametab.h"
 					/>
 				</FileConfiguration>
