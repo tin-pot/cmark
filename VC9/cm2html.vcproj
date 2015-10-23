@@ -25,7 +25,7 @@
 			<Tool
 				Name="VCPreBuildEventTool"
 				Description="Getting Git revision."
-				CommandLine="for /f %%i in (&apos;git ls-remote --get-url&apos;) do ( echo #define REPOURL &quot;%%i&quot; &gt; &quot;..\src\repourl.h&quot; )&#x0D;&#x0A;for /f %%i in (&apos;git show-ref -s12 origin/master&apos;) do ( echo #define GITIDENT &quot;%%i&quot; &gt; &quot;..\src\gitident.h&quot; )"
+				CommandLine="for /f %%i in (&apos;git ls-remote --get-url&apos;) do ( echo #define REPOURL &quot;%%i&quot; &gt; &quot;..\src\repourl.h&quot; )&#x0D;&#x0A;for /f %%i in (&apos;git show-ref -s12 origin/master&apos;) do ( echo #define GITIDENT &quot;%%i&quot; &gt; &quot;..\src\gitident.h&quot; )&#x0D;&#x0A;"
 			/>
 			<Tool
 				Name="VCCustomBuildTool"
@@ -98,7 +98,7 @@
 			<Tool
 				Name="VCPreBuildEventTool"
 				Description="Getting Git revision."
-				CommandLine="for /f %%i in (&apos;git ls-remote --get-url&apos;) do ( echo #define REPOURL &quot;%%i&quot; &gt; &quot;..\src\repourl.h&quot; )&#x0D;&#x0A;for /f %%i in (&apos;git show-ref -s12 origin/master&apos;) do ( echo #define GITIDENT &quot;%%i&quot; &gt; &quot;..\src\gitident.h&quot; )"
+				CommandLine="for /f %%i in (&apos;git ls-remote --get-url&apos;) do ( echo #define REPOURL &quot;%%i&quot; &gt; &quot;..\src\repourl.h&quot; )&#x0D;&#x0A;for /f %%i in (&apos;git show-ref -s12 origin/master&apos;) do ( echo #define GITIDENT &quot;%%i&quot; &gt; &quot;..\src\gitident.h&quot; )&#x0D;&#x0A;"
 			/>
 			<Tool
 				Name="VCCustomBuildTool"
@@ -117,6 +117,7 @@
 				Optimization="2"
 				EnableIntrinsicFunctions="true"
 				AdditionalIncludeDirectories=".\;..\src"
+				RuntimeLibrary="2"
 				EnableFunctionLevelLinking="true"
 				WarningLevel="3"
 				DebugInformationFormat="3"

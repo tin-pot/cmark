@@ -3,7 +3,12 @@
 */
 
 #include <stdio.h>
-#include "expat.h"
+#include "esisio.h"
+#include "xmlparse.h"
+
+#ifndef XMLCALL
+#define XMLCALL ESISCALL
+#endif
 
 #if defined(__amigaos__) && defined(__USE_INLINE__)
 #include <proto/expat.h>
@@ -111,7 +116,7 @@ main(int argc, char *argv[])
   do {
     int len = (int)fread(buf, 1, sizeof(buf), stdin);
     done = len < sizeof(buf);
-    if (XML_Parse(parser, buf, len, done) == XML_STATUS_ERROR) {
+    if (XML_Parse(parser, buf, len, done) != XML_ERROR_NONE) {
       fprintf(stderr,
               "%s at line %" XML_FMT_INT_MOD "u\n",
               XML_ErrorString(XML_GetErrorCode(parser)),

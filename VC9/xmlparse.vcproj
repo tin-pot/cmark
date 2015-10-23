@@ -146,7 +146,7 @@
 				AdditionalIncludeDirectories="..\expat\xmlparse;..\expat\xmltok,..\expat\xmlwf"
 				PreprocessorDefinitions="XMLTOKAPI=__declspec(dllimport);XMLPARSEAPI=__declspec(dllexport);NDEBUG;XML_NS;WIN32;_WINDOWS;XML_DTD"
 				StringPooling="true"
-				RuntimeLibrary="0"
+				RuntimeLibrary="2"
 				EnableFunctionLevelLinking="true"
 				PrecompiledHeaderFile=".\Release/xmlparse.pch"
 				AssemblerListingLocation=".\Release/"

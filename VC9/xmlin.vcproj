@@ -4,6 +4,7 @@
 	Version="9,00"
 	Name="xmlin"
 	ProjectGUID="{1925F442-9B82-461E-A1CE-EED3AF40AD13}"
+	RootNamespace="xmlin"
 	TargetFrameworkVersion="0"
 	>
 	<Platforms>
@@ -44,10 +45,10 @@
 			<Tool
 				Name="VCCLCompilerTool"
 				Optimization="0"
-				AdditionalIncludeDirectories="..\lib"
+				AdditionalIncludeDirectories="&quot;$(SolutionDir)..\esisio&quot;;&quot;$(SolutionDir)..\expat\xmlparse&quot;"
 				PreprocessorDefinitions="WIN32;_DEBUG;_CONSOLE;XML_STATIC"
 				BasicRuntimeChecks="3"
-				RuntimeLibrary="1"
+				RuntimeLibrary="3"
 				PrecompiledHeaderFile=".\..\win32\tmp\Debug-xmlin/xmlin.pch"
 				AssemblerListingLocation=".\..\win32\tmp\Debug-xmlin/"
 				ObjectFile=".\..\win32\tmp\Debug-xmlin/"
@@ -70,8 +71,6 @@
 			/>
 			<Tool
 				Name="VCLinkerTool"
-				AdditionalDependencies="libexpatMT.lib"
-				OutputFile="..\win32\bin\Debug\xmlin.exe"
 				LinkIncremental="2"
 				SuppressStartupBanner="true"
 				AdditionalLibraryDirectories="..\win32\bin\Debug"
@@ -136,10 +135,10 @@
 				Name="VCCLCompilerTool"
 				Optimization="2"
 				InlineFunctionExpansion="1"
-				AdditionalIncludeDirectories="..\lib"
+				AdditionalIncludeDirectories="&quot;$(SolutionDir)..\esisio&quot;;&quot;$(SolutionDir)..\expat\xmlparse&quot;"
 				PreprocessorDefinitions="WIN32;NDEBUG;_CONSOLE;XML_STATIC"
 				StringPooling="true"
-				RuntimeLibrary="0"
+				RuntimeLibrary="2"
 				EnableFunctionLevelLinking="true"
 				PrecompiledHeaderFile=".\..\win32\tmp\Release-xmlin/xmlin.pch"
 				AssemblerListingLocation=".\..\win32\tmp\Release-xmlin/"
@@ -161,8 +160,6 @@
 			/>
 			<Tool
 				Name="VCLinkerTool"
-				AdditionalDependencies="libexpatMT.lib"
-				OutputFile="..\win32\bin\Release\xmlin.exe"
 				LinkIncremental="1"
 				SuppressStartupBanner="true"
 				AdditionalLibraryDirectories="..\win32\bin\Release"

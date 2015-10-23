@@ -39,3 +39,4 @@ cmark
 /VC9/*.user
 /src/gitident.h
 /src/repourl.h
+/expat/xmltok/nametab.h
