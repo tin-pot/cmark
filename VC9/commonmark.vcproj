@@ -2,9 +2,9 @@
 <VisualStudioProject
 	ProjectType="Visual C++"
 	Version="9,00"
-	Name="xmlout"
-	ProjectGUID="{74473D16-608A-469f-B010-E68C6BF7A88D}"
-	RootNamespace="xmlout"
+	Name="commonmark"
+	ProjectGUID="{7DFB9059-1ABC-4850-BB33-ABDCE4005B60}"
+	RootNamespace="commonmark"
 	TargetFrameworkVersion="196613"
 	>
 	<Platforms>
@@ -171,7 +171,7 @@
 			UniqueIdentifier="{4FC737F1-C7A5-4376-A066-2A32D752A2FF}"
 			>
 			<File
-				RelativePath="..\esis\xmlout.c"
+				RelativePath="..\esis\commonmark.c"
 				>
 			</File>
 		</Filter>
@@ -180,14 +180,6 @@
 			Filter="h;hpp;hxx;hm;inl;inc;xsd"
 			UniqueIdentifier="{93995380-89BD-4b04-88EB-625FBE52EBFB}"
 			>
-			<File
-				RelativePath="..\src\gitident.h"
-				>
-			</File>
-			<File
-				RelativePath="..\src\repourl.h"
-				>
-			</File>
 		</Filter>
 	</Files>
 	<Globals>

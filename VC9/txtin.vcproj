@@ -2,9 +2,9 @@
 <VisualStudioProject
 	ProjectType="Visual C++"
 	Version="9,00"
-	Name="xmlout"
-	ProjectGUID="{74473D16-608A-469f-B010-E68C6BF7A88D}"
-	RootNamespace="xmlout"
+	Name="txtin"
+	ProjectGUID="{10385CE4-AE77-4D38-8E08-D0270D97C431}"
+	RootNamespace="txtin"
 	TargetFrameworkVersion="196613"
 	>
 	<Platforms>
@@ -170,24 +170,12 @@
 			Filter="cpp;c;cc;cxx;def;odl;idl;hpj;bat;asm;asmx"
 			UniqueIdentifier="{4FC737F1-C7A5-4376-A066-2A32D752A2FF}"
 			>
-			<File
-				RelativePath="..\esis\xmlout.c"
-				>
-			</File>
 		</Filter>
 		<Filter
 			Name="Headerdateien"
 			Filter="h;hpp;hxx;hm;inl;inc;xsd"
 			UniqueIdentifier="{93995380-89BD-4b04-88EB-625FBE52EBFB}"
 			>
-			<File
-				RelativePath="..\src\gitident.h"
-				>
-			</File>
-			<File
-				RelativePath="..\src\repourl.h"
-				>
-			</File>
 		</Filter>
 	</Files>
 	<Globals>

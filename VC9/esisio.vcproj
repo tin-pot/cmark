@@ -2,9 +2,9 @@
 <VisualStudioProject
 	ProjectType="Visual C++"
 	Version="9,00"
-	Name="cmesis"
-	ProjectGUID="{A91867FB-695E-4C6C-8B6B-AB0019351FB9}"
-	RootNamespace="cmesis"
+	Name="esisio"
+	ProjectGUID="{62B23D40-B879-40C7-9E2A-5D8E370DA1E4}"
+	RootNamespace="esisio"
 	TargetFrameworkVersion="196613"
 	>
 	<Platforms>
@@ -19,7 +19,7 @@
 			Name="Debug|Win32"
 			OutputDirectory="$(SolutionDir)$(ConfigurationName)"
 			IntermediateDirectory="$(ConfigurationName)\$(ProjectName)"
-			ConfigurationType="1"
+			ConfigurationType="4"
 			CharacterSet="2"
 			>
 			<Tool
@@ -61,15 +61,10 @@
 				Name="VCPreLinkEventTool"
 			/>
 			<Tool
-				Name="VCLinkerTool"
-				GenerateDebugInformation="true"
-				TargetMachine="1"
+				Name="VCLibrarianTool"
 			/>
 			<Tool
 				Name="VCALinkTool"
-			/>
-			<Tool
-				Name="VCManifestTool"
 			/>
 			<Tool
 				Name="VCXDCMakeTool"
@@ -81,9 +76,6 @@
 				Name="VCFxCopTool"
 			/>
 			<Tool
-				Name="VCAppVerifierTool"
-			/>
-			<Tool
 				Name="VCPostBuildEventTool"
 			/>
 		</Configuration>
@@ -91,7 +83,7 @@
 			Name="Release|Win32"
 			OutputDirectory="$(SolutionDir)$(ConfigurationName)"
 			IntermediateDirectory="$(ConfigurationName)\$(ProjectName)"
-			ConfigurationType="1"
+			ConfigurationType="4"
 			CharacterSet="2"
 			WholeProgramOptimization="1"
 			>
@@ -133,17 +125,10 @@
 				Name="VCPreLinkEventTool"
 			/>
 			<Tool
-				Name="VCLinkerTool"
-				GenerateDebugInformation="true"
-				OptimizeReferences="2"
-				EnableCOMDATFolding="2"
-				TargetMachine="1"
+				Name="VCLibrarianTool"
 			/>
 			<Tool
 				Name="VCALinkTool"
-			/>
-			<Tool
-				Name="VCManifestTool"
 			/>
 			<Tool
 				Name="VCXDCMakeTool"
@@ -153,9 +138,6 @@
 			/>
 			<Tool
 				Name="VCFxCopTool"
-			/>
-			<Tool
-				Name="VCAppVerifierTool"
 			/>
 			<Tool
 				Name="VCPostBuildEventTool"
@@ -171,7 +153,7 @@
 			UniqueIdentifier="{4FC737F1-C7A5-4376-A066-2A32D752A2FF}"
 			>
 			<File
-				RelativePath="..\src\cmesis.c"
+				RelativePath="..\esis\esisrd.c"
 				>
 			</File>
 		</Filter>
@@ -181,11 +163,11 @@
 			UniqueIdentifier="{93995380-89BD-4b04-88EB-625FBE52EBFB}"
 			>
 			<File
-				RelativePath="..\src\gitident.h"
+				RelativePath="..\esis\esisio.h"
 				>
 			</File>
 			<File
-				RelativePath="..\src\repourl.h"
+				RelativePath="..\esis\esisio_external.h"
 				>
 			</File>
 		</Filter>
