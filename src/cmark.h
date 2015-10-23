@@ -2,7 +2,9 @@
 #define CMARK_H
 
 #include <stdio.h>
+#ifdef CMARK_OPTION_64
 #include <stdint.h>
+#endif
 #include <cmark_export.h>
 #include <cmark_version.h>
 
@@ -20,7 +22,11 @@ extern "C" {
  * ## Simple Interface
  */
 
-typedef uint64_t cmark_option_t;
+#ifdef CMARK_OPTION_64
+typedef uint64_t cmark_option_t;  /* Future direction ... */
+#else
+typedef int cmark_option_t;       /* Current "official" default. */
+#endif
 
 /** Convert 'text' (assumed to be a UTF-8 encoded string with length
  * 'len' from CommonMark Markdown to HTML, returning a null-terminated,
