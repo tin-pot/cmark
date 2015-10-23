@@ -1,4 +1,5 @@
-#define ESISIMPORT /* Empty, building no DLL */
+/* esisrd.c */
+
 #include "esisio.h"
 
 #include <stdlib.h>

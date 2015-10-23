@@ -62,27 +62,10 @@
 #endif
 #endif  /* not defined ESISCALL */
 
-
-#if !defined(ESIS_STATIC) && !defined(ESISIMPORT)
-#ifndef ESIS_BUILDING_APP
-/* using Expat from an application */
-
-#ifdef ESIS_USE_MSC_EXTENSIONS
-#define ESISIMPORT __declspec(dllimport)
+#ifndef ESISPARSEAPI
+#define ESISPARSEAPI
+#define ESISWRITEAPI
 #endif
-
-#endif
-#endif  /* not defined ESIS_STATIC */
-
-
-/* If we didn't define it above, define it away: */
-#ifndef ESISIMPORT
-#define ESISIMPORT
-#endif
-
-
-#define ESISPARSEAPI(type) ESISIMPORT type ESISCALL
-#define ESISWRITEAPI(type) ESISIMPORT type ESISCALL
 
 #ifdef __cplusplus
 extern "C" {

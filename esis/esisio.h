@@ -1,13 +1,42 @@
-/* esisio.h */
-
 #ifndef ESISIO_H_INCLUDED
 #define ESISIO_H_INCLUDED
 
+/*
+   esisio --
+   
+       Reading and writing texts streams in the `nsgmls` output format,
+       representing the Element Structure Information Set (ESIS) of an
+       XML or SGML document.
+
+       The API defined herein does heavily borrow from the one provided
+       by the Expat 1.2 XML Parser Toolkit by James Clarke, see:
+
+           http://www.jclark.com/xml/expat.html
+
+       The primary purpose of this library is to support tools that
+       transform or consume such ESIS representation streams.
+
+       Functions to write output in XML or SGML format are also
+       provided: Together with an XML parser, this library can be used
+       to implement conversion from the marked-up form of XML and
+       SGML documents to the ESIS representation (either by stand-
+       alone parser like `nsgmls`, producing the ESIS representation,
+       or by using an XML parser library like `Expat` to read the ESIS
+       representation directly from the linked-in parser.
+       
+       Like Expat 1.2, this library is published under the MIT license:
+       
+           https://opensource.org/licenses/MIT
+
+       reproduced in the file `copying.txt`.
+       
+ */
+   
 #include <stdio.h> /* FILE */
 #include "esisio_external.h"
 
-#ifdef ESIS_XMLPARSE
-# include "expat.h" /* Use Expat as a front end for XML. */
+#ifdef ESIS_XMLPARSE   /* NOT IMPLEMENTED */
+# include <xmlparse.h> /* Use Expat as a front end for XML input. */
 #endif
 
 #ifdef __cplusplus 
@@ -30,16 +59,6 @@ extern "C" {
 struct ESIS_ParserStruct;
 typedef struct ESIS_ParserStruct *ESIS_Parser;
 
-/*
-   The ESIS_Status enum gives the possible return values for several
-   API functions (just like XML_Status does in Expat ...).
-*/
-enum ESIS_Status {
-  ESIS_STATUS_ERROR     = 0,
-  ESIS_STATUS_OK        = 1,
-  ESIS_STATUS_SUSPENDED = 2
-};
-
 enum ESIS_Error {
     ESIS_ERROR_NONE,
     ESIS_ERROR_NO_MEMORY,
@@ -54,31 +73,33 @@ struct ESIS_el {
 };
 
 
-ESISPARSEAPI(ESIS_Parser)
+ESIS_Parser ESISPARSEAPI
 ESIS_ParserCreate(const ESIS_Char *encoding);
 
-#ifdef ESIS_XMLPARSE
-ESISPARSEAPI(ESIS_Parser)
+#ifdef ESIS_XMLPARSE /* NOT IMPLEMENTED */
+ESIS_Parser ESISPARSEAPI
 ESIS_XmlParserCreate(XML_Parser xmlParser);
 #endif
 
-ESISPARSEAPI(ESIS_Bool)
+ESIS_Bool ESISPARSEAPI
 ESIS_ParserReset(ESIS_Parser, const ESIS_Char *encoding);
 
+
 typedef ESIS_Bool (ESISCALL *ESIS_ElementHandler) (
-                        void             *userData,
-                        long              elemID,
-                        const  ESIS_Elem *elem,
-                        const  ESIS_Char *charData,
-                        size_t            len);
-	
-ESISPARSEAPI(void)
-ESIS_SetElementHandler(ESIS_Parser         parser,
-                       ESIS_ElementHandler handler,
-	               const ESIS_Char    *elemGI,
-	               long                elemID,
-	               void               *userData);
-	
+					void               *userData,
+					long                elemID,
+					const  ESIS_Elem   *elem,
+					const  ESIS_Char   *charData,
+					size_t              len);
+
+void ESISPARSEAPI ESIS_SetElementHandler(
+					ESIS_Parser         parser,
+					ESIS_ElementHandler handler,
+					const ESIS_Char    *elemGI,
+					long                elemID,
+					void               *userData);
+
+
 /*
  * An element E is "seen" as open through the ESIS_Env() function
  *
@@ -122,178 +143,107 @@ ESIS_SetElementHandler(ESIS_Parser         parser,
  * or the number of currently open elements.
  */
  
-ESISPARSEAPI(size_t)
+size_t ESISPARSEAPI
 ESIS_Env(ESIS_Parser, ESIS_Elem outElems[], size_t depth);
 
-/* This structure is filled in by the ESIS_UnknownEncodingHandler to
-   provide information to the parser about encodings that are unknown
-   to the parser.
 
-   The map[b] member gives information about byte sequences whose
-   first byte is b.
+/*
+   This structure is filled in by the ESIS_UnknownEncodingHandler to
+   provide information to the parser about encodings that are unknown to
+   the parser (specified in the `?xml` PI at the start of an ESIS
+   stream).
 
-   If map[b] is c where c is >= 0, then b by itself encodes the
-   Unicode scalar value c.
+   The map[b] member gives information about byte sequences whose first
+   byte is b.
+
+   If map[b] is c where c is >= 0, then b by itself encodes the Unicode
+   scalar value c.
 
    If map[b] is -1, then the byte sequence is malformed.
 
-   If map[b] is -n, where n >= 2, then b is the first byte of an
-   n-byte sequence that encodes a single Unicode scalar value.
-
-   The data member will be passed as the first argument to the convert
-   function.
+   If map[b] is -n, where n >= 2, then b is the first byte of an n-byte
+   sequence that encodes a single Unicode scalar value. The data member
+   will be passed as the first argument to the convert function.
 
    The convert function is used to convert multibyte sequences; s will
-   point to a n-byte sequence where map[(unsigned char)*s] == -n.  The
+   point to a n-byte sequence where map[(unsigned char)*s] == -n. The
    convert function must return the Unicode scalar value represented
    by this byte sequence or -1 if the byte sequence is malformed.
-
-   The convert function may be NULL if the encoding is a single-byte
+   The convert function may be null if the encoding is a single-byte
    encoding, that is if map[b] >= -1 for all bytes b.
 
-   When the parser is finished with the encoding, then if release is
-   not NULL, it will call release passing it the data member; once
-   release has been called, the convert function will not be called
-   again.
+   When the parser is finished with the encoding, then if release is not
+   null, it will call release passing it the data member; once release
+   has been called, the convert function will not be called again.
 
-   Expat places certain restrictions on the encodings that are supported
-   using this mechanism.
+   This library places certain restrictions on the encodings that are
+   supported using this mechanism.
 
-   1. Every ASCII character that can appear in a well-formed XML document,
-      other than the characters
+    1. Every ASCII character that can appear in a well-formed XML
+       document, other than the characters
 
-      $@\^`{}~
+           $@\^`{}~
 
-      must be represented by a single byte, and that byte must be the
-      same byte that represents that character in ASCII.
+       must be represented by a single byte, and that byte must be the
+       same byte that represents that character in ASCII.
 
-   2. No character may require more than 4 bytes to encode.
+    2. No character may require more than 4 bytes to encode.
 
-   3. All characters encoded must have Unicode scalar values <=
-      0xFFFF, (i.e., characters that would be encoded by surrogates in
-      UTF-16 are  not allowed).  Note that this restriction doesn't
-      apply to the built-in support for UTF-8 and UTF-16.
+    3. All characters encoded must have Unicode scalar values <= 0xFFFF,
+       (ie characters that would be encoded by surrogates in UTF-16 are
+       not allowed). Note that this restriction doesn't apply to the
+       built-in support for UTF-8 and UTF-16.
 
-   4. No Unicode character may be encoded by more than one distinct
-      sequence of bytes.
-*/
+    4. No Unicode character may be encoded by more than one distinct
+       sequence of bytes.
+ */
+
 typedef struct {
-  int map[256];
-  void *data;
-  int (ESISCALL *convert)(void *data, const char *s);
-  void (ESISCALL *release)(void *data);
+	int              map[256];
+	void            *data;
+	int  (ESISCALL  *convert)(void *data, const char *s);
+	void (ESISCALL  *release)(void *data);
 } ESIS_Encoding;
 
-/* This is called for an encoding that is unknown to the parser.
 
-   The encodingHandlerData argument is that which was passed as the
-   second argument to ESIS_SetUnknownEncodingHandler.
+/*
+   This is called for an encoding that is unknown to the parser. The
+   encodingHandlerData argument is that which was passed as the second
+   argument to ESIS_SetUnknownEncodingHandler.
 
-   The name argument gives the name of the encoding as specified in
-   the encoding declaration.
+   The name argument gives the name of the encoding as specified in the
+   encoding declaration.
 
    If the callback can provide information about the encoding, it must
-   fill in the ESIS_Encoding structure, and return ESIS_STATUS_OK.
-   Otherwise it must return ESIS_STATUS_ERROR.
+   fill in the ESIS_Encoding structure, and return 1.
+
+   Otherwise it must return 0.
 
    If info does not describe a suitable encoding, then the parser will
    return an ESIS_UNKNOWN_ENCODING error.
-*/
+ */
+
 typedef int (ESISCALL *ESIS_UnknownEncodingHandler) (
-                                void            *encodingHandlerData,
-                                const ESIS_Char *name,
-                                ESIS_Encoding   *info);
-                                    
-/* Parses some input. Returns ESIS_STATUS_ERROR if a fatal error is
-   detected.  The last call to ESIS_Parse must have isFinal true; len
-   may be zero for this call (or any other).
+				void            *encodingHandlerData,
+				const ESIS_Char *name,
+				ESIS_Encoding   *info);
 
-   Though the return values for these functions has always been
-   described as a Boolean value, the implementation, at least for the
-   1.95.x series, has always returned exactly one of the ESIS_Status
-   values.
-*/
-
-ESISPARSEAPI(enum ESIS_Status)
-ESIS_Parse(ESIS_Parser parser, const char *s, size_t len, int isFinal);
-
-ESISPARSEAPI(void *)
-ESIS_GetBuffer(ESIS_Parser parser, size_t len);
-
-ESISPARSEAPI(enum ESIS_Status)
-ESIS_ParseBuffer(ESIS_Parser parser, size_t len, int isFinal);
 
 /*
-   Stops parsing, causing ESIS_Parse() or ESIS_ParseBuffer() to return.
-   Must be called from within a call-back handler, except when aborting
-   (resumable = 0) an already suspended parser. Some call-backs may
-   still follow because they would otherwise get lost. Examples:
-   - endElementHandler() for empty elements when stopped in
-     startElementHandler(), 
-   - endNameSpaceDeclHandler() when stopped in endElementHandler(), 
-   and possibly others.
+   Parses some input. Returns 0 if a fatal error is detected.
 
-   Can be called from most handlers, including DTD related call-backs,
-   except when parsing an external parameter entity and resumable != 0.
-   Returns ESIS_STATUS_OK when successful, ESIS_STATUS_ERROR otherwise.
-   Possible error codes: 
-   - ESIS_ERROR_SUSPENDED: when suspending an already suspended parser.
-   - ESIS_ERROR_FINISHED: when the parser has already finished.
-   - ESIS_ERROR_SUSPEND_PE: when suspending while parsing an external PE.
+   The last call to ESIS_Parse must have isFinal true; len may be zero
+   for this call (or any other).
+ */
 
-   When resumable != 0 (true) then parsing is suspended, that is, 
-   ESIS_Parse() and ESIS_ParseBuffer() return ESIS_STATUS_SUSPENDED. 
-   Otherwise, parsing is aborted, that is, ESIS_Parse() and ESIS_ParseBuffer()
-   return ESIS_STATUS_ERROR with error code ESIS_ERROR_ABORTED.
+int ESISPARSEAPI
+ESIS_Parse(ESIS_Parser parser, const char *s, size_t len, int isFinal);
 
-   *Note*:
-   This will be applied to the current parser instance only, that is, if
-   there is a parent parser then it will continue parsing when the
-   externalEntityRefHandler() returns. It is up to the implementation of
-   the externalEntityRefHandler() to call ESIS_StopParser() on the parent
-   parser (recursively), if one wants to stop parsing altogether.
+void * ESISPARSEAPI
+ESIS_GetBuffer(ESIS_Parser parser, size_t len);
 
-   When suspended, parsing can be resumed by calling ESIS_ResumeParser(). 
-*/
-
-ESISPARSEAPI(enum ESIS_Status)
-ESIS_StopParser(ESIS_Parser parser, ESIS_Bool resumable);
-
-/* Resumes parsing after it has been suspended with ESIS_StopParser().
-   Must not be called from within a handler call-back. Returns same
-   status codes as ESIS_Parse() or ESIS_ParseBuffer().
-   Additional error code ESIS_ERROR_NOT_SUSPENDED possible.   
-
-   *Note*:
-   This must be called on the most deeply nested child parser instance
-   first, and on its parent parser only after the child parser has finished,
-   to be applied recursively until the document entity's parser is restarted.
-   That is, the parent parser will not resume by itself and it is up to the
-   application to call ESIS_ResumeParser() on it at the appropriate moment.
-*/
-ESISPARSEAPI(enum ESIS_Status)
-ESIS_ResumeParser(ESIS_Parser parser);
-
-
-enum ESIS_Parsing {
-  ESIS_INITIALIZED,
-  ESIS_PARSING,
-  ESIS_FINISHED,
-  ESIS_SUSPENDED
-};
-
-typedef struct {
-  enum ESIS_Parsing parsing;
-  ESIS_Bool finalBuffer;
-} ESIS_ParsingStatus;
-
-/* Returns status of parser with respect to being initialized, parsing,
-   finished, or suspended and processing the final buffer.
-   XXX ESIS_Parse() and ESIS_ParseBuffer() should return ESIS_ParsingStatus,
-   XXX with ESIS_FINISHED_OK or ESIS_FINISHED_ERROR replacing ESIS_FINISHED
-*/
-ESISPARSEAPI(void)
-ESIS_GetParsingStatus(ESIS_Parser parser, ESIS_ParsingStatus *status);
+int ESISPARSEAPI
+ESIS_ParseBuffer(ESIS_Parser parser, size_t len, int isFinal);
 
 
 /*
@@ -307,26 +257,37 @@ ESIS_GetParsingStatus(ESIS_Parser parser, ESIS_ParsingStatus *status);
  *    ESIS_XmlParserCreate(XML_Parser xmlParser)
  *
  * so that the xmlParser can be created and initialized in any way
- * the application wants.
+ * the application wants (NOT IMPLEMENTED YET).
  */
  
-ESISPARSEAPI(ESIS_Parser)
-ESIS_FileParserCreate(FILE *fp,
+ESIS_Parser ESISPARSEAPI
+ESIS_FileParserCreate(FILE            *fp,
                       const ESIS_Char *encoding);
 
 
-/* If ESIS_Parse or ESIS_ParseBuffer have returned ESIS_STATUS_ERROR, then
-   ESIS_GetErrorCode returns information about the error.
+/*
+   If XML_Parse or XML_ParseBuffer have returned 0, then
+   XML_GetErrorCode returns information about the error.
 */
-ESISPARSEAPI(enum ESIS_Error)
-ESIS_GetErrorCode(ESIS_Parser parser);
 
-/*####################################################################*/
+enum ESIS_Error ESISPARSEAPI ESIS_GetErrorCode(ESIS_Parser parser);
+
+/*
+   Frees memory used by the parser.
+ */
+
+void ESISPARSEAPI ESIS_ParserFree(ESIS_Parser parser);
+
+/*
+   Returns a string describing the error.
+ */
+
+const char ESISPARSEAPI *ESIS_ErrorString(int code);
+
+/**********************************************************************/
 
 /*
  * Output support: writing ESIS, XML, and SGML files.
- *
- * :TODO: Separate header file "esisout.h" instead of "esisio.h" ?
  */
 
 struct ESIS_WriterStruct;
@@ -337,10 +298,11 @@ ESIS_Writer ESIS_WriterCreate(const ESIS_Char *encoding);
 ESIS_Writer ESIS_XmlWriterCreate(const ESIS_Char *encoding);
 ESIS_Writer ESIS_SgmlWriterCreate(const ESIS_Char *encoding);
 
+
 /*
- * If the number of characters passed in a ESIS_Char * argument
- * is specified as ESIS_NTS, a NUL-terminated string is assumed,
- * and the length is determined by the called function.
+   If the number of characters passed in a ESIS_Char * argument is
+   specified as ESIS_NTS, a NUL-terminated string is assumed, and the
+   length is determined by the called function.
  */
 
 #define ESIS_NTS (~(size_t)0U)
@@ -392,11 +354,14 @@ void ESIS_Atts(ESIS_Writer, const ESIS_Char **atts);
 
 void ESIS_Start(ESIS_Writer,     const ESIS_Char  *elemGI,
                                  const ESIS_Char **atts);
+
 void ESIS_StartElem(ESIS_Writer, const ESIS_Elem  *elem);
 
 void ESIS_Empty(ESIS_Writer,     const ESIS_Char  *elemGI,
                                  const ESIS_Char **atts);
+
 void ESIS_EmptyElem(ESIS_Writer, const ESIS_Elem  *elem);
+
 
 /*
    The difference between the two character data output functions
@@ -454,62 +419,90 @@ void ESIS_Cdata(ESIS_Writer,   const ESIS_Char *cd, size_t len);
 void ESIS_End(ESIS_Writer,     const ESIS_Char *elemGI);
 void ESIS_EndElem(ESIS_Writer, const ESIS_Elem *elem);
 
-/*
- * Useful Expat functions to emulat:
- */
-ESISPARSEAPI(void)
-ESIS_SetUnknownEncodingHandler(ESIS_Parser parser,
-                               ESIS_UnknownEncodingHandler handler,
-                               void *encodingHandlerData);
 
-/* This can be called within a handler for a start element, end
-   element, processing instruction or character data.  It causes the
-   corresponding markup to be passed to the default handler.
-*/
-ESISPARSEAPI(void)
+/*
+ * Functions analogous to the Expat API
+ *
+ * ************ THESE ARE ALL NOT IMPLEMENTED YET *********************
+ */
+ 
+void ESISPARSEAPI
+ESIS_SetUnknownEncodingHandler(
+				ESIS_Parser parser,
+				ESIS_UnknownEncodingHandler handler,
+				void *encodingHandlerData);
+
+
+/*
+   This can be called within a handler for a start element, end element,
+   processing instruction or character data. It causes the corresponding
+   markup to be passed to the default handler.
+ */
+
+void ESISPARSEAPI
 ESIS_DefaultCurrent(ESIS_Parser parser);
  
  
- 
-/* This value is passed as the userData argument to callbacks. */
-ESISPARSEAPI(void)
-ESIS_SetUserData(ESIS_Parser parser, void *userData);
+/*
+   This value is passed as the userData argument to callbacks.
+ */
 
-/* Returns the last value set by ESIS_SetUserData or NULL. */
-#define ESIS_GetUserData(parser) (*(void **)(parser))
+void ESISPARSEAPI
+ESIS_SetUserData(ESIS_Parser parser, long elemID, void *userData);
 
-/* This is equivalent to supplying an encoding argument to
-   ESIS_ParserCreate. On success ESIS_SetEncoding returns non-zero,
-   zero otherwise.
-   Note: Calling ESIS_SetEncoding after ESIS_Parse or ESIS_ParseBuffer
-     has no effect and returns ESIS_STATUS_ERROR.
-*/
-ESISPARSEAPI(enum ESIS_Status)
-ESIS_SetEncoding(ESIS_Parser parser, const ESIS_Char *encoding);/* If this function is called, then the parser will be passed as the
-   first argument to callbacks instead of userData.  The userData will
+
+/*
+   Returns the last value set by ESIS_SetUserData or NULL.
+ */
+
+void * ESISPARSEAPI
+ESIS_GetUserData(ESIS_Parser, long elemID);
+
+
+/*
+   This is equivalent to supplying an encoding argument to
+   ESIS_ParserCreate. It must not be called after ESIS_Parse or
+   ESIS_ParseBuffer.
+ */
+
+int ESISPARSEAPI
+ESIS_SetEncoding(ESIS_Parser parser, const ESIS_Char *encoding);
+
+
+/*
+   If this function is called, then the parser will be passed as the
+   first argument to callbacks instead of userData. The userData will
    still be accessible using ESIS_GetUserData.
-*/
-ESISPARSEAPI(void)
+ */
+
+void ESISPARSEAPI
 ESIS_UseParserAsHandlerArg(ESIS_Parser parser);
 
-/* Returns the number of the attribute/value pairs passed in last call
-   to the ESIS_StartElementHandler that were specified in the start-tag
-   rather than defaulted. Each attribute/value pair counts as 2; thus
-   this correspondds to an index into the atts array passed to the
-   ESIS_StartElementHandler.
-*/
-ESISPARSEAPI(int)
+
+/*
+   Returns the number of the attribute/value pairs passed in last call
+   to the ESIS_ElementHandler that were specified in the start-
+   tag rather than defaulted. Each attribute/value pair counts as 2;
+   thus this correspondds to an index into the atts array passed to the
+   ESIS_ElementHandler.
+ */
+
+int ESISPARSEAPI
 ESIS_GetSpecifiedAttributeCount(ESIS_Parser parser);
 
-/* Returns the index of the ID attribute passed in the last call to
-   ESIS_StartElementHandler, or -1 if there is no ID attribute.  Each
-   attribute/value pair counts as 2; thus this correspondds to an
-   index into the atts array passed to the ESIS_StartElementHandler.
-*/
-ESISPARSEAPI(int)
+
+/*
+   Returns the index of the ID attribute passed in the last call to
+   ESIS_ElementHandler, or -1 if there is no ID attribute. Each
+   attribute/value pair counts as 2; thus this correspondds to an index
+   into the atts array passed to the ESIS_ElementHandler.
+ */
+
+int ESISPARSEAPI
 ESIS_GetIdAttributeIndex(ESIS_Parser parser);
 
-
-
+#ifdef __cplusplus
+}
+#endif
 
 #endif/*ESISIO_H_INCLUDED*/
