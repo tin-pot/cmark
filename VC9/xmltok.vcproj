@@ -111,7 +111,7 @@
 			Name="Release|Win32"
 			OutputDirectory="$(SolutionDir)$(ConfigurationName)"
 			IntermediateDirectory="$(ConfigurationName)\$(ProjectName)"
-			ConfigurationType="2"
+			ConfigurationType="4"
 			InheritedPropertySheets="$(VCInstallDir)VCProjectDefaults\UpgradeFromVC60.vsprops"
 			UseOfMFC="0"
 			ATLMinimizesCRunTimeLibraryUsage="false"
@@ -142,7 +142,7 @@
 				Optimization="2"
 				InlineFunctionExpansion="1"
 				AdditionalIncludeDirectories="..\expat\xmlparse;..\expat\xmltok,..\expat\xmlwf"
-				PreprocessorDefinitions="NDEBUG;XML_NS;XMLTOKAPI=__declspec(dllexport);WIN32;_WINDOWS;XML_DTD"
+				PreprocessorDefinitions="NDEBUG;XML_NS;WIN32;_WINDOWS"
 				StringPooling="true"
 				RuntimeLibrary="2"
 				EnableFunctionLevelLinking="true"
@@ -165,22 +165,10 @@
 				Name="VCPreLinkEventTool"
 			/>
 			<Tool
-				Name="VCLinkerTool"
-				LinkIncremental="1"
-				SuppressStartupBanner="true"
-				ProgramDatabaseFile="$(OutDir)\xmltok.pdb"
-				SubSystem="2"
-				EntryPointSymbol="DllMain"
-				RandomizedBaseAddress="1"
-				DataExecutionPrevention="0"
-				ImportLibrary="$(OutDir)\xmltok.lib"
-				TargetMachine="1"
+				Name="VCLibrarianTool"
 			/>
 			<Tool
 				Name="VCALinkTool"
-			/>
-			<Tool
-				Name="VCManifestTool"
 			/>
 			<Tool
 				Name="VCXDCMakeTool"
@@ -194,7 +182,81 @@
 				Name="VCFxCopTool"
 			/>
 			<Tool
-				Name="VCAppVerifierTool"
+				Name="VCPostBuildEventTool"
+			/>
+		</Configuration>
+		<Configuration
+			Name="Release_MT|Win32"
+			OutputDirectory="$(SolutionDir)$(ConfigurationName)"
+			IntermediateDirectory="$(ConfigurationName)\$(ProjectName)"
+			ConfigurationType="4"
+			InheritedPropertySheets="$(VCInstallDir)VCProjectDefaults\UpgradeFromVC60.vsprops"
+			UseOfMFC="0"
+			ATLMinimizesCRunTimeLibraryUsage="false"
+			>
+			<Tool
+				Name="VCPreBuildEventTool"
+			/>
+			<Tool
+				Name="VCCustomBuildTool"
+			/>
+			<Tool
+				Name="VCXMLDataGeneratorTool"
+			/>
+			<Tool
+				Name="VCWebServiceProxyGeneratorTool"
+			/>
+			<Tool
+				Name="VCMIDLTool"
+				PreprocessorDefinitions="NDEBUG"
+				MkTypLibCompatible="true"
+				SuppressStartupBanner="true"
+				TargetEnvironment="1"
+				TypeLibraryName="$(OutDir)\xmltok.tlb"
+				HeaderFileName=""
+			/>
+			<Tool
+				Name="VCCLCompilerTool"
+				Optimization="2"
+				InlineFunctionExpansion="1"
+				AdditionalIncludeDirectories="..\expat\xmlparse;..\expat\xmltok,..\expat\xmlwf"
+				PreprocessorDefinitions="NDEBUG;XML_NS;WIN32;_WINDOWS"
+				StringPooling="true"
+				EnableFunctionLevelLinking="true"
+				PrecompiledHeaderFile="$(IntDir)\xmltok.pch"
+				AssemblerListingLocation="$(IntDir)\"
+				ObjectFile="$(IntDir)\"
+				ProgramDataBaseFileName="$(IntDir)\"
+				WarningLevel="3"
+				SuppressStartupBanner="true"
+			/>
+			<Tool
+				Name="VCManagedResourceCompilerTool"
+			/>
+			<Tool
+				Name="VCResourceCompilerTool"
+				PreprocessorDefinitions="NDEBUG"
+				Culture="2057"
+			/>
+			<Tool
+				Name="VCPreLinkEventTool"
+			/>
+			<Tool
+				Name="VCLibrarianTool"
+			/>
+			<Tool
+				Name="VCALinkTool"
+			/>
+			<Tool
+				Name="VCXDCMakeTool"
+			/>
+			<Tool
+				Name="VCBscMakeTool"
+				SuppressStartupBanner="true"
+				OutputFile="$(IntDir)\xmltok.bsc"
+			/>
+			<Tool
+				Name="VCFxCopTool"
 			/>
 			<Tool
 				Name="VCPostBuildEventTool"
@@ -227,6 +289,14 @@
 						PreprocessorDefinitions=""
 					/>
 				</FileConfiguration>
+				<FileConfiguration
+					Name="Release_MT|Win32"
+					>
+					<Tool
+						Name="VCCLCompilerTool"
+						PreprocessorDefinitions=""
+					/>
+				</FileConfiguration>
 			</File>
 			<File
 				RelativePath="..\expat\gennmtab\gennmtab.c"
@@ -246,8 +316,18 @@
 					>
 					<Tool
 						Name="VCCustomBuildTool"
-						Description="Creating nametab.h"
-						CommandLine="$(OutDir)\gennmtab &gt;$(SolutionDir)..\expat\xmltok\nametab.h&#x0D;&#x0A;"
+						Description="Looking for nametab.h ..."
+						CommandLine="if exist &quot;$(SolutionDir)..\expat\xmltok\nametab.h&quot; (echo Using existing nametab.h) else (echo Creating nametab.h &amp;&amp; $(OutDir)\gennmtab &gt;$(SolutionDir)..\expat\xmltok\nametab.h)&#x0D;&#x0A;"
+						Outputs="$(ProjectDir)nametab.h"
+					/>
+				</FileConfiguration>
+				<FileConfiguration
+					Name="Release_MT|Win32"
+					>
+					<Tool
+						Name="VCCustomBuildTool"
+						Description="Looking for nametab.h ..."
+						CommandLine="if exist &quot;$(SolutionDir)..\expat\xmltok\nametab.h&quot; (echo Using existing nametab.h) else (echo Creating nametab.h &amp;&amp; $(OutDir)\gennmtab &gt;$(SolutionDir)..\expat\xmltok\nametab.h)&#x0D;&#x0A;"
 						Outputs="$(ProjectDir)nametab.h"
 					/>
 				</FileConfiguration>
@@ -265,6 +345,14 @@
 				</FileConfiguration>
 				<FileConfiguration
 					Name="Release|Win32"
+					>
+					<Tool
+						Name="VCCLCompilerTool"
+						PreprocessorDefinitions=""
+					/>
+				</FileConfiguration>
+				<FileConfiguration
+					Name="Release_MT|Win32"
 					>
 					<Tool
 						Name="VCCLCompilerTool"
@@ -291,6 +379,14 @@
 						PreprocessorDefinitions=""
 					/>
 				</FileConfiguration>
+				<FileConfiguration
+					Name="Release_MT|Win32"
+					>
+					<Tool
+						Name="VCCLCompilerTool"
+						PreprocessorDefinitions=""
+					/>
+				</FileConfiguration>
 			</File>
 		</Filter>
 		<Filter
@@ -307,10 +403,6 @@
 			</File>
 			<File
 				RelativePath="..\expat\xmltok\latin1tab.h"
-				>
-			</File>
-			<File
-				RelativePath="..\expat\xmltok\nametab.h"
 				>
 			</File>
 			<File
@@ -350,6 +442,15 @@
 						PreprocessorDefinitions=""
 					/>
 				</FileConfiguration>
+				<FileConfiguration
+					Name="Release_MT|Win32"
+					ExcludedFromBuild="true"
+					>
+					<Tool
+						Name="VCCLCompilerTool"
+						PreprocessorDefinitions=""
+					/>
+				</FileConfiguration>
 			</File>
 			<File
 				RelativePath="..\expat\xmltok\xmltok_impl.h"
@@ -369,6 +470,15 @@
 				</FileConfiguration>
 				<FileConfiguration
 					Name="Release|Win32"
+					ExcludedFromBuild="true"
+					>
+					<Tool
+						Name="VCCLCompilerTool"
+						PreprocessorDefinitions=""
+					/>
+				</FileConfiguration>
+				<FileConfiguration
+					Name="Release_MT|Win32"
 					ExcludedFromBuild="true"
 					>
 					<Tool
