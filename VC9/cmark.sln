@@ -47,6 +47,9 @@ EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Expat 1.2", "Expat 1.2", "{9104420B-759E-413D-AA4F-CD6F19406D99}"
 EndProject
 Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "xmlparse", "xmlparse.vcproj", "{35C506BA-53EB-49AC-9CE2-0793CC2971E5}"
+	ProjectSection(ProjectDependencies) = postProject
+		{D4F277DA-E3C7-407B-B800-5582A273737F} = {D4F277DA-E3C7-407B-B800-5582A273737F}
+	EndProjectSection
 EndProject
 Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "xmlwf", "xmlwf.vcproj", "{157FE769-1EEC-4713-AE27-D354336D0CA4}"
 	ProjectSection(ProjectDependencies) = postProject
@@ -55,13 +58,10 @@ Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "xmlwf", "xmlwf.vcproj", "{1
 EndProject
 Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "xmltok", "xmltok.vcproj", "{D4F277DA-E3C7-407B-B800-5582A273737F}"
 	ProjectSection(ProjectDependencies) = postProject
-		{35C506BA-53EB-49AC-9CE2-0793CC2971E5} = {35C506BA-53EB-49AC-9CE2-0793CC2971E5}
+		{644A28A3-B823-47DE-88D0-E7562DCEF17B} = {644A28A3-B823-47DE-88D0-E7562DCEF17B}
 	EndProjectSection
 EndProject
 Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "gennmtab", "gennmtab.vcproj", "{644A28A3-B823-47DE-88D0-E7562DCEF17B}"
-	ProjectSection(ProjectDependencies) = postProject
-		{35C506BA-53EB-49AC-9CE2-0793CC2971E5} = {35C506BA-53EB-49AC-9CE2-0793CC2971E5}
-	EndProjectSection
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution

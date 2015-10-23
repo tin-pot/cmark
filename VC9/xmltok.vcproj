@@ -4,6 +4,7 @@
 	Version="9,00"
 	Name="xmltok"
 	ProjectGUID="{D4F277DA-E3C7-407B-B800-5582A273737F}"
+	RootNamespace="xmltok"
 	TargetFrameworkVersion="0"
 	>
 	<Platforms>
@@ -47,7 +48,7 @@
 			<Tool
 				Name="VCCLCompilerTool"
 				Optimization="0"
-				AdditionalIncludeDirectories="..\expat;..\expat\xmltok,..\expat\xmlwf"
+				AdditionalIncludeDirectories="..\expat\xmlparse;..\expat\xmltok,..\expat\xmlwf"
 				PreprocessorDefinitions="_DEBUG;XMLTOKAPI=__declspec(dllexport);WIN32;_WINDOWS;XML_DTD;XML_NS"
 				MinimalRebuild="true"
 				RuntimeLibrary="1"
@@ -72,7 +73,6 @@
 			/>
 			<Tool
 				Name="VCLinkerTool"
-				OutputFile="$(OutDir)\xmltoc.tll"
 				LinkIncremental="2"
 				SuppressStartupBanner="true"
 				GenerateDebugInformation="true"
@@ -141,7 +141,7 @@
 				Name="VCCLCompilerTool"
 				Optimization="2"
 				InlineFunctionExpansion="1"
-				AdditionalIncludeDirectories="..\expat;..\expat\xmltok,..\expat\xmlwf"
+				AdditionalIncludeDirectories="..\expat\xmlparse;..\expat\xmltok,..\expat\xmlwf"
 				PreprocessorDefinitions="NDEBUG;XML_NS;XMLTOKAPI=__declspec(dllexport);WIN32;_WINDOWS;XML_DTD"
 				StringPooling="true"
 				RuntimeLibrary="0"
@@ -166,7 +166,6 @@
 			/>
 			<Tool
 				Name="VCLinkerTool"
-				OutputFile="$(OutDir)\xmltoc.tll"
 				LinkIncremental="1"
 				SuppressStartupBanner="true"
 				ProgramDatabaseFile="$(OutDir)\xmltok.pdb"
@@ -238,7 +237,7 @@
 					<Tool
 						Name="VCCustomBuildTool"
 						Description="Creating nametab.h"
-						CommandLine="$(InputDir)$(OutDir)\gennmtab &gt;$(ProjectDir)nametab.h&#x0D;&#x0A;"
+						CommandLine="$(OutDir)\gennmtab &gt;$(SolutionDir)..\expat\xmltok\nametab.h&#x0D;&#x0A;"
 						Outputs="$(ProjectDir)nametab.h"
 					/>
 				</FileConfiguration>
@@ -248,7 +247,7 @@
 					<Tool
 						Name="VCCustomBuildTool"
 						Description="Creating nametab.h"
-						CommandLine="$(InputDir)$(OutDir)\gennmtab &gt;$(ProjectDir)nametab.h&#x0D;&#x0A;"
+						CommandLine="$(OutDir)\gennmtab &gt;$(SolutionDir)..\expat\xmltok\nametab.h&#x0D;&#x0A;"
 						Outputs="$(ProjectDir)nametab.h"
 					/>
 				</FileConfiguration>

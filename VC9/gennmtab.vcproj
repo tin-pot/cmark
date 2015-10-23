@@ -43,7 +43,7 @@
 			<Tool
 				Name="VCCLCompilerTool"
 				Optimization="0"
-				AdditionalIncludeDirectories="..\expat;..\expat\xmltok,..\expat\xmlwf"
+				AdditionalIncludeDirectories="..\expat\xmlparse;..\expat\xmltok,..\expat\xmlwf"
 				PreprocessorDefinitions="WIN32;_DEBUG;_CONSOLE"
 				MinimalRebuild="true"
 				RuntimeLibrary="1"
@@ -68,7 +68,6 @@
 			/>
 			<Tool
 				Name="VCLinkerTool"
-				OutputFile="$(OutDir)\gennmtab.exe"
 				LinkIncremental="2"
 				SuppressStartupBanner="true"
 				GenerateDebugInformation="true"
@@ -132,7 +131,7 @@
 				Name="VCCLCompilerTool"
 				Optimization="2"
 				InlineFunctionExpansion="1"
-				AdditionalIncludeDirectories="..\expat;..\expat\xmltok,..\expat\xmlwf"
+				AdditionalIncludeDirectories="..\expat\xmlparse;..\expat\xmltok,..\expat\xmlwf"
 				PreprocessorDefinitions="WIN32;NDEBUG;_CONSOLE"
 				StringPooling="true"
 				RuntimeLibrary="0"
@@ -157,7 +156,6 @@
 			/>
 			<Tool
 				Name="VCLinkerTool"
-				OutputFile="$(OutDir)\gennmtab.exe"
 				LinkIncremental="1"
 				SuppressStartupBanner="true"
 				ProgramDatabaseFile="$(OutDir)\gennmtab.pdb"
@@ -199,7 +197,7 @@
 			Filter="cpp;c;cxx;rc;def;r;odl;idl;hpj;bat;for;f90"
 			>
 			<File
-				RelativePath="..\expat\gennmtag\gennmtab.c"
+				RelativePath="..\expat\gennmtab\gennmtab.c"
 				>
 				<FileConfiguration
 					Name="Debug|Win32"

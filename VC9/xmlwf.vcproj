@@ -44,7 +44,7 @@
 				Name="VCCLCompilerTool"
 				Optimization="2"
 				InlineFunctionExpansion="1"
-				AdditionalIncludeDirectories="..\expat;..\expat\xmltok,..\expat\xmlwf"
+				AdditionalIncludeDirectories="..\expat\xmlparse;..\expat\xmltok,..\expat\xmlwf"
 				PreprocessorDefinitions="NDEBUG;WIN32;_CONSOLE;XMLTOKAPI=__declspec(dllimport);XMLPARSEAPI=__declspec(dllimport)"
 				StringPooling="true"
 				RuntimeLibrary="0"
@@ -55,6 +55,7 @@
 				ProgramDataBaseFileName="$(IntDir)\"
 				WarningLevel="3"
 				SuppressStartupBanner="true"
+				DisableSpecificWarnings="4996"
 			/>
 			<Tool
 				Name="VCManagedResourceCompilerTool"
@@ -70,7 +71,6 @@
 			<Tool
 				Name="VCLinkerTool"
 				AdditionalDependencies="setargv.obj odbc32.lib odbccp32.lib"
-				OutputFile="$(OutDir)\xmlwf.exe"
 				LinkIncremental="1"
 				SuppressStartupBanner="true"
 				ProgramDatabaseFile="$(OutDir)\xmlwf.pdb"
@@ -132,7 +132,7 @@
 			<Tool
 				Name="VCCLCompilerTool"
 				Optimization="0"
-				AdditionalIncludeDirectories="..\expat;..\expat\xmltok,..\expat\xmlwf"
+				AdditionalIncludeDirectories="..\expat\xmlparse;..\expat\xmltok,..\expat\xmlwf"
 				PreprocessorDefinitions="_DEBUG;WIN32;_CONSOLE;XMLTOKAPI=__declspec(dllimport);XMLPARSEAPI=__declspec(dllimport)"
 				MinimalRebuild="true"
 				RuntimeLibrary="3"
@@ -143,6 +143,7 @@
 				WarningLevel="3"
 				SuppressStartupBanner="true"
 				DebugInformationFormat="4"
+				DisableSpecificWarnings="4996"
 			/>
 			<Tool
 				Name="VCManagedResourceCompilerTool"
@@ -158,7 +159,6 @@
 			<Tool
 				Name="VCLinkerTool"
 				AdditionalDependencies="setargv.obj odbc32.lib odbccp32.lib"
-				OutputFile="$(OutDir)\xmlwf.exe"
 				LinkIncremental="2"
 				SuppressStartupBanner="true"
 				GenerateDebugInformation="true"
