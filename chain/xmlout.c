@@ -189,11 +189,13 @@ void translate(const struct trans tab[])
   const struct trans *tp;
   unsigned flags;
   size_t len;
+  int havepi = 0;
   
   while ((ch = getchar()) != EOF) {
     switch (ch) {
       case '?':
         trans_pi();
+        havepi = 1;
         break;
         
       case 'A':
@@ -241,6 +243,8 @@ void translate(const struct trans tab[])
                   `s`, `p`, `f`, `{`, `}`, `L`, `#`, `C`, `i`, `e` */
         ;
     }
+    if (!havepi) puts("<?xml version=\"1.0\" encoding=\"UTF-8\"?>");
+    havepi = 1;
   }
 }
 
