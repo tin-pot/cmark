@@ -1,14 +1,13 @@
-/* This is simple demonstration of how to use expat. This program
-   reads an XML document from standard input and writes 
-*/
+/* xmlin.c */
+
+#ifdef _MSC_VER
+#define _CRT_DISABLE_PERFCRIT_LOCKS
+#endif
 
 #include <stdio.h>
-#include "esisio.h"
-#include "xmlparse.h"
+#include <esisio.h>
+#include <xmlparse.h>
 
-#ifndef XMLCALL
-#define XMLCALL ESISCALL
-#endif
 
 #ifdef XML_LARGE_SIZE
 #if defined(XML_USE_MSC_EXTENSIONS) && _MSC_VER < 1400
@@ -21,77 +20,82 @@
 #endif
 
 struct state {
-  int level;
-  size_t ncdata;
+  int       level;
+  size_t    col;
+  FILE     *infp;
+  FILE     *outfp;
 };
 
-static void XMLCALL
+static void
 startElement(void *userData, const char *name, const char **atts)
 {
   int i;
-  struct state *sp = userData;
+  struct state *const sp = userData;
+  FILE *const fp = sp->outfp;
   
   if (sp->level == 0)
-    puts("?xml version=\"1.0\" encoding=\"UTF-8\"");
+    fputs("?xml version=\"1.0\" encoding=\"UTF-8\"", fp);
     
-  if (sp->ncdata > 0U)
-    putchar('\n');
+  if (sp->col > 0U)
+    putc('\n', fp);
   
   for (i = 0; atts[i]; i += 2) {
-    printf("A%s CDATA %s\n", atts[i], atts[i+1]);
+    fprintf(fp, "A%s CDATA %s\n", atts[i], atts[i+1]);
   }
-  printf("(%s\n", name);
+  fprintf(fp, "(%s\n", name);
   
-  sp->ncdata = 0U;
+  sp->col = 0U;
   sp->level++;
 }
 
-static void XMLCALL
+static void
 characterData(void *userData, const XML_Char *s, int len)
 {
   int i;
   struct state *sp = userData;
+  FILE *fp = sp->outfp;
   
   if (len == 0) return;
      
-  if (sp->ncdata == 0) putchar('-');
+  if (sp->col == 0) putc('-', fp);
   
   for (i = 0; i < len; ++i)
     if (s[i] == '\n') {
-	putchar('\\');
-	putchar('n');
-	sp->ncdata += 2;
-	putchar('\\');
-	putchar('0');
-	putchar('1');
-	putchar('2');
-	sp->ncdata += 4;
+	putc('\\', fp);
+	putc('n', fp);
+	sp->col += 2;
+	putc('\\', fp);
+	putc('0', fp);
+	putc('1', fp);
+	putc('2', fp);
+	sp->col += 4;
     } else if (s[i] == '\\') {
-	putchar('\\');
-	putchar('\\');
-	sp->ncdata += 2;
+	putc('\\', fp);
+	putc('\\', fp);
+	sp->col += 2;
     } else if (s[i] == '\r') {
-	putchar('\\');
-	putchar('0');
-	putchar('1');
-	putchar('2');
-	sp->ncdata += 4;
+	putc('\\', fp);
+	putc('0', fp);
+	putc('1', fp);
+	putc('2', fp);
+	sp->col += 4;
     } else {
-	putchar(s[i]);
-	sp->ncdata += 1;
+	putc(s[i], fp);
+	sp->col += 1;
     }
 }
 
-static void XMLCALL
+static void
 endElement(void *userData, const char *name)
 {
   struct state *sp = userData;
+  FILE *fp = sp->outfp;
   
-  if (sp->ncdata > 0U) putchar('\n');
+  if (sp->col > 0U) putc('\n', fp);
   
-  printf(")%s\n", name);
+  fprintf(fp, ")%s\n", name);
   sp->level--;
-  sp->ncdata = 0U;
+  sp->col = 0U;
 }
 
 int
@@ -107,10 +111,12 @@ main(int argc, char *argv[])
   XML_SetCharacterDataHandler(parser,
                               characterData);
   s.level = 0;
-  s.ncdata = 0U;
+  s.col   = 0U;
+  s.infp  = stdin;
+  s.outfp = stdout;
   
   do {
-    int len = (int)fread(buf, 1, sizeof(buf), stdin);
+    int len = (int)fread(buf, 1, sizeof(buf), s.infp);
     done = len < sizeof(buf);
     if (XML_Parse(parser, buf, len, done) != XML_ERROR_NONE) {
       fprintf(stderr,
@@ -121,8 +127,8 @@ main(int argc, char *argv[])
     }
   } while (!done);
   
-  if (s.ncdata > 0) putchar('\n');
-  if (s.level == 0) puts("C");
+  if (s.col > 0) putc('\n', s.outfp);
+  if (s.level == 0) fputs("C", s.outfp);
   
   XML_ParserFree(parser);
   return 0;
