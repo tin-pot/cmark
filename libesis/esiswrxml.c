@@ -59,7 +59,7 @@ WritePCDATA(FILE *outputFile, const byte *data, size_t len)
         putc(b, outputFile);
         continue;
     }
-    fputs(buf, outputFile);
+    fputs(ent, outputFile);
   }
 }
 
@@ -75,8 +75,14 @@ EsisXmlTagWriter(FILE             *outputFile,
   case ESIS_START_ :
   case ESIS_EMPTY_ :
     fprintf(outputFile, "<%s", elemGI);
-    if (atts != NULL) for (k = 0; atts[k] != NULL; k += 2)
-      fprintf(outputFile, " %s=\"%s\"", atts[k], atts[k+1]);
+    if (atts != NULL) for (k = 0; atts[k] != NULL; k += 2) {
+      putc(' ', outputFile);
+      WritePCDATA(outputFile, atts[k],   strlen(atts[k]));
+      putc('=', outputFile);
+      putc('"', outputFile);
+      WritePCDATA(outputFile, atts[k+1], strlen(atts[k+1]));
+      putc('"', outputFile);
+    }
       
     if (what == ESIS_EMPTY_)
       putc('/', outputFile);
