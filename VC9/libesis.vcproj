@@ -221,7 +221,19 @@
 			UniqueIdentifier="{4FC737F1-C7A5-4376-A066-2A32D752A2FF}"
 			>
 			<File
+				RelativePath="..\libesis\esismem.c"
+				>
+			</File>
+			<File
 				RelativePath="..\libesis\esisrd.c"
+				>
+			</File>
+			<File
+				RelativePath="..\libesis\esiswr.c"
+				>
+			</File>
+			<File
+				RelativePath="..\libesis\esiswrxml.c"
 				>
 			</File>
 			<File
@@ -240,6 +252,10 @@
 			</File>
 			<File
 				RelativePath="..\libesis\esisio_external.h"
+				>
+			</File>
+			<File
+				RelativePath="..\libesis\esisio_int.h"
 				>
 			</File>
 		</Filter>

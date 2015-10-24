@@ -73,15 +73,15 @@ struct ESIS_el {
 };
 
 
-ESIS_Parser ESISPARSEAPI
+ESIS_Parser ESISAPI
 ESIS_ParserCreate(const ESIS_Char *encoding);
 
 #ifdef ESIS_XMLPARSE /* NOT IMPLEMENTED */
-ESIS_Parser ESISPARSEAPI
+ESIS_Parser ESISAPI
 ESIS_XmlParserCreate(XML_Parser xmlParser);
 #endif
 
-ESIS_Bool ESISPARSEAPI
+ESIS_Bool ESISAPI
 ESIS_ParserReset(ESIS_Parser, const ESIS_Char *encoding);
 
 
@@ -92,7 +92,7 @@ typedef ESIS_Bool (ESISCALL *ESIS_ElementHandler) (
 					const  ESIS_Char   *charData,
 					size_t              len);
 
-void ESISPARSEAPI ESIS_SetElementHandler(
+void ESISAPI ESIS_SetElementHandler(
 					ESIS_Parser         parser,
 					ESIS_ElementHandler handler,
 					const ESIS_Char    *elemGI,
@@ -143,7 +143,7 @@ void ESISPARSEAPI ESIS_SetElementHandler(
  * or the number of currently open elements.
  */
  
-size_t ESISPARSEAPI
+size_t ESISAPI
 ESIS_Env(ESIS_Parser, ESIS_Elem outElems[], size_t depth);
 
 
@@ -236,13 +236,13 @@ typedef int (ESISCALL *ESIS_UnknownEncodingHandler) (
    for this call (or any other).
  */
 
-int ESISPARSEAPI
+int ESISAPI
 ESIS_Parse(ESIS_Parser parser, const char *s, size_t len, int isFinal);
 
-void * ESISPARSEAPI
+void * ESISAPI
 ESIS_GetBuffer(ESIS_Parser parser, size_t len);
 
-int ESISPARSEAPI
+int ESISAPI
 ESIS_ParseBuffer(ESIS_Parser parser, size_t len, int isFinal);
 
 
@@ -260,7 +260,7 @@ ESIS_ParseBuffer(ESIS_Parser parser, size_t len, int isFinal);
  * the application wants (NOT IMPLEMENTED YET).
  */
  
-ESIS_Parser ESISPARSEAPI
+ESIS_Parser ESISAPI
 ESIS_FileParserCreate(FILE            *fp,
                       const ESIS_Char *encoding);
 
@@ -270,19 +270,19 @@ ESIS_FileParserCreate(FILE            *fp,
    XML_GetErrorCode returns information about the error.
 */
 
-enum ESIS_Error ESISPARSEAPI ESIS_GetErrorCode(ESIS_Parser parser);
+enum ESIS_Error ESISAPI ESIS_GetErrorCode(ESIS_Parser parser);
 
 /*
    Frees memory used by the parser.
  */
 
-void ESISPARSEAPI ESIS_ParserFree(ESIS_Parser parser);
+void ESISAPI ESIS_ParserFree(ESIS_Parser parser);
 
 /*
    Returns a string describing the error.
  */
 
-const char ESISPARSEAPI *ESIS_ErrorString(int code);
+const char ESISAPI *ESIS_ErrorString(int code);
 
 /**********************************************************************/
 
@@ -294,9 +294,14 @@ struct ESIS_WriterStruct;
 
 typedef struct ESIS_WriterStruct *ESIS_Writer;
 
-ESIS_Writer ESIS_WriterCreate(const ESIS_Char *encoding);
-ESIS_Writer ESIS_XmlWriterCreate(const ESIS_Char *encoding);
-ESIS_Writer ESIS_SgmlWriterCreate(const ESIS_Char *encoding);
+ESIS_Writer ESISAPI
+ESIS_WriterCreate(FILE *, const ESIS_Char *encoding);
+
+ESIS_Writer ESISAPI
+ESIS_XmlWriterCreate(FILE *, const ESIS_Char *encoding);
+
+ESIS_Writer ESISAPI
+ESIS_SgmlWriterCreate(FILE *, const ESIS_Char *encoding);
 
 
 /*
@@ -307,10 +312,12 @@ ESIS_Writer ESIS_SgmlWriterCreate(const ESIS_Char *encoding);
 
 #define ESIS_NTS (~(size_t)0U)
 
-void ESIS_Attr(ESIS_Writer, const ESIS_Char  *name,
-                            const ESIS_Char  *val, size_t len);
+void ESISAPI
+ESIS_Attr(ESIS_Writer, const ESIS_Char  *name,
+                       const ESIS_Char  *val, size_t len);
 
-void ESIS_Atts(ESIS_Writer, const ESIS_Char **atts);
+void ESISAPI
+ESIS_Atts(ESIS_Writer, const ESIS_Char **atts);
 
 
 /*
@@ -352,15 +359,19 @@ void ESIS_Atts(ESIS_Writer, const ESIS_Char **atts);
    
  */
 
-void ESIS_Start(ESIS_Writer,     const ESIS_Char  *elemGI,
-                                 const ESIS_Char **atts);
+void ESISAPI
+ESIS_Start(ESIS_Writer,     const ESIS_Char  *elemGI,
+                            const ESIS_Char **atts);
 
-void ESIS_StartElem(ESIS_Writer, const ESIS_Elem  *elem);
+void ESISAPI
+ESIS_StartElem(ESIS_Writer, const ESIS_Elem  *elem);
 
-void ESIS_Empty(ESIS_Writer,     const ESIS_Char  *elemGI,
-                                 const ESIS_Char **atts);
+void ESISAPI
+ESIS_Empty(ESIS_Writer,     const ESIS_Char  *elemGI,
+                            const ESIS_Char **atts);
 
-void ESIS_EmptyElem(ESIS_Writer, const ESIS_Elem  *elem);
+void ESISAPI
+ESIS_EmptyElem(ESIS_Writer, const ESIS_Elem  *elem);
 
 
 /*
@@ -408,17 +419,23 @@ void ESIS_EmptyElem(ESIS_Writer, const ESIS_Elem  *elem);
           represented by a "`\#n;`" sequence using decimal digits.
  */
 
-void ESIS_PCdata(ESIS_Writer,  const ESIS_Char *cd, size_t len);
-void ESIS_Cdata(ESIS_Writer,   const ESIS_Char *cd, size_t len);
+void ESISAPI
+ESIS_PCdata(ESIS_Writer,  const ESIS_Char *cd, size_t len);
+void ESISAPI
+ESIS_Cdata(ESIS_Writer,   const ESIS_Char *cd, size_t len);
 
 
 /*
  * The ESIS_End* functions output an end tag rsp a "`)`" line.
  */
 
-void ESIS_End(ESIS_Writer,     const ESIS_Char *elemGI);
-void ESIS_EndElem(ESIS_Writer, const ESIS_Elem *elem);
+void ESISAPI
+ESIS_End(ESIS_Writer,     const ESIS_Char *elemGI);
+void ESISAPI
+ESIS_EndElem(ESIS_Writer, const ESIS_Elem *elem);
 
+
+void ESISAPI ESIS_WriterFree(ESIS_Writer);
 
 /*
  * Functions analogous to the Expat API
@@ -426,7 +443,7 @@ void ESIS_EndElem(ESIS_Writer, const ESIS_Elem *elem);
  * ************ THESE ARE ALL NOT IMPLEMENTED YET *********************
  */
  
-void ESISPARSEAPI
+void ESISAPI
 ESIS_SetUnknownEncodingHandler(
 				ESIS_Parser parser,
 				ESIS_UnknownEncodingHandler handler,
@@ -439,7 +456,7 @@ ESIS_SetUnknownEncodingHandler(
    markup to be passed to the default handler.
  */
 
-void ESISPARSEAPI
+void ESISAPI
 ESIS_DefaultCurrent(ESIS_Parser parser);
  
  
@@ -447,7 +464,7 @@ ESIS_DefaultCurrent(ESIS_Parser parser);
    This value is passed as the userData argument to callbacks.
  */
 
-void ESISPARSEAPI
+void ESISAPI
 ESIS_SetUserData(ESIS_Parser parser, long elemID, void *userData);
 
 
@@ -455,7 +472,7 @@ ESIS_SetUserData(ESIS_Parser parser, long elemID, void *userData);
    Returns the last value set by ESIS_SetUserData or NULL.
  */
 
-void * ESISPARSEAPI
+void * ESISAPI
 ESIS_GetUserData(ESIS_Parser, long elemID);
 
 
@@ -465,7 +482,7 @@ ESIS_GetUserData(ESIS_Parser, long elemID);
    ESIS_ParseBuffer.
  */
 
-int ESISPARSEAPI
+int ESISAPI
 ESIS_SetEncoding(ESIS_Parser parser, const ESIS_Char *encoding);
 
 
@@ -475,7 +492,7 @@ ESIS_SetEncoding(ESIS_Parser parser, const ESIS_Char *encoding);
    still be accessible using ESIS_GetUserData.
  */
 
-void ESISPARSEAPI
+void ESISAPI
 ESIS_UseParserAsHandlerArg(ESIS_Parser parser);
 
 
@@ -487,7 +504,7 @@ ESIS_UseParserAsHandlerArg(ESIS_Parser parser);
    ESIS_ElementHandler.
  */
 
-int ESISPARSEAPI
+int ESISAPI
 ESIS_GetSpecifiedAttributeCount(ESIS_Parser parser);
 
 
@@ -498,7 +515,7 @@ ESIS_GetSpecifiedAttributeCount(ESIS_Parser parser);
    into the atts array passed to the ESIS_ElementHandler.
  */
 
-int ESISPARSEAPI
+int ESISAPI
 ESIS_GetIdAttributeIndex(ESIS_Parser parser);
 
 #ifdef __cplusplus

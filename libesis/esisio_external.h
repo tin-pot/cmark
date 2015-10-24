@@ -62,9 +62,8 @@
 #endif
 #endif  /* not defined ESISCALL */
 
-#ifndef ESISPARSEAPI
-#define ESISPARSEAPI
-#define ESISWRITEAPI
+#ifndef ESISAPI
+#define ESISAPI
 #endif
 
 #ifdef __cplusplus
