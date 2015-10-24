@@ -62,7 +62,10 @@ typedef struct ESIS_ParserStruct *ESIS_Parser;
 enum ESIS_Error {
     ESIS_ERROR_NONE,
     ESIS_ERROR_NO_MEMORY,
-    /* :TODO: Error codes, but analoguous to Expat's. */
+    ESIS_ERROR_FILE_READ,
+    ESIS_ERROR_FILE_WRITE,
+    ESIS_ERROR_INPUT,
+    ESIS_ERROR_INTERNAL
 };
 
 enum {

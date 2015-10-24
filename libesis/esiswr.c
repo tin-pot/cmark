@@ -21,8 +21,12 @@ ESIS_WriterCreateInt(FILE *fp, unsigned options)
   ref r;
   
   ESIS_Writer pe = malloc(sizeof *pe);
+  if (pe == NULL) return NULL;
   
   esisStackInit(pe->S);
+  if (pe->S->buf == NULL) return NULL;
+  
+  pe->err  = ESIS_ERROR_NONE;
   pe->opts = options;
   r = MARK(0);
   pe->n_att  = 0U;

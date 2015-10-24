@@ -9,6 +9,7 @@ struct esis_stack_ {
   byte *buf;
   size_t lim;
   ref top, mark;
+  int err;
 };
 
 void esisStackInit(struct esis_stack_ *p);
@@ -69,6 +70,7 @@ typedef void (* ESISAPI ESIS_DataWriter)(
 
 struct ESIS_WriterStruct {
   struct esis_stack_    S[1];
+  int                   err;
   unsigned              opts;
   unsigned              n_att;
   ref                   r_att;
@@ -77,3 +79,10 @@ struct ESIS_WriterStruct {
   ESIS_DataWriter       datafunc;
   FILE                 *fp;
 };
+
+#define ERROR_SET(E_) do { \
+       if (!pe->err && !pe->err = p->S->err) pe->err = (E_); } while (0)
+
+#define ERROR_RET() do { \
+                 if (pe->err || pe->err = p->S->err) return; } while (0)
+      
