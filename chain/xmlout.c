@@ -3,6 +3,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <esisio.h>
 
 #define NELEM 19
 
@@ -15,14 +16,16 @@
 #define BUF_SIZE   4096
 #define NAME_SIZE   128
 
-#define RE_CHAR '\n'
-#define RS_CHAR '\r'
+#define RE_CHAR '\xA'
+#define RS_CHAR '\0'
 
 struct trans {
   const char *ingi;
   const char *outgi;
   unsigned flags;
 };
+
+ESIS_Writer writer;
 
 struct trans xmltab[NELEM] = {
   { "none",           NULL,   EL_OMIT                    },
@@ -64,6 +67,10 @@ void trans_pi()
 {
   int ch;
   
+  while ((ch = getchar()) != EOF)
+    if (ch == '\n')
+      break;
+
   putchar('<');
   putchar('?');
   while ((ch = getchar()) != EOF) {
@@ -119,36 +126,22 @@ int decode()
   }
 }
 
-void cdata()
+size_t cdata(char *buf)
 {
   int ch;
+  char *p = buf;
   
   while ((ch = decode()) != EOF)
-    if (ch != RS_CHAR) putchar(ch);
+    if (ch != RS_CHAR)
+      *p++ = ch;
+  return p - buf;
 }
 
-void pcdata()
-{
-  int ch;
-  
-  while ((ch = decode()) != EOF) {
-    switch (ch) {
-    case '<':     printf("&lt;");   break;
-    case '&':     printf("&amp;");  break;
-    case '>':     printf("&gt;");   break;
-    case '"':     printf("&quot;"); break;
-    case RS_CHAR: /* ignored */     break;
-    case RE_CHAR: putchar('\n');    break;
-    default:      putchar(ch);
-    }
-  }
-}
-
-char *store_attr(char *buf, char **attrn, char **attrv)
+void store_attr(char *buf, char **name, char **val)
 {
   int ch;
 
-  *attrn = buf;
+  *name = buf;
   while ((ch = getchar()) != EOF) {
     if (ch == ' ' || ch == '\n')
       break;
@@ -156,91 +149,81 @@ char *store_attr(char *buf, char **attrn, char **attrv)
   }   
   *buf++ = '\0';
 
-  *attrv = NULL;
+  *val = buf;
   if (ch == ' ') {
     while ((ch = getchar()) != EOF) {
       if (ch == ' ' || ch == '\n')
         break;
     }
     if (ch == ' ') {
-      *attrv = buf;
+      *val = buf;
       while ((ch = getchar()) != EOF) {
         if (ch == '\n')
           break;
         *buf++ = ch;
       }
-      *buf++ = '\0';
     }
   }
-  return buf;
+  *buf++ = '\0';
 }
 
-#define forget_attr() do { attrc = 0; bufp = buf; } while (0) 
-
-void store_name(char *name)
+void store_name(char *buf, char **name)
 {
   int ch;
+  
+  *name = buf;
+  
   while ((ch = getchar()) != EOF) {
     if (ch == '\n')
       break;
-    *name++ = ch;
+    *buf++ = ch;
   }
-  *name = '\0';
+  *buf = '\0';
 }
 
 void translate(const struct trans tab[])
 {
   int ch;
-  int attrc;
-  char *attrn[ATTR_MAX];
-  char *attrv[ATTR_MAX];
-  char buf[BUF_SIZE], *bufp;
-  char name[NAME_SIZE];
+  char buf[BUF_SIZE], *name, *val;
   const char *outname;
   const struct trans *tp;
   unsigned flags;
-  
-  forget_attr();
+  size_t len;
   
   while ((ch = getchar()) != EOF) {
     switch (ch) {
       case '?':
         trans_pi();
         break;
+        
       case 'A':
-        bufp = store_attr(bufp, attrn+attrc, attrv + attrc);
-        ++attrc;
+        store_attr(buf, &name, &val);
+        ESIS_Attr(writer, name, val, ESIS_NTS);
         break;
+        
       case '(':
-        store_name(name);
+        store_name(buf, &name);
         outname = name;
-        flags = 0;
         if ((tp = find_trans(name)) != NULL) {
           flags = tp->flags;
           if (tp->outgi != NULL)
             outname = tp->outgi;
         }
-        if ((flags & EL_OMIT) == 0) {
-          int i;
-          
-          printf("<%s", outname);
-          for (i = 0; i < attrc; ++i) {
-            printf(" %s=\"%s\"", attrn[i], attrv[i]);
-          }
-          if (flags & EL_EMPTY)
-            putchar('/');
-          putchar('>');
-        }
-        forget_attr();
-        break;
-      case '-':
-        if (flags & EL_CDATA)
-          cdata();
+        if (flags & EL_EMPTY)
+          ESIS_Empty(writer, name, NULL);
         else
-          pcdata();
+          ESIS_Start(writer, name, NULL);
+        break;
+        
+      case '-':
+        len = cdata(buf);
+        if (flags & EL_CDATA)
+          ESIS_Cdata(writer, buf, len);
+        else
+          ESIS_PCdata(writer, buf, len);
         break;
       case ')':
-        store_name(name);
+        store_name(buf, &name);
         outname = name;
         flags = 0;
         if ((tp = find_trans(name)) != NULL) {
@@ -249,12 +232,9 @@ void translate(const struct trans tab[])
             outname = tp->outgi;
         }
         if ((flags & EL_OMIT) == 0) {
-          if ((flags & (EL_CDATA | EL_PCDATA)) == 0)
-            putchar('\n');
           if ((flags & EL_EMPTY) == 0)
-            printf("</%s>", outname);
+            ESIS_End(writer, outname);
         }
-        flags = 0;
         break;
       case 'C':
       default: /* `&`, `D`, `N`, `E`, `I`, `S`, `T`,
@@ -262,13 +242,14 @@ void translate(const struct trans tab[])
         ;
     }
   }
-  putchar('\n');
 }
 
 
 int main(int argc, char *argv)
 {
   qsort(xmltab, NELEM, sizeof xmltab[0], cmp);
+  writer = ESIS_XmlWriterCreate(stdout, NULL);
   translate(xmltab);
+  ESIS_WriterFree(writer);
   return 0;
 }
