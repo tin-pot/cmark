@@ -251,8 +251,9 @@ void translate(const struct trans tab[])
 
 int main(int argc, char *argv)
 {
+  unsigned opts = ESIS_CANONICAL;
   qsort(xmltab, NELEM, sizeof xmltab[0], cmp);
-  writer = ESIS_XmlWriterCreate(stdout, NULL);
+  writer = ESIS_XmlWriterCreate(stdout, opts);
   translate(xmltab);
   ESIS_WriterFree(writer);
   return 0;

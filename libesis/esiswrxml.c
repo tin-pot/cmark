@@ -11,9 +11,9 @@ static void
 EsisXmlDataWriter(FILE *, unsigned, const byte *, size_t);
 
 ESIS_Writer ESISAPI
-ESIS_XmlWriterCreate(FILE *fp, const ESIS_Char *encoding)
+ESIS_XmlWriterCreate(FILE *fp, unsigned options)
 {
-  ESIS_Writer pe = ESIS_WriterCreateInt(fp, encoding);
+  ESIS_Writer pe = ESIS_WriterCreateInt(fp, options);
   
   pe->tagfunc  = EsisXmlTagWriter;
   pe->datafunc = EsisXmlDataWriter;
@@ -38,7 +38,8 @@ WriteCDATA(FILE *outputFile, const byte *data, size_t len)
 }
 
 static void 
-WritePCDATA(FILE *outputFile, const byte *data, size_t len)
+WritePCDATA(FILE *outputFile,
+            const byte *data, size_t len, ESIS_Bool canon)
 {
   unsigned k;
   
@@ -54,7 +55,10 @@ WritePCDATA(FILE *outputFile, const byte *data, size_t len)
       case '>':  ent = "&gt;";   break;
       case '"':  ent = "&quot;"; break;
       case '&':  ent = "&amp;";  break;
-      case '\n': /* &#10; for Canonical XML, but not here ... */
+      case '\n': if (canon) {
+                 ent = "&#10;";  break; 
+                 }
+        /* FALLTHROUGH */
       default: 
         putc(b, outputFile);
         continue;
@@ -70,17 +74,18 @@ EsisXmlTagWriter(FILE             *outputFile,
                  const ESIS_Char **atts)
 {
   unsigned k;
+  ESIS_Bool canon = (what & ESIS_CANONICAL) != 0U;
   
-  switch (what) {
+  switch (what & ESIS_NONOPTION_) {
   case ESIS_START_ :
   case ESIS_EMPTY_ :
     fprintf(outputFile, "<%s", elemGI);
     if (atts != NULL) for (k = 0; atts[k] != NULL; k += 2) {
       putc(' ', outputFile);
-      WritePCDATA(outputFile, atts[k],   strlen(atts[k]));
+      WritePCDATA(outputFile, atts[k],   strlen(atts[k]), canon);
       putc('=', outputFile);
       putc('"', outputFile);
-      WritePCDATA(outputFile, atts[k+1], strlen(atts[k+1]));
+      WritePCDATA(outputFile, atts[k+1], strlen(atts[k+1]), canon);
       putc('"', outputFile);
     }
       
@@ -102,8 +107,10 @@ EsisXmlDataWriter(FILE             *outputFile,
                   const byte      *data,
                   size_t           len)
 {
-  switch (how) {
-  case ESIS_PCDATA_ : WritePCDATA(outputFile, data, len); break;
+  ESIS_Bool canon = (how & ESIS_CANONICAL) != 0U;
+  
+  switch (how & ESIS_NONOPTION_) {
+  case ESIS_PCDATA_ : WritePCDATA(outputFile, data, len, canon); break;
   case ESIS_CDATA_  : WriteCDATA (outputFile, data, len); break;
   }
 }

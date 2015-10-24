@@ -65,6 +65,10 @@ enum ESIS_Error {
     /* :TODO: Error codes, but analoguous to Expat's. */
 };
 
+enum {
+    ESIS_CANONICAL  = 010000,       /* Output Canonical XML. */
+};
+
 typedef struct ESIS_el ESIS_Elem;
 
 struct ESIS_el {
@@ -295,10 +299,10 @@ struct ESIS_WriterStruct;
 typedef struct ESIS_WriterStruct *ESIS_Writer;
 
 ESIS_Writer ESISAPI
-ESIS_WriterCreate(FILE *, const ESIS_Char *encoding);
+ESIS_WriterCreate(FILE *, unsigned options);
 
 ESIS_Writer ESISAPI
-ESIS_XmlWriterCreate(FILE *, const ESIS_Char *encoding);
+ESIS_XmlWriterCreate(FILE *, unsigned options);
 
 ESIS_Writer ESISAPI
 ESIS_SgmlWriterCreate(FILE *, const ESIS_Char *encoding);

@@ -16,13 +16,14 @@ static void
 EsisDataWriter(FILE *, unsigned, const byte *, size_t);
 
 ESIS_Writer ESISAPI
-ESIS_WriterCreateInt(FILE *fp, const ESIS_Char *encoding)
+ESIS_WriterCreateInt(FILE *fp, unsigned options)
 {
   ref r;
   
   ESIS_Writer pe = malloc(sizeof *pe);
   
   esisStackInit(pe->S);
+  pe->opts = options;
   r = MARK(0);
   pe->n_att  = 0U;
   pe->r_att  = r;
@@ -32,9 +33,9 @@ ESIS_WriterCreateInt(FILE *fp, const ESIS_Char *encoding)
 }
               
 ESIS_Writer ESISAPI
-ESIS_WriterCreate(FILE *fp, const ESIS_Char *encoding)
+ESIS_WriterCreate(FILE *fp, unsigned options)
 {
-  ESIS_Writer pe = ESIS_WriterCreateInt(fp, encoding);
+  ESIS_Writer pe = ESIS_WriterCreateInt(fp, options);
   
   pe->tagfunc  = EsisTagWriter;
   pe->datafunc = EsisDataWriter;
@@ -206,6 +207,7 @@ ShipTag(ESIS_Writer pe, unsigned what, const ESIS_Char *elemGI)
     r_atts = TOP();
   }
   
+  what |= (pe->opts & ~ESIS_NONOPTION_);
   pe->tagfunc(pe->fp, what, elemGI, atts);
   
   pe->n_att = 0U;
@@ -218,7 +220,10 @@ static void
 ShipData(ESIS_Writer pe, unsigned how,
                          const ESIS_Char *data, size_t len)
 {
-  if (len > 0U) pe->datafunc(pe->fp, how, data, len);
+  if (len > 0U) {
+    how |= (pe->opts & ~ESIS_NONOPTION_);
+    pe->datafunc(pe->fp, how, data, len);
+  }
 }
 
 /*====================================================================*/

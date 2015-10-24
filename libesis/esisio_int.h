@@ -44,14 +44,16 @@ struct ESIS_ParserStruct {
 };
 
 extern ESIS_Writer ESISAPI
-ESIS_WriterCreateInt(FILE *, const ESIS_Char *);
+ESIS_WriterCreateInt(FILE *, unsigned options);
 
-#define ESIS_START_   001U
-#define ESIS_END_     002U
-#define ESIS_EMPTY_   003U
+#define ESIS_NONOPTION_ 07777U
 
-#define ESIS_CDATA_   010U
-#define ESIS_PCDATA_  020U
+#define ESIS_START_     00001U
+#define ESIS_END_       00002U
+#define ESIS_EMPTY_     00003U
+
+#define ESIS_CDATA_     00010U
+#define ESIS_PCDATA_    00020U
 
 typedef void (* ESISAPI ESIS_TagWriter)(
                                       FILE             *outputFile,
@@ -67,6 +69,7 @@ typedef void (* ESISAPI ESIS_DataWriter)(
 
 struct ESIS_WriterStruct {
   struct esis_stack_    S[1];
+  unsigned              opts;
   unsigned              n_att;
   ref                   r_att;
   ref                   r_gi;
