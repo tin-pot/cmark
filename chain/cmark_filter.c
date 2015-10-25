@@ -87,7 +87,7 @@ static int S_render_node(cmark_node *node, cmark_event_type ev_type,
     case CMARK_NODE_IMAGE:
       ESIS_Attr(w, "destination", node->as.link.url.data, node->as.link.url.len);
       ESIS_Attr(w, "title", node->as.link.title.data, node->as.link.title.len);
-      ESIS_Empty(w, GI[node->type], NULL);
+      ESIS_Start(w, GI[node->type], NULL);
       break;
 
     case CMARK_NODE_HRULE:
