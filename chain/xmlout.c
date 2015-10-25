@@ -87,12 +87,9 @@ ESIS_Bool handler(void               *userData,
   ESIS_Writer w = userData;
   
   switch (elemEvent) {
-  case ESIS_START:
-    ESIS_Start(w, elem->elemGI, elem->atts); break;
-  case ESIS_CDATA:
-    ESIS_PCdata(w, charData, len); break;
-  case ESIS_END:
-    ESIS_End(w, elem->elemGI); break;
+  case ESIS_START: ESIS_Start(w, elem->elemGI, elem->atts); break;
+  case ESIS_CDATA: ESIS_PCdata(w, charData, len);           break;
+  case ESIS_END:   ESIS_End(w, elem->elemGI);               break;
   }   
   return ESIS_TRUE;
 }
