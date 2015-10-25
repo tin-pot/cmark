@@ -94,6 +94,23 @@ ESIS_Bool handler(void               *userData,
   return ESIS_TRUE;
 }
 
+ESIS_Bool def_handler(void               *userData,
+                      ESIS_ElemEvent      elemEvent,
+                      long                elemID,
+                      const  ESIS_Elem   *elem,
+                      const  ESIS_Char   *charData,
+                      size_t              len)
+{
+  ESIS_Writer w = userData;
+  
+  switch (elemEvent) {
+  case ESIS_START: ESIS_Start(w, elem->elemGI, elem->atts); break;
+  case ESIS_CDATA: ESIS_PCdata(w, charData, len);           break;
+  case ESIS_END:   ESIS_End(w, elem->elemGI);               break;
+  }   
+  return ESIS_TRUE;
+}
+
 int main(int argc, char *argv)
 {
   int i;
@@ -105,7 +122,10 @@ int main(int argc, char *argv)
     ESIS_SetElementHandler(parser, handler,
 	                   elems[i].elemGI, elems[i].elemID,
 			   writer);
-			   
+  ESIS_SetElementHandler(parser, def_handler,
+                         NULL, -1L,
+                         writer);
+                         
   if (ESIS_ParseFile(parser, stdin) == 0) {
     ESIS_Error err = ESIS_GetParserError(parser);
     fprintf(stderr, "ESIS_Error: %d\n", (int)err);
