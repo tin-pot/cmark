@@ -160,7 +160,11 @@ const char *cmark_node_get_type_string(cmark_node *node) {
   case CMARK_NODE_CODE_BLOCK:
     return "code_block";
   case CMARK_NODE_HTML:
+#ifndef CMARK_INSANITY
+    return "block_html";
+#else
     return "html";
+#endif
   case CMARK_NODE_PARAGRAPH:
     return "paragraph";
   case CMARK_NODE_HEADER:

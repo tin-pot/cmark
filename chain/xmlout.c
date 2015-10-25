@@ -49,7 +49,7 @@ struct {
     "list",		CMARK_NODE_LIST,          0,
     "item",		CMARK_NODE_ITEM,          0,
     "code_block",	CMARK_NODE_CODE_BLOCK,    EL_PCDATA,
-    "html",		CMARK_NODE_HTML,          EL_CDATA | EL_OMIT,
+    "block_html",	CMARK_NODE_HTML,          EL_CDATA | EL_OMIT,
     "paragraph",	CMARK_NODE_PARAGRAPH,     0,
     "header",		CMARK_NODE_HEADER,        0,
     "hrule",		CMARK_NODE_HRULE,         EL_EMPTY,
@@ -159,7 +159,7 @@ ESIS_Bool handler(void               *userData,
           val = findatt(elem->atts, "destination");
           val2 = findatt(elem->atts, "title");
           if (val != NULL && val2 != NULL) {
-            atta[0] = "href";
+            atta[0] = (elemID == CMARK_NODE_LINK) ? "href" : "src";
             atta[1] = val;
             atta[2] = "title";
             atta[3] = val2;
@@ -196,19 +196,24 @@ int main(int argc, char *argv[])
 {
   int i, j;
   unsigned options = 0U;
+  enum { t_sgml, t_html, t_xhtml, t_xml } format = t_xml;
   
   xml = ESIS_TRUE, trans = ESIS_FALSE;
   
   if (argc == 2)
-    if (strcmp(argv[1], "-sgml") == 0)
+    if (strcmp(argv[1], "-sgml") == 0) {
       xml = ESIS_FALSE, trans = ESIS_FALSE;
-    else if (strcmp(argv[1], "-html") == 0)
+      format = t_sgml;
+    } else if (strcmp(argv[1], "-html") == 0) {
       xml = ESIS_FALSE, trans = ESIS_TRUE;
-    else if (strcmp(argv[1], "-xml") == 0)
+      format = t_html;
+    } else if (strcmp(argv[1], "-xml") == 0) {
       xml = ESIS_TRUE, trans = ESIS_FALSE;
-    else if (strcmp(argv[1], "-xhtml") == 0)
+      format = t_xml;
+    } else if (strcmp(argv[1], "-xhtml") == 0) {
       xml = ESIS_TRUE, trans = ESIS_TRUE;
-    else {
+      format = t_xhtml;
+    } else {
       fputs("Usage: argv[0] [-sgml | -html | -xml | -xhtml]\n", stderr);
       return 1;
     }
@@ -231,10 +236,55 @@ int main(int argc, char *argv[])
   for (i = 0; elems[i].elemID >= 0L; ++i)
     ESIS_SetElementHandler(parser, handler,
 	                      elems[i].elemGI, elems[i].elemID, writer);
-                         
+  switch (format) {
+  case t_sgml:
+    puts("<!DOCTYPE document SYSTEM \"CommonMark.dtd\">");
+    puts("<document>");
+    break;
+  case t_html:
+    puts("<!DOCTYPE HTML PUBLIC "
+                               "\"ISO/IEC 15445:2000//DTD HTML//EN\">");
+    puts("<HTML>\n<HEAD>");
+    puts("<TITLE>Untitled</TITLE>");
+    puts("<META http-equiv=\"Content-Type\" "
+                               "content=\"text/html; charset=UTF-8\">");
+    puts("</HEAD>\n<BODY>");
+    break;
+  case t_xml:
+    puts("<?xml version=\"1.0\" encoding=\"UTF-8\"?>");
+    puts("<document>");
+    break;
+  case t_xhtml:
+    puts("<?xml version=\"1.0\" encoding=\"UTF-8\"?>");
+    puts("<!DOCTYPE html PUBLIC \"-//W3C//DTD XHTML 1.0 Strict//EN\" "
+              "\"http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd\">");
+    puts("<html xmlns=\"http://www.w3.org/1999/xhtml\" "
+                                        "xml:lang=\"en\" lang=\"en\">");
+    puts("<head>\n<title>Untitled</title>");
+    puts("<meta http-equiv=\"Content-Type\" "
+                              "content=\"text/html; charset=UTF-8\"/>");
+    puts("</head>\n<body>");
+    break;
+  }
+  
   if (ESIS_ParseFile(parser, stdin) == 0) {
     ESIS_Error err = ESIS_GetParserError(parser);
     fprintf(stderr, "ESIS_Error: %d\n", (int)err);
+  }
+  
+  switch (format) {
+  case t_sgml:
+    puts("</document>");
+    break;
+  case t_html:
+    puts("</BODY>\n</HTML>");
+    break;
+  case t_xml:
+    puts("</document>");
+    break;
+  case t_xhtml:
+    puts("</body>\n</html>");
+    break;
   }
   
   ESIS_WriterFree(writer);

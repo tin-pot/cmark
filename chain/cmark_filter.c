@@ -16,7 +16,7 @@ extern const char cmark_repourl[];
 
 static const char *GI[] = {
   "none",	"document",	"block_quote",	"list",
-  "item",	"code_block",	"html",		"paragraph",
+  "item",	"code_block",	"block_html",	"paragraph",
   "header",	"hrule",	"text",		"softbreak",
   "linebreak",	"code",		"inline_html",	"emph",
   "strong",	"link",		"image",
@@ -201,7 +201,6 @@ int main(int argc, char *argv[]) {
   ud.parser  = NULL;
   
   ESIS_SetElementHandler(eparser, markup, "mark-up",  1L, &ud);
-  ESIS_SetElementHandler(eparser, markup, "document", 2L, &ud);
   
   ESIS_FilterFile(eparser, stdin, stdout);
   ESIS_WriterFree(ud.writer);
