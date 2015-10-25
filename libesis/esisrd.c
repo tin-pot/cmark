@@ -139,7 +139,7 @@ static size_t store_cdata(ESIS_Parser pe)
        case '\n':
          return n;
        case 'n':
-         PUSH_CHAR(ch), ++n;
+         PUSH_CHAR('\n'), ++n;
          break;
        case '0': case '1': case '2': case '3':
        case '4': case '5': case '6': case '7':
