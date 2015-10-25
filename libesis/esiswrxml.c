@@ -68,6 +68,12 @@ WritePCDATA(FILE *outputFile,
   }
 }
 
+static int cmp_att(const void *lhs, const void *rhs)
+{
+  const ESIS_Char **lhn = lhs, **rhn = rhs;
+  return strcmp(*lhn, *rhn);
+}
+
 static void ESISAPI
 EsisXmlTagWriter(FILE             *outputFile,
                  unsigned          what,
@@ -81,6 +87,12 @@ EsisXmlTagWriter(FILE             *outputFile,
   case ESIS_START_ :
   case ESIS_EMPTY_ :
     fprintf(outputFile, "<%s", elemGI);
+    if (atts != NULL && atts[0] != NULL && canon) {
+      size_t natt;
+      for (natt = 0U; atts[natt] != NULL; natt += 2)
+        ;
+      qsort((ESIS_Char **)atts, natt/2, 2*sizeof atts[0], cmp_att);
+    }
     if (atts != NULL) for (k = 0; atts[k] != NULL; k += 2) {
       putc(' ', outputFile);
       WritePCDATA(outputFile, atts[k],   strlen(atts[k]), canon);
