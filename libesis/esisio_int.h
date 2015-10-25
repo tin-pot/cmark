@@ -3,7 +3,7 @@
 typedef unsigned char byte;
 typedef size_t ref;
 
-#define STACK_CHUNK 2048U
+#define STACK_CHUNK 512U
 
 struct esis_stack_ {
   byte *buf;

@@ -21,14 +21,15 @@ void esisStackGrow(struct esis_stack_ *p, size_t n)
 {
   int err = p->err;
   byte *pb;
+  const size_t nr = p->lim + n; /* required */
   const size_t nb = STACK_CHUNK *
-                                ((n + 2*STACK_CHUNK - 1) / STACK_CHUNK);
+                                 ((nr + STACK_CHUNK - 1) / STACK_CHUNK);
   
   if (!err)
-    pb = realloc(p->buf, n);
+    pb = realloc(p->buf, nb);
   if (!err && pb != NULL) {
     p->buf = pb;
-    p->lim = n;
+    p->lim = nb;
   } else
     p->err = ESIS_ERROR_NO_MEMORY;
 }
