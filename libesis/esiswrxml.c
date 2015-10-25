@@ -6,14 +6,15 @@
 #include <string.h>
 
 static void
-EsisXmlTagWriter(FILE *, unsigned, const ESIS_Char *, const ESIS_Char **);
+EsisXmlTagWriter(FILE *, unsigned, const ESIS_Char *,
+                                                    const ESIS_Char **);
 static void
 EsisXmlDataWriter(FILE *, unsigned, const byte *, size_t);
 
 ESIS_Writer ESISAPI
 ESIS_XmlWriterCreate(FILE *fp, unsigned options)
 {
-  ESIS_Writer pe = ESIS_WriterCreateInt(fp, options);
+  ESIS_Writer pe = ESIS_WriterCreateInt_(fp, options);
   
   pe->tagfunc  = EsisXmlTagWriter;
   pe->datafunc = EsisXmlDataWriter;

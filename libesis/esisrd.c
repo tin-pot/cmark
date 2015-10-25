@@ -1,329 +1,462 @@
 /* esisrd.c */
 
 #include "esisio.h"
-
-#include <stdlib.h>
+#include "esisio_int.h"
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
-#include <errno.h>
-#include "cmark_ctype.h"
-#include "config.h"
-#include "cmark.h"
-#include "node.h"
-#include "buffer.h"
-#include "houdini.h"
-#include "scanners.h"
 
-extern const char cmark_gitident[];
-extern const char cmark_repourl[];
 
-#if defined(_WIN32) && !defined(__CYGWIN__)
-#include <io.h>
-#include <fcntl.h>
+#ifdef ESIS_XMLPARSE /* NOT IMPLEMENTED */
+ESIS_Parser ESISAPI
+ESIS_XmlParserCreate(XML_Parser xmlParser)
+{
+  return NULL;
+}
 #endif
 
-struct render_state {
-  cmark_strbuf *esis;
-  cmark_node *plain;
-};
 
-
-static const char *GI[] = {
-  "none",
-  "document",
-  "block_quote",
-  "list",
-  "item",
-  "code_block",
-  "html",
-  "paragraph",
-  "header",
-  "hrule",
-  "text",
-  "softbreak",
-  "linebreak",
-  "code",
-  "inline_html",
-  "emph",
-  "strong",
-  "link",
-  "image",
-};
-
-/* ESIS output */
-
-static void attribn(cmark_strbuf *out, const char *attr,
-                                            const char *val, size_t len)
+#ifndef NDEBUG /* NOT IMPLEMENTED */
+ESIS_Bool ESISAPI
+ESIS_ParserReset(ESIS_Parser pe, const ESIS_Char *encoding)
 {
-  cmark_strbuf_putc(out, 'A');
-  cmark_strbuf_puts(out, attr);
-  cmark_strbuf_puts(out, " CDATA ");
-  cmark_strbuf_put(out, val, len);
-  cmark_strbuf_putc(out, '\n');
+  return ESIS_FALSE;
+}
+#endif
+
+
+void ESISAPI
+ESIS_SetElementHandler(ESIS_Parser pe,
+                       ESIS_ElementHandler handler,
+                       const ESIS_Char    *elemGI,
+                       long                elemID,
+                       void               *userData)
+{
+  size_t n;
+  struct hi *p_hi;
+  ref r_gi;
+  ref r_hi;
+  
+  n = strlen(elemGI) + 1;
+  r_gi = esisStackPush(pe->HD, elemGI, n);
+  
+  r_hi = esisStackMark(pe->HI, sizeof *p_hi);
+  p_hi = (struct hi *)(pe->HI->buf + r_hi);
+  
+  p_hi->r_ElemGI = r_gi;
+  p_hi->elemGI   = NULL; /* Set when parsing begins. */
+  p_hi->elemID   = elemID;
+  p_hi->userData = userData;
+  p_hi->handler  = handler;
+  
+  ++pe->n_hi;
 }
 
-static void attrib(cmark_strbuf *out, const char *attr, const char *val)
+
+#ifndef NDEBUG /* NOT IMPLEMENTED */
+size_t ESISAPI
+ESIS_Env(ESIS_Parser pe, ESIS_Elem outElems[], size_t depth)
 {
-  cmark_strbuf_putc(out, 'A');
-  cmark_strbuf_puts(out, attr);
-  cmark_strbuf_puts(out, " CDATA ");
-  cmark_strbuf_puts(out, val);
-  cmark_strbuf_putc(out, '\n');
+  return 0U;
+}
+#endif
+
+static int cmp_hi(const void *lhs, const void *rhs)
+{
+  const struct hi *lhi = lhs, *rhi = rhs;
+  return strcmp(lhi->elemGI, rhi->elemGI);
 }
 
-static void stag(cmark_strbuf *out, cmark_node_type t)
+static int store_attr(ESIS_Parser pe)
 {
-  const char *gi = GI[t];
-
-  cmark_strbuf_putc(out, '(');
-  cmark_strbuf_puts(out, gi);
-  cmark_strbuf_putc(out, '\n');
-}
-
-static void etag(cmark_strbuf *out, cmark_node_type t)
-{
-  const char *gi = GI[t];
-
-  cmark_strbuf_putc(out, ')');
-  cmark_strbuf_puts(out, gi);
-  cmark_strbuf_putc(out, '\n');
-}
-
-static void cdata(cmark_strbuf *out, char *text, size_t len)
-{
-  size_t k;
-
-  if (len == 0) return;
-
-  cmark_strbuf_putc(out, '-');
-  for (k = 0; k < len; ++k) {
-    unsigned ch = 0xFF & text[k];
-    if (ch == '\\') {
-      cmark_strbuf_putc(out, '\\');
-      cmark_strbuf_putc(out, '\\');
-    } else if (ch == '\n') {
-      cmark_strbuf_putc(out, '\\');
-      cmark_strbuf_putc(out, 'n');
-      cmark_strbuf_putc(out, '\\');
-      cmark_strbuf_putc(out, '0');
-      cmark_strbuf_putc(out, '1');
-      cmark_strbuf_putc(out, '2');
-    } else if (ch < 32) {
-      char buf[4];
-      sprintf(buf, "%03o", ch);
-      cmark_strbuf_putc(out, '\\');
-      cmark_strbuf_putc(out, buf[0]);
-      cmark_strbuf_putc(out, buf[1]);
-      cmark_strbuf_putc(out, buf[2]);
-    } else {
-      cmark_strbuf_putc(out, ch);
-    }
-  }
-  cmark_strbuf_putc(out, '\n');
-}
-
-/* Rendering */
-
-static int S_render_node(cmark_node *node, cmark_event_type ev_type,
-                         struct render_state *state, cmark_option_t options) {
-  cmark_strbuf *esis = state->esis;
-  bool literal = false;
-  cmark_delim_type delim;
-  bool entering = (ev_type == CMARK_EVENT_ENTER);
-  char buffer[100];
-
-  if (entering) {
-    literal = false;
-
-    switch (node->type) {
-    case CMARK_NODE_TEXT:
-    case CMARK_NODE_CODE:
-    case CMARK_NODE_HTML:
-    case CMARK_NODE_INLINE_HTML:
-      stag(esis, node->type);
-      cdata(esis, node->as.literal.data, node->as.literal.len);
-      etag(esis, node->type);
-      literal = true;
+  int ch;
+  ref r = TOP();
+  FILE *fp = pe->fp;
+  
+  while ((ch = getc(fp)) != EOF) {
+    if (ch == '\n' || ch == ' ')
       break;
-    case CMARK_NODE_LIST:
-      switch (cmark_node_get_list_type(node)) {
-      case CMARK_ORDERED_LIST:
-        attrib(esis, "type", "ordered");
-        sprintf(buffer, "%d", cmark_node_get_list_start(node));
-        attrib(esis, "start", buffer);
-        delim = cmark_node_get_list_delim(node);
-        if (delim == CMARK_PAREN_DELIM) {
-          attrib(esis, "delim", "paren");
-        } else if (delim == CMARK_PERIOD_DELIM) {
-          attrib(esis, "delim", "period");
+    PUSH_CHAR(ch);
+  }
+  if (ch != ' ') {
+    RELEASE(r);
+    return ESIS_ERROR_SYNTAX;
+  }
+  
+  while ((ch = getc(fp)) != EOF)
+    if (ch == '\n' || ch == ' ')
+      break;
+  if (ch != ' ') {
+    RELEASE(r);
+    return ESIS_ERROR_SYNTAX;
+  }
+  
+  PUSH_CHAR('\0');
+  while ((ch = getc(fp)) != EOF) {
+    if (ch == '\n')
+      break;
+    PUSH_CHAR(ch);
+  }
+  PUSH_CHAR('\0');
+  return ESIS_ERROR_NONE;
+}
+
+static int store_name(ESIS_Parser pe)
+{
+  int ch;
+  FILE *fp = pe->fp;
+  ref r = TOP();
+  
+  if ((ch = getc(fp)) != EOF) {
+    if (ch == '\n')
+      return ESIS_ERROR_SYNTAX;
+    do
+      PUSH_CHAR(ch);
+    while ((ch = getc(fp)) != EOF && ch != '\n');
+  }
+  PUSH_CHAR('\0');
+  return ESIS_ERROR_NONE;
+}
+
+
+#define DIG_MAX 7 /* Enough for 1,114,112 UCS code points. */
+
+static size_t store_cdata(ESIS_Parser pe)
+{
+  int ch;
+  FILE *fp = pe->fp;
+  size_t n = 0U;
+  unsigned num, ndig;
+  char dig[DIG_MAX];
+  
+  while ((ch = getc(fp)) != EOF) {
+    if (ch == '\n')
+      break;
+    else if (ch == '\\') {
+      ch = getc(fp);
+      switch (ch) {
+       case EOF:
+       case '\n':
+         return n;
+       case 'n':
+         PUSH_CHAR(ch), ++n;
+         break;
+       case '0': case '1': case '2': case '3':
+       case '4': case '5': case '6': case '7':
+         num = 0;
+         ndig = 0;
+         do {
+           num = 8 * num + (ch - '0');
+           dig[ndig++] = ch;
+           if (ndig == 3) break;
+         } while ((ch = getc(fp)) != EOF && '0' <= ch && ch <= '7');
+         if (num != '\012') /* Ignore RS character. */
+           PUSH_CHAR(num & 0xFF), ++n;
+         break;
+       case '#':
+         num = 0;
+         ndig = 0;
+         while ((ch = getc(fp)) != EOF && '0' <= ch && ch <= '9') {
+           num = 10 * num + (ch - '0');
+           dig[ndig++] = ch;
+           if (ndig == DIG_MAX) break;
+         }
+         if (ch == ';')
+           PUSH_CHAR(num & 0xFF), ++n; /* :TODO: num -> UTF-8 */
+         else {
+           unsigned k;
+           PUSH_CHAR('\\'), ++n;
+           PUSH_CHAR('#'), ++n;
+           for (k = 0U; k < ndig; ++k)
+             PUSH_CHAR(dig[k]), ++n;
+           PUSH_CHAR(';'), ++n;
+         }
+       default:
+         PUSH_CHAR(ch), ++n;
+      }
+    } else
+      PUSH_CHAR(ch), ++n;
+  }
+  return n;
+}
+
+
+static void ParseLoop(ESIS_Parser pe)
+{
+  int ch;
+  FILE *fp = pe->fp;
+  int err = ESIS_ERROR_NONE;
+  const byte *data;
+  size_t len;
+  const char **atts;
+  ref r;
+  
+  static const ESIS_Char *const null_atts[2] = { NULL, NULL };
+  /*
+   * After the attributes and the GI are copied from the input
+   * onto the S stack, we push information about the now open
+   * element above it, in a "frame" that also links back to
+   * the enclosing element: the "frame" structure for this one
+   * is right in frot of r_att.
+   */
+  struct fr {
+    ref       r_att;  /* Start of pushed attributes. */
+    ref       r_gi;   /* Start of pushed GI. */
+    long                elemID;
+    void               *userData;
+    ESIS_ElementHandler handler;
+  } frame;
+  
+  static const struct fr null_frame = {
+    0, 0,
+    0L, NULL, (ESIS_ElementHandler)NULL
+  };
+
+  frame = null_frame;
+  
+  while ((ch = getc(fp)) != EOF) {
+    
+    switch (ch) {
+      case '?':
+        /* :TODO: PI - Store for handler or pass through */
+        while ((ch = getc(fp)) != EOF)
+          if (ch == '\n')
+            break;
+        break;
+
+      case 'A':
+          /*
+           * Push frame of enclosing element.
+           */
+           
+        if (pe->n_att == 0) {
+          frame.r_att = esisStackPush(pe->S, &frame, sizeof frame);
+        }
+        
+        err = store_attr(pe);
+        ERROR_SET(err);
+        if (err)
+          RELEASE(r);
+        else
+          ++pe->n_att;
+        break;
+
+      case '(':
+ 
+        if (pe->n_att == 0) {
+          r = esisStackPush(pe->S, &frame, sizeof frame);
+          frame = null_frame;
+          frame.r_att = r;
+        }
+        frame.r_gi = TOP();
+        err = store_name(pe);
+        ERROR_SET(err);
+        if (!err) {
+          struct hi hi, *p_hi;
+          
+          hi.elemGI = P(frame.r_gi);
+          p_hi = bsearch(&hi, HANDLER, pe->n_hi, sizeof hi, cmp_hi);
+          
+          if (p_hi != NULL) {
+            ESIS_Elem elem;
+            ref r_atts = TOP();
+            
+            frame.elemID   = p_hi->elemID;
+            frame.userData = p_hi->userData;
+            frame.handler  = p_hi->handler;
+            
+            atts = (pe->n_att > 0) ? ESIS_Atts_(pe, frame.r_att)
+                                   : null_atts;
+            
+            elem.atts   = atts;
+            elem.elemGI = P(frame.r_gi);
+            frame.handler(frame.userData, ESIS_START,
+                          frame.elemID, &elem, NULL, 0U);
+            
+            RELEASE(r_atts);
+          } else {
+            /*
+             * :TODO: Element start w/o handler. Use Expat-style 
+             * handler if any, or pass through.
+             */
+          }
         }
         break;
-      case CMARK_BULLET_LIST:
-        attrib(esis, "type", "bullet");
+
+      case '-':
+        r = TOP();
+        len = store_cdata(pe);
+        data = P(r);
+        if (frame.handler != NULL && len > 0U) {
+          ESIS_Elem elem;
+          elem.elemGI = P(frame.r_gi);
+          elem.atts   = NULL;
+          frame.handler(frame.userData, ESIS_CDATA,
+                        frame.elemID, &elem, data, len);
+        } else
+          ; /* :TODO: character data w/o handler: pass through. */
+        RELEASE(r);
+        break;       
+        
+      case ')':
+        r = TOP();
+        store_name(pe);
+        if (frame.handler != NULL) {
+          ESIS_Elem elem;
+          elem.elemGI = P(frame.r_gi);
+          elem.atts   = NULL;
+          frame.handler(frame.userData, ESIS_END,
+                        frame.elemID, &elem, NULL, 0U);
+        }
+        RELEASE(r);
+        /*
+         * Pop frame of closed element, get outer element info in frame.
+         */
+        r = frame.r_att;
+        RELEASE(r);
+        if (r >= sizeof frame)
+          r = esisStackPop(pe->S, &frame, sizeof frame);
+        else
+          frame = null_frame;
         break;
+               
       default:
-        break;
-      }
-      attrib(esis, "tight", cmark_node_get_list_tight(node) ?
-                                                      "true" : "false");
-      stag(esis, node->type);
-      break;
-    case CMARK_NODE_HEADER:
-      sprintf(buffer, "%d", node->as.header.level);
-      attrib(esis, "level", buffer);
-      stag(esis, node->type);
-      break;
-    case CMARK_NODE_CODE_BLOCK:
-      if (node->as.code.info.len > 0) {
-        attribn(esis, "info", node->as.code.info.data, node->as.code.info.len);
-      }
-      stag(esis, node->type);
-      cdata(esis, node->as.code.literal.data, node->as.code.literal.len);
-      etag(esis, node->type);
-      literal = true;
-      break;
-    case CMARK_NODE_LINK:
-    case CMARK_NODE_IMAGE:
-      attribn(esis, "destination", node->as.link.url.data, node->as.link.url.len);
-      attribn(esis, "title", node->as.link.title.data, node->as.link.title.len);
-      stag(esis, node->type);
-      break;
-    case CMARK_NODE_HRULE:
-    case CMARK_NODE_SOFTBREAK:
-    case CMARK_NODE_LINEBREAK:
-      stag(esis, node->type);
-      etag(esis, node->type);
-      break;
-    case CMARK_NODE_DOCUMENT:
-      cmark_strbuf_puts(esis, "?xml version=\"1.0\" encoding=\"UTF-8\"\n");
-      stag(esis, node->type);
-      break;
-    default:
-      stag(esis, node->type);
-      break;
+        ;
     }
-  } else if (node->first_child) {
-    etag(esis, node->type);
   }
-
-  return 1;
 }
 
-char *cmark_render_esis(cmark_node *root, cmark_option_t options)
+int ESISAPI
+ESIS_ParseFile(ESIS_Parser pe, FILE *inputFile)
 {
-  char *result;
-  cmark_strbuf html = GH_BUF_INIT;
-  cmark_event_type ev_type;
-  cmark_node *cur;
-  struct render_state state = {&html, NULL};
-  cmark_iter *iter = cmark_iter_new(root);
-
-  while ((ev_type = cmark_iter_next(iter)) != CMARK_EVENT_DONE) {
-    cur = cmark_iter_get_node(iter);
-    S_render_node(cur, ev_type, &state, options);
-  }
-  result = (char *)cmark_strbuf_detach(&html);
-
-  cmark_iter_free(iter);
-  return result;
-}
-
-void print_usage() {
-  printf("Usage:   cmesis [FILE*]\n");
-  printf("Options:\n");
-  printf("  --sourcepos      Include source position attribute\n");
-  printf("  --hardbreaks     Treat newlines as hard line breaks\n");
-  printf("  --safe           Suppress raw HTML and dangerous URLs\n");
-  printf("  --smart          Use smart punctuation\n");
-  printf("  --normalize      Consolidate adjacent text nodes\n");
-  printf("  --help, -h       Print usage information\n");
-  printf("  --version        Print version\n");
-}
-
-int main(int argc, char *argv[]) {
-  int i, numfps = 0;
-  int *files;
-  char buffer[4096];
-  char *title = NULL;
-  char *css = NULL;
+  unsigned n_hi = pe->n_hi;
+  struct hi *p_hi = HANDLER;
   
-  cmark_parser *parser;
-  size_t bytes;
-  cmark_node *document;
-  cmark_option_t options = CMARK_OPT_DEFAULT | CMARK_OPT_ISO;
+  if (n_hi > 0U) {
+    unsigned k;
+    const char *hdbuf = pe->HD->buf;
+    
+    for (k = 0; k < n_hi; ++k)
+      p_hi[k].elemGI = hdbuf + p_hi[k].r_ElemGI;
+      
+    qsort(p_hi, n_hi, sizeof p_hi[0], cmp_hi);
+  }
+  
+  pe->fp = inputFile;
+  
+  ParseLoop(pe);
+  
+  ERROR_GET();
+  return pe->err == ESIS_ERROR_NONE;
+}
 
-#if defined(_WIN32) && !defined(__CYGWIN__)
-  _setmode(_fileno(stdout), _O_BINARY);
+
+#ifndef NDEBUG /* NOT IMPLEMENTED */
+int ESISAPI
+ESIS_Parse(ESIS_Parser pe, const char *s, size_t len, int isFinal)
+{
+  return 0;
+}
 #endif
 
-  files = (int *)malloc(argc * sizeof(*files));
 
-  for (i = 1; i < argc; i++) {
-    if (strcmp(argv[i], "--version") == 0) {
-      printf("cmesis %s", CMARK_VERSION_STRING
-                                    " ( %s %s )\n",
-                                    cmark_repourl, cmark_gitident);
-      printf(" - CommonMark converter\n(C) 2014, 2015 John MacFarlane\n");
-      exit(0);
-    } else if (strcmp(argv[i], "--sourcepos") == 0) {
-      options |= CMARK_OPT_SOURCEPOS;
-    } else if (strcmp(argv[i], "--hardbreaks") == 0) {
-      options |= CMARK_OPT_HARDBREAKS;
-    } else if (strcmp(argv[i], "--smart") == 0) {
-      options |= CMARK_OPT_SMART;
-    } else if (strcmp(argv[i], "--safe") == 0) {
-      options |= CMARK_OPT_SAFE;
-    } else if (strcmp(argv[i], "--normalize") == 0) {
-      options |= CMARK_OPT_NORMALIZE;
-    } else if (strcmp(argv[i], "--validate-utf8") == 0) {
-      options |= CMARK_OPT_VALIDATE_UTF8;
-    } else if ((strcmp(argv[i], "--help") == 0) ||
-               (strcmp(argv[i], "-h") == 0)) {
-      print_usage();
-      exit(0);
-    } else if (*argv[i] == '-') {
-      print_usage();
-      exit(1);
-    } else { // treat as file argument
-      files[numfps++] = i;
-    }
-  }
+#ifndef NDEBUG /* NOT IMPLEMENTED */
+void * ESISAPI
+ESIS_GetBuffer(ESIS_Parser pe, size_t len)
+{
+  return NULL;
+}
+#endif
 
-  parser = cmark_parser_new(options);
-  for (i = 0; i < numfps; i++) {
-    FILE *fp = fopen(argv[files[i]], "r");
-    bool in_header = true;
-    
-    if (fp == NULL) {
-      fprintf(stderr, "Error opening file %s: %s\n", argv[files[i]],
-              strerror(errno));
-      exit(1);
-    }
 
-    while ((bytes = fread(buffer, 1, sizeof(buffer), fp)) > 0) {
-      cmark_parser_feed(parser, buffer, bytes);
-    }
-
-    fclose(fp);
-  }
-
-  if (numfps == 0) {
-    while ((bytes = fread(buffer, 1, sizeof(buffer), stdin)) > 0) {
-      cmark_parser_feed(parser, buffer, bytes);
-      if (bytes < sizeof(buffer)) {
-        break;
-      }
-    }
-  }
-
-  document = cmark_parser_finish(parser);
-  cmark_parser_free(parser);
-
-  printf("%s", cmark_render_esis(document, options));
-
-  cmark_node_free(document);
-
-  free(files);
-
+#ifndef NDEBUG /* NOT IMPLEMENTED */
+int ESISAPI
+ESIS_ParseBuffer(ESIS_Parser pe, size_t len, int isFinal)
+{
   return 0;
+}
+#endif
+
+
+ESIS_Parser ESISAPI
+ESIS_ParserCreate(const ESIS_Char *encoding)
+{
+  ESIS_Parser pe = malloc(sizeof *pe);
+  if (pe == NULL) return NULL;
+  
+  memset(pe, 0, sizeof *pe);
+  
+  esisStackInit(pe->HD);
+  if (pe->HD->buf == NULL) goto fail;
+  
+  esisStackInit(pe->HI);
+  if (pe->HI->buf == NULL) goto fail;
+  
+  esisStackInit(pe->S);
+  if (pe->S->buf == NULL) goto fail;
+  
+  pe->err    = ESIS_ERROR_NONE;
+  pe->n_att  = 0U;
+  pe->n_hi   = 0U;
+  pe->fp     = NULL;
+  
+  return pe;
+  
+fail:
+  free(pe->HI->buf);
+  free(pe->HD->buf);
+  free(pe->S->buf);
+  free(pe);
+  return NULL;
+}
+
+
+void ESISAPI ESIS_ParserFree(ESIS_Parser pe)
+{
+  free(pe->S->buf);
+  free(pe);
+}
+
+
+enum ESIS_Error ESISAPI ESIS_GetParserError(ESIS_Parser pe)
+{
+  ERROR_SET(ESIS_ERROR_NONE);
+  return pe->err;
+}
+
+
+const char **ESIS_Atts_(ESIS_Parser pe, ref att)
+{
+  unsigned n_att, k;
+  size_t n;
+  ref r_atts;
+  const ESIS_Char *p, **pp;
+  const char **atts;
+  
+  n_att = pe->n_att;
+  n = (2 * n_att + 1 ) * sizeof p;
+  r_atts = MARK(n + sizeof p);
+  n = r_atts - r_atts % sizeof p + sizeof p;
+  
+  pp = P(n);
+  p  = P(att); 
+  
+  atts = pp;
+  
+  for (k = 0; k < n_att; ++k) {
+    const ESIS_Char *name, *val;
+    
+    name = p;
+    p += strlen(p) + 1;
+    
+    val = p;
+    p += strlen(p) + 1;
+    
+    *pp++ = name;
+    *pp++ = val;
+  }
+  *pp = NULL;
+  pe->n_att = 0U;
+  
+  return atts;
 }

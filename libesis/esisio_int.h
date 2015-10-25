@@ -40,12 +40,11 @@ ref  esisStackPop(struct esis_stack_ *p, void *v, size_t n);
                             pe->S->mark = (pe->S->top > pe->S->mark) ? \
                                   pe->S->top : pe->S->mark, pe->S->top )
 
-struct ESIS_ParserStruct {
-  struct esis_stack_ S;
-};
 
 extern ESIS_Writer ESISAPI
-ESIS_WriterCreateInt(FILE *, unsigned options);
+ESIS_WriterCreateInt_(FILE *, unsigned options);
+
+extern const char **ESIS_Atts_(ESIS_Parser, ref att);
 
 #define ESIS_NONOPTION_ 07777U
 
@@ -71,18 +70,43 @@ typedef void (* ESISAPI ESIS_DataWriter)(
 struct ESIS_WriterStruct {
   struct esis_stack_    S[1];
   int                   err;
-  unsigned              opts;
   unsigned              n_att;
   ref                   r_att;
   ref                   r_gi;
+  
+  unsigned              opts;
   ESIS_TagWriter        tagfunc;
   ESIS_DataWriter       datafunc;
   FILE                 *fp;
 };
 
+struct ESIS_ParserStruct {
+  struct esis_stack_    S[1];
+  int                   err;
+  unsigned              n_att;
+  
+  struct esis_stack_    HD[1];
+  struct esis_stack_    HI[1];
+  unsigned              n_hi;
+  FILE                 *fp;
+};
+
+struct hi {
+  ref                 r_ElemGI;
+  const ESIS_Char    *elemGI;
+  long                elemID;
+  void               *userData;
+  ESIS_ElementHandler handler;
+};
+
+#define HANDLER ((struct hi *)pe->HI->buf)
+
 #define ERROR_SET(E_) do { \
-       if (!pe->err && !pe->err = p->S->err) pe->err = (E_); } while (0)
+       if (!pe->err && !(pe->err = pe->S->err)) pe->err = (E_); } while (0)
+
+#define ERROR_GET() \
+     ( (pe->err || (pe->err = pe->S->err)) ? pe->err : ESIS_ERROR_NONE )
 
 #define ERROR_RET() do { \
-                 if (pe->err || pe->err = p->S->err) return; } while (0)
+                 if (pe->err || (pe->err = pe->S->err)) return; } while (0)
       

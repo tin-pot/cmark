@@ -59,18 +59,24 @@ extern "C" {
 struct ESIS_ParserStruct;
 typedef struct ESIS_ParserStruct *ESIS_Parser;
 
-enum ESIS_Error {
+typedef enum ESIS_Error {
     ESIS_ERROR_NONE,
     ESIS_ERROR_NO_MEMORY,
     ESIS_ERROR_FILE_READ,
     ESIS_ERROR_FILE_WRITE,
-    ESIS_ERROR_INPUT,
+    ESIS_ERROR_SYNTAX,
     ESIS_ERROR_INTERNAL
-};
+} ESIS_Error;
 
 enum {
     ESIS_CANONICAL  = 010000,       /* Output Canonical XML. */
 };
+
+typedef enum {
+    ESIS_START,
+    ESIS_CDATA,
+    ESIS_END
+} ESIS_ElemEvent;
 
 typedef struct ESIS_el ESIS_Elem;
 
@@ -92,8 +98,9 @@ ESIS_Bool ESISAPI
 ESIS_ParserReset(ESIS_Parser, const ESIS_Char *encoding);
 
 
-typedef ESIS_Bool (ESISCALL *ESIS_ElementHandler) (
+typedef ESIS_Bool (*ESIS_ElementHandler) (
 					void               *userData,
+					ESIS_ElemEvent      elemEvent,
 					long                elemID,
 					const  ESIS_Elem   *elem,
 					const  ESIS_Char   *charData,
@@ -106,6 +113,36 @@ void ESISAPI ESIS_SetElementHandler(
 					long                elemID,
 					void               *userData);
 
+/*
+ * The following three handler types and handler setting functions are
+ * for compatibility with Expat 1.2 -- implement if needed.
+ */
+ 
+typedef void (*ESIS_StartElementHandler) (
+					void               *userData,
+					const  ESIS_Char   *name,
+					const  ESIS_Char  **atts);
+
+typedef void (*ESIS_EndElementHandler) (
+					void               *userData,
+					const  ESIS_Char   *name);
+
+typedef void (*ESIS_CharacterDataHandler) (
+					void               *userData,
+					const  ESIS_Char   *charData,
+					int                 len);
+
+void ESISAPI ESIS_SetExpUserData(  ESIS_Parser               parser,
+                                   void                     *userData);
+
+void ESISAPI ESIS_SetExpElementHandler(
+			           ESIS_Parser               parser,
+				   ESIS_StartElementHandler  start,
+				   ESIS_EndElementHandler    end);
+
+void ESISAPI ESIS_SetExpCharacterDataHandler(
+				   ESIS_Parser               parser,
+				   ESIS_CharacterDataHandler data);
 
 /*
  * An element E is "seen" as open through the ESIS_Env() function
@@ -244,6 +281,9 @@ typedef int (ESISCALL *ESIS_UnknownEncodingHandler) (
  */
 
 int ESISAPI
+ESIS_ParseFile(ESIS_Parser parser, FILE *inputFile);
+
+int ESISAPI
 ESIS_Parse(ESIS_Parser parser, const char *s, size_t len, int isFinal);
 
 void * ESISAPI
@@ -251,33 +291,6 @@ ESIS_GetBuffer(ESIS_Parser parser, size_t len);
 
 int ESISAPI
 ESIS_ParseBuffer(ESIS_Parser parser, size_t len, int isFinal);
-
-
-/*
- * Creates an ESIS_Parser object that can parse a given FILE stream.
- *
- * Expat provides a XML_ExternalEntityParserCreate() function with
- * a similar purpose. To use the ESIS API for parsing an XML input
- * file (or entity, or buffer), the best contraption without too
- * much duplication would probably a function
- *
- *    ESIS_XmlParserCreate(XML_Parser xmlParser)
- *
- * so that the xmlParser can be created and initialized in any way
- * the application wants (NOT IMPLEMENTED YET).
- */
- 
-ESIS_Parser ESISAPI
-ESIS_FileParserCreate(FILE            *fp,
-                      const ESIS_Char *encoding);
-
-
-/*
-   If XML_Parse or XML_ParseBuffer have returned 0, then
-   XML_GetErrorCode returns information about the error.
-*/
-
-enum ESIS_Error ESISAPI ESIS_GetErrorCode(ESIS_Parser parser);
 
 /*
    Frees memory used by the parser.
@@ -291,6 +304,13 @@ void ESISAPI ESIS_ParserFree(ESIS_Parser parser);
 
 const char ESISAPI *ESIS_ErrorString(int code);
 
+/*
+If ESIS_Parse or ESIS_ParseBuffer have returned 0, then ESIS_GetParserError
+returns information about the error.
+*/
+
+enum ESIS_Error ESISAPI ESIS_GetParserError(ESIS_Parser parser);
+
 /**********************************************************************/
 
 /*
@@ -300,6 +320,7 @@ const char ESISAPI *ESIS_ErrorString(int code);
 struct ESIS_WriterStruct;
 
 typedef struct ESIS_WriterStruct *ESIS_Writer;
+
 
 ESIS_Writer ESISAPI
 ESIS_WriterCreate(FILE *, unsigned options);
@@ -431,6 +452,13 @@ ESIS_PCdata(ESIS_Writer,  const ESIS_Char *cd, size_t len);
 void ESISAPI
 ESIS_Cdata(ESIS_Writer,   const ESIS_Char *cd, size_t len);
 
+/*
+ * This one (with an `int` length parameter) is for Expat 1.2
+ * compatibility.
+ */
+ 
+void ESISAPI
+ESIS_CdataExp(ESIS_Writer, const ESIS_Char *cd, int len);
 
 /*
  * The ESIS_End* functions output an end tag rsp a "`)`" line.
@@ -441,6 +469,7 @@ ESIS_End(ESIS_Writer,     const ESIS_Char *elemGI);
 void ESISAPI
 ESIS_EndElem(ESIS_Writer, const ESIS_Elem *elem);
 
+enum ESIS_Error ESISAPI ESIS_GetWriterError(ESIS_Writer writer);
 
 void ESISAPI ESIS_WriterFree(ESIS_Writer);
 

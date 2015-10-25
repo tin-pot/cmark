@@ -6,7 +6,7 @@
 #include <string.h>
 
 static void
-ShipTag(ESIS_Writer, unsigned what, const ESIS_Char *);
+ShipTag(ESIS_Writer, unsigned what, const ESIS_Char *, ref att);
 static void
 ShipData(ESIS_Writer, unsigned how, const ESIS_Char *, size_t);
 
@@ -16,7 +16,7 @@ static void
 EsisDataWriter(FILE *, unsigned, const byte *, size_t);
 
 ESIS_Writer ESISAPI
-ESIS_WriterCreateInt(FILE *fp, unsigned options)
+ESIS_WriterCreateInt_(FILE *fp, unsigned options)
 {
   ref r;
   
@@ -39,7 +39,7 @@ ESIS_WriterCreateInt(FILE *fp, unsigned options)
 ESIS_Writer ESISAPI
 ESIS_WriterCreate(FILE *fp, unsigned options)
 {
-  ESIS_Writer pe = ESIS_WriterCreateInt(fp, options);
+  ESIS_Writer pe = ESIS_WriterCreateInt_(fp, options);
   
   pe->tagfunc  = EsisTagWriter;
   pe->datafunc = EsisDataWriter;
@@ -97,7 +97,7 @@ ESIS_Start(ESIS_Writer pe, const ESIS_Char  *elemGI,
   n = strlen(elemGI) + 1U;
   esisStackPush(pe->S, elemGI, n);
   
-  ShipTag(pe, ESIS_START_, elemGI);
+  ShipTag(pe, ESIS_START_, elemGI, pe->r_att);
 }
                             
 void ESISAPI
@@ -112,7 +112,7 @@ ESIS_StartElem(ESIS_Writer pe, const ESIS_Elem  *elem)
   n = strlen(elem->elemGI) + 1U;
   esisStackPush(pe->S, elem->elemGI, n);
   
-  ShipTag(pe, ESIS_START_, elem->elemGI);
+  ShipTag(pe, ESIS_START_, elem->elemGI, pe->r_att);
 }
 
 void ESISAPI
@@ -128,7 +128,7 @@ ESIS_Empty(ESIS_Writer pe, const ESIS_Char  *elemGI,
   n = strlen(elemGI) + 1U;
   esisStackPush(pe->S, elemGI, n);
   
-  ShipTag(pe, ESIS_EMPTY_, elemGI);
+  ShipTag(pe, ESIS_EMPTY_, elemGI, pe->r_att);
 }
 
 void ESISAPI
@@ -143,19 +143,19 @@ ESIS_EmptyElem(ESIS_Writer pe, const ESIS_Elem  *elem)
   n = strlen(elem->elemGI) + 1U;
   esisStackPush(pe->S, elem->elemGI, n);
   
-  ShipTag(pe, ESIS_EMPTY_, elem->elemGI);
+  ShipTag(pe, ESIS_EMPTY_, elem->elemGI, pe->r_att);
 }
 
 void ESISAPI
 ESIS_End(ESIS_Writer pe, const ESIS_Char *elemGI)
 {
-  ShipTag(pe, ESIS_END_, elemGI);
+  ShipTag(pe, ESIS_END_, elemGI, pe->r_att);
 }
 
 void ESISAPI
 ESIS_EndElem(ESIS_Writer pe, const ESIS_Elem *elem)
 {
-  ShipTag(pe, ESIS_END_, elem->elemGI);
+  ShipTag(pe, ESIS_END_, elem->elemGI, pe->r_att);
 }
 
 void ESISAPI
@@ -174,41 +174,16 @@ ESIS_Cdata(ESIS_Writer pe, const ESIS_Char *cd, size_t len)
 /*====================================================================*/
 
 static void
-ShipTag(ESIS_Writer pe, unsigned what, const ESIS_Char *elemGI)
+ShipTag(ESIS_Writer pe, unsigned what, const ESIS_Char *elemGI, ref att)
 {
-  unsigned n_att, k;
-  ref r_atts;
-  ESIS_Char *p, **pp;
-  ESIS_Char **atts;
-  size_t n;
+  const ESIS_Char **atts;
+  static const ESIS_Char *null_atts[2] = { NULL, NULL };
   
   if ((what & ESIS_START_) && pe->n_att) {
-    n_att = pe->n_att;
-    n = (2 * n_att + 1 ) * sizeof p;
-    r_atts = MARK(n + sizeof p);
-    n = r_atts - r_atts % sizeof p + sizeof p;
-    
-    pp = P(n);
-    p  = P(pe->r_att); 
-    
-    atts = pp;
-    
-    for (k = 0; k < n_att; ++k) {
-      ESIS_Char *name, *val;
-      
-      name = p;
-      p += strlen(p) + 1;
-      
-      val = p;
-      p += strlen(p) + 1;
-      
-      *pp++ = name;
-      *pp++ = val;
-    }
-    *pp = NULL;
+    atts = ESIS_Atts_((ESIS_Parser)pe, att);
   } else {
-    atts = NULL;
-    r_atts = TOP();
+    null_atts[0] = null_atts[1] = NULL;
+    atts = null_atts;
   }
   
   what |= (pe->opts & ~ESIS_NONOPTION_);
