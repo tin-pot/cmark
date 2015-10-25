@@ -149,8 +149,10 @@ ESIS_Bool handler(void               *userData,
           break;
           
         case CMARK_NODE_HEADER:
-          if ((val = findatt(elem->atts, "level")) != NULL) 
+          if ((val = findatt(elem->atts, "level")) != NULL) {
             outGI[1] = val[0];
+            elem->userData = val[0];
+          }
           break;
           
         case CMARK_NODE_SOFTBREAK:
@@ -192,6 +194,8 @@ ESIS_Bool handler(void               *userData,
         if (elemID == CMARK_NODE_LIST) {
           if (trans && elem->userData == 'OL')
             strcpy(outGI, xml ? "ol" : "OL");
+        } else if (elemID == CMARK_NODE_HEADER) {
+           outGI[1] = elem->userData & 0xFF;
         }
         ESIS_End(w, outGI);
         if (trans && elemID == CMARK_NODE_CODE_BLOCK) {
