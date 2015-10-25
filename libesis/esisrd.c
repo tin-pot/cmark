@@ -128,6 +128,25 @@ static int store_name(ESIS_Parser pe)
   return ESIS_ERROR_NONE;
 }
 
+static void put_cdata(FILE *fp, const byte *data, size_t len)
+{
+  unsigned k;
+  
+  putc('-', fp);
+  
+  for (k = 0; k < len; ++k) {
+    byte b = data[k];
+    if (b >= 0x20)
+      putc(b, fp);
+    else if (b == '\n') {
+      fputs("\\012\\n", fp);
+    } else {   
+      fprintf(fp, "\\%.3o", b);
+    } 
+  }
+  
+  putc('\n', fp);
+}
 
 #define DIG_MAX 7 /* Enough for 1,114,112 UCS code points. */
 
@@ -336,7 +355,7 @@ static void ParseLoop(ESIS_Parser pe)
           frame.handler(frame.userData, ESIS_CDATA,
                         frame.elemID, &elem, data, len);
         } else if (outfp != NULL)
-          fprintf(outfp, "-%.*s\n", (int)len, data);
+          put_cdata(outfp, data, len);
           
         RELEASE(r);
         break;       
