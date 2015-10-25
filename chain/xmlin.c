@@ -16,7 +16,7 @@ main(int argc, char *argv[])
   FILE *infile, *outfile;
   
   XML_Parser parser = XML_ParserCreate(NULL);
-  ESIS_Writer writer = ESIS_WriterCreate(stdout, NULL);
+  ESIS_Writer writer = ESIS_WriterCreate(stdout, 0U);
   
   if (argc == 2) {
     infile = fopen(argv[1], "r");
