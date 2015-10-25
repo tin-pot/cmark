@@ -62,8 +62,12 @@ ESIS_Attr(ESIS_Writer pe, const ESIS_Char  *name,
   n = strlen(name) + 1U;
   esisStackPush(pe->S, name, n);
   
-  if (len == ESIS_NTS) len = strlen(val) + 1U;
-  esisStackPush(pe->S, val, len);
+  if (len == ESIS_NTS) {
+    esisStackPush(pe->S, val, strlen(val) + 1U);
+  } else {
+    esisStackPush(pe->S, val, len);
+    PUSH_CHAR('\0');
+  }
   
   ++pe->n_att;
 }
@@ -77,7 +81,7 @@ ESIS_Atts(ESIS_Writer pe, const ESIS_Char **atts)
   
   for (name = atts[0]; name != NULL; atts += 2) {
     const ESIS_Char *val = atts[1];
-    size_t len = strlen(val) + 1U;
+    size_t len = strlen(val);
     ESIS_Attr(pe, name, val, len);
     
     name = atts[2];
