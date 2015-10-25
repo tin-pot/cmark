@@ -118,7 +118,7 @@ static const char *findatt(const char **atts, const char *name)
 ESIS_Bool handler(void               *userData,
                   ESIS_ElemEvent      elemEvent,
                   long                elemID,
-                  const  ESIS_Elem   *elem,
+                  ESIS_Elem          *elem,
                   const  ESIS_Char   *charData,
                   size_t              len)
 {
@@ -137,12 +137,15 @@ ESIS_Bool handler(void               *userData,
     if ((prop & EL_OMIT) == 0) {
       if (trans) switch (elemID) {
         case CMARK_NODE_LIST:
-          if ((val = findatt(elem->atts, "type")) && !strcmp(val, "ordered"))
+          if ((val = findatt(elem->atts, "type")) &&
+                                              !strcmp(val, "ordered")) {
             strcpy(outGI, (xml) ? "ol" : "OL");
+            elem->userData = 'OL';
+          }
           break;
           
         case CMARK_NODE_CODE_BLOCK:
-          ESIS_Start(w, "PRE", NULL);
+          ESIS_Start(w, xml ? "pre" : "PRE", NULL);
           break;
           
         case CMARK_NODE_HEADER:
@@ -161,7 +164,7 @@ ESIS_Bool handler(void               *userData,
           if (val != NULL && val2 != NULL) {
             atta[0] = (elemID == CMARK_NODE_LINK) ? "href" : "src";
             atta[1] = val;
-            atta[2] = "title";
+            atta[2] = (elemID == CMARK_NODE_IMAGE) ? "alt" : "title";
             atta[3] = val2;
             atta[4] = NULL;
           }
@@ -184,9 +187,18 @@ ESIS_Bool handler(void               *userData,
     break;
     
   case ESIS_END:
-    if ((prop & EL_OMIT) == 0) 
-      if ((prop & EL_EMPTY) == 0)
+    if ((prop & EL_OMIT) == 0) {
+      if ((prop & EL_EMPTY) == 0) {
+        if (elemID == CMARK_NODE_LIST) {
+          if (trans && elem->userData == 'OL')
+            strcpy(outGI, xml ? "ol" : "OL");
+        }
         ESIS_End(w, outGI);
+        if (trans && elemID == CMARK_NODE_CODE_BLOCK) {
+          ESIS_End(w, xml ? "pre" : "PRE");
+        }
+      }
+    }
     break;
   }   
   return ESIS_TRUE;
