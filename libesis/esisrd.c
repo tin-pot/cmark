@@ -234,14 +234,16 @@ static void ParseLoop(ESIS_Parser pe)
     unsigned short  n_att;  /* Number of attributes. */
     ref             r_att;  /* Start of pushed attributes. */
     ref             r_gi;   /* Start of pushed GI. */
-    long            elemID;
     void           *userData;
+    long            elemID;
+    ESIS_Elem       elem;
     ESIS_ElementHandler handler;
   } frame;
   
   static const struct fr null_frame = {
-    0, 0, 0,
-    0L, NULL, (ESIS_ElementHandler)NULL
+    0, 0, 0, NULL, -1L,
+    { NULL, NULL, 0U },
+    (ESIS_ElementHandler)NULL
   };
 
   frame = null_frame;
@@ -296,8 +298,6 @@ static void ParseLoop(ESIS_Parser pe)
           p_hi = bsearch(&hi, p_hi, pe->n_hi, sizeof hi, cmp_hi);
           
           if (p_hi != NULL || pe->handler != NULL) {
-            ESIS_Elem elem;
-            
             ESIS_ElementHandler handler;
             void *userData;
             long elemID;
@@ -314,18 +314,20 @@ static void ParseLoop(ESIS_Parser pe)
               elemID   = pe->elemID;
             }
             
-            frame.elemID   = elemID;
-            frame.userData = userData;
             frame.handler  = handler;
+            frame.userData = userData;
+            frame.elemID   = elemID;
+            
+            frame.elem.userData = 0U;
             
             atts = (n_att > 0) ?
                                 ESIS_Atts_(pe, n_att, frame.r_att)
                               : null_atts;
             
-            elem.atts   = atts;
-            elem.elemGI = P(frame.r_gi);
+            frame.elem.atts   = atts;
+            frame.elem.elemGI = P(frame.r_gi);
             
-            handler(userData, ESIS_START, elemID, &elem, NULL, 0U);
+            handler(userData, ESIS_START, elemID, &frame.elem, NULL, 0U);
             
             RELEASE(r_atts);
           } else if (outfp != NULL) {
@@ -349,11 +351,10 @@ static void ParseLoop(ESIS_Parser pe)
         len = store_cdata(pe);
         data = P(r);
         if (frame.handler != NULL && len > 0U) {
-          ESIS_Elem elem;
-          elem.elemGI = P(frame.r_gi);
-          elem.atts   = NULL;
+          frame.elem.elemGI = P(frame.r_gi);
+          frame.elem.atts   = NULL;
           frame.handler(frame.userData, ESIS_CDATA,
-                        frame.elemID, &elem, data, len);
+                        frame.elemID, &frame.elem, data, len);
         } else if (outfp != NULL)
           put_cdata(outfp, data, len);
           
@@ -364,11 +365,10 @@ static void ParseLoop(ESIS_Parser pe)
         r = TOP();
         store_name(pe);
         if (frame.handler != NULL) {
-          ESIS_Elem elem;
-          elem.elemGI = P(frame.r_gi);
-          elem.atts   = NULL;
+          frame.elem.elemGI = P(frame.r_gi);
+          frame.elem.atts   = NULL;
           frame.handler(frame.userData, ESIS_END,
-                        frame.elemID, &elem, NULL, 0U);
+                        frame.elemID, &frame.elem, NULL, 0U);
         } else if (outfp != NULL)
           fprintf(outfp, ")%s\n", P(frame.r_gi));
           

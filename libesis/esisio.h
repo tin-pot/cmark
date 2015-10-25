@@ -33,6 +33,7 @@
  */
    
 #include <stdio.h> /* FILE */
+#include <stdint.h> /* uintptr_t */
 #include "esisio_external.h"
 
 #ifdef ESIS_XMLPARSE   /* NOT IMPLEMENTED */
@@ -44,17 +45,11 @@ extern "C" {
 #endif
 
 #ifndef __cplusplus
-#ifdef ESIS_STDBOOL
 # include <stdbool.h>
-  typedef bool ESIS_Bool;
+#endif
+typedef bool ESIS_Bool;
 # define ESIS_TRUE   true
 # define ESIS_FALSE  false
-#else
-  typedef unsigned char ESIS_Bool;
-# define ESIS_TRUE   ((ESIS_Bool) 1)
-# define ESIS_FALSE  ((ESIS_Bool) 0)
-#endif
-#endif /* __cplusplus */
 
 struct ESIS_ParserStruct;
 typedef struct ESIS_ParserStruct *ESIS_Parser;
@@ -84,6 +79,7 @@ typedef struct ESIS_el ESIS_Elem;
 struct ESIS_el {
     const ESIS_Char  *elemGI;
     const ESIS_Char **atts;
+    uintptr_t         userData;
 };
 
 
@@ -103,7 +99,7 @@ typedef ESIS_Bool (*ESIS_ElementHandler) (
 					void               *userData,
 					ESIS_ElemEvent      elemEvent,
 					long                elemID,
-					const  ESIS_Elem   *elem,
+					ESIS_Elem          *elem,
 					const  ESIS_Char   *charData,
 					size_t              len);
 
@@ -396,14 +392,14 @@ ESIS_Start(ESIS_Writer,     const ESIS_Char  *elemGI,
                             const ESIS_Char **atts);
 
 void ESISAPI
-ESIS_StartElem(ESIS_Writer, const ESIS_Elem  *elem);
+ESIS_StartElem(ESIS_Writer,       ESIS_Elem  *elem);
 
 void ESISAPI
 ESIS_Empty(ESIS_Writer,     const ESIS_Char  *elemGI,
                             const ESIS_Char **atts);
 
 void ESISAPI
-ESIS_EmptyElem(ESIS_Writer, const ESIS_Elem  *elem);
+ESIS_EmptyElem(ESIS_Writer,       ESIS_Elem  *elem);
 
 
 /*
@@ -471,7 +467,7 @@ ESIS_CdataExp(ESIS_Writer, const ESIS_Char *cd, int len);
 void ESISAPI
 ESIS_End(ESIS_Writer,     const ESIS_Char *elemGI);
 void ESISAPI
-ESIS_EndElem(ESIS_Writer, const ESIS_Elem *elem);
+ESIS_EndElem(ESIS_Writer,       ESIS_Elem *elem);
 
 enum ESIS_Error ESISAPI ESIS_GetWriterError(ESIS_Writer writer);
 

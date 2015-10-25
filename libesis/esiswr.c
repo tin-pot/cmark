@@ -106,7 +106,7 @@ ESIS_Start(ESIS_Writer pe, const ESIS_Char  *elemGI,
 }
                             
 void ESISAPI
-ESIS_StartElem(ESIS_Writer pe, const ESIS_Elem  *elem)
+ESIS_StartElem(ESIS_Writer pe, ESIS_Elem  *elem)
 {
   size_t n;
   
@@ -139,7 +139,7 @@ ESIS_Empty(ESIS_Writer pe, const ESIS_Char  *elemGI,
 }
 
 void ESISAPI
-ESIS_EmptyElem(ESIS_Writer pe, const ESIS_Elem  *elem)
+ESIS_EmptyElem(ESIS_Writer pe, ESIS_Elem  *elem)
 {
   size_t n;
   
@@ -162,7 +162,7 @@ ESIS_End(ESIS_Writer pe, const ESIS_Char *elemGI)
 }
 
 void ESISAPI
-ESIS_EndElem(ESIS_Writer pe, const ESIS_Elem *elem)
+ESIS_EndElem(ESIS_Writer pe, ESIS_Elem *elem)
 {
   ShipTag(pe, ESIS_END_, elem->elemGI, 0, pe->r_att);
   pe->n_att = 0U;
