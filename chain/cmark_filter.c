@@ -22,6 +22,11 @@ static const char *GI[] = {
   "strong",	"link",		"image",
 };
 
+struct UserData {
+  cmark_option_t options;
+  cmark_parser  *parser;
+  ESIS_Writer    writer;
+};
 
 static int S_render_node(cmark_node *node, cmark_event_type ev_type,
 			 ESIS_Writer w)
@@ -103,12 +108,11 @@ static int S_render_node(cmark_node *node, cmark_event_type ev_type,
   return 1;
 }
 
-char *cmark_render_esis(cmark_node *root)
+char *cmark_render_esis(ESIS_Writer w, cmark_node *root)
 {
   cmark_event_type ev_type;
   cmark_node *cur;
   cmark_iter *iter = cmark_iter_new(root);
-  ESIS_Writer w = ESIS_WriterCreate(stdout, 0U);
 
   while ((ev_type = cmark_iter_next(iter)) != CMARK_EVENT_DONE) {
     cur = cmark_iter_get_node(iter);
@@ -131,23 +135,40 @@ void print_usage() {
   printf("  --version        Print version\n");
 }
 
-int main(int argc, char *argv[]) {
-  int i, numfps = 0;
-  int *files;
-  char buffer[4096];
-  char *title = NULL;
-  char *css = NULL;
-  size_t bytes;
-  
-  cmark_parser *parser;
+ESIS_Bool
+markup(void *userData, ESIS_ElemEvent ev,
+                       long elemID, const ESIS_Elem *elem,
+                       const ESIS_Char *charData, size_t len)
+{
+  struct UserData *the = userData;
   cmark_node *document;
-  cmark_option_t options = CMARK_OPT_DEFAULT | CMARK_OPT_ISO;
+  
+  switch (ev) {
+  case ESIS_START:
+    the->parser = cmark_parser_new(the->options);
+    break;
+  case ESIS_CDATA:
+    cmark_parser_feed(the->parser, charData, len);
+    break;
+  case ESIS_END:
+    document = cmark_parser_finish(the->parser);
+    cmark_render_esis(the->writer, document);
+    cmark_node_free(document);
+    cmark_parser_free(the->parser);
+    the->parser = NULL;
+  }
+  return ESIS_TRUE;
+}
 
-  files = (int *)malloc(argc * sizeof(*files));
+int main(int argc, char *argv[]) {
+  struct UserData ud;
+  cmark_option_t options = CMARK_OPT_DEFAULT | CMARK_OPT_ISO;
+  ESIS_Parser eparser;
+  int i;
 
   for (i = 1; i < argc; i++) {
     if (strcmp(argv[i], "--version") == 0) {
-      printf("cmesis %s", CMARK_VERSION_STRING
+      printf("cmark_filter %s", CMARK_VERSION_STRING
                                     " ( %s %s )\n",
                                     cmark_repourl, cmark_gitident);
       printf(" - CommonMark converter\n(C) 2014, 2015 John MacFarlane\n");
@@ -168,46 +189,24 @@ int main(int argc, char *argv[]) {
                (strcmp(argv[i], "-h") == 0)) {
       print_usage();
       exit(0);
-    } else if (*argv[i] == '-') {
+    } else {
       print_usage();
       exit(1);
-    } else { // treat as file argument
-      files[numfps++] = i;
     }
   }
 
-  parser = cmark_parser_new(options);
-  for (i = 0; i < numfps; i++) {
-    FILE *fp = fopen(argv[files[i]], "r");
-    bool in_header = true;
-    
-    if (fp == NULL) {
-      fprintf(stderr, "Error opening file %s: %s\n", argv[files[i]],
-              strerror(errno));
-      exit(1);
-    }
-
-    while ((bytes = fread(buffer, 1, sizeof(buffer), fp)) > 0) {
-      cmark_parser_feed(parser, buffer, bytes);
-    }
-
-    fclose(fp);
-  }
-
-  if (numfps == 0) {
-    while ((bytes = fread(buffer, 1, sizeof(buffer), stdin)) > 0) {
-      cmark_parser_feed(parser, buffer, bytes);
-      if (bytes < sizeof(buffer)) {
-        break;
-      }
-    }
-  }
-
-  document = cmark_parser_finish(parser);
-  cmark_parser_free(parser);
-  cmark_render_esis(document);
-  cmark_node_free(document);
-  free(files);
-
+  eparser = ESIS_ParserCreate(NULL);
+  
+  ud.options = options;
+  ud.writer  = ESIS_WriterCreate(stdout, 0U);
+  ud.parser  = NULL;
+  
+  ESIS_SetElementHandler(eparser, markup, "mark-up",  1L, &ud);
+  ESIS_SetElementHandler(eparser, markup, "document", 2L, &ud);
+  
+  ESIS_FilterFile(eparser, stdin, stdout);
+  
+  ESIS_ParserFree(eparser);
+  
   return 0;
 }
