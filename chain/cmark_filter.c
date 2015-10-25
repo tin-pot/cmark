@@ -118,7 +118,6 @@ char *cmark_render_esis(ESIS_Writer w, cmark_node *root)
     cur = cmark_iter_get_node(iter);
     S_render_node(cur, ev_type, w);
   }
-  ESIS_WriterFree(w);
   cmark_iter_free(iter);
   return NULL;
 }
@@ -195,8 +194,8 @@ int main(int argc, char *argv[]) {
     }
   }
 
-  eparser = ESIS_ParserCreate(NULL);
   
+  eparser = ESIS_ParserCreate(NULL);
   ud.options = options;
   ud.writer  = ESIS_WriterCreate(stdout, 0U);
   ud.parser  = NULL;
@@ -205,7 +204,7 @@ int main(int argc, char *argv[]) {
   ESIS_SetElementHandler(eparser, markup, "document", 2L, &ud);
   
   ESIS_FilterFile(eparser, stdin, stdout);
-  
+  ESIS_WriterFree(ud.writer);
   ESIS_ParserFree(eparser);
   
   return 0;
