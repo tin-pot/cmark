@@ -249,11 +249,13 @@ EsisDataWriter(FILE             *outputFile,
   
   for (k = 0; k < len; ++k) {
     byte b = data[k];
-    if (b >= 0x20)
+    if (b == '\\') {   
+      fputs("\\\\", outputFile);
+    } else if (b >= 0x20)
       putc(b, outputFile);
     else if (b == '\n') {
       fputs("\\012\\n", outputFile);
-    } else {   
+    } else {
       fprintf(outputFile, "\\%.3o", b);
     } 
   }
