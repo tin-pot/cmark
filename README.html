@@ -1,0 +1,288 @@
+<!DOCTYPE HTML PUBLIC "ISO/IEC 15445:2000//DTD HTML//EN">
+<HTML>
+<HEAD>
+  <META name="GENERATOR"
+        content="cmark 0.22.0 ( git@github.com:tin-pot/cmark.git eda889f945b1 )">  <META http-equiv="Content-Type" content="text/html; charset=UTF-8">
+  <LINK rel="schema.DC"   href="http://purl.org/dc/elements/1.1/">
+  <META name="DC.format"  scheme="DCTERMS.IMT"      content="text/html">
+  <META name="DC.type"    scheme="DCTERMS.DCMIType" content="Text">
+  <META name="DC.title"   content="README">
+  <META name="DC.creator" content="mh@tin-pot.net">
+  <META name="DC.date"    content="2015-10-25">
+  <LINK rel="stylesheet"  type="text/css"
+        href="default.css">
+  <TITLE>README</TITLE>
+</HEAD>
+<BODY>
+<H1>About this Repository</H1>
+<P>Here is an overview of what kind of stuff this repository contains, in
+addition to the original <CODE>cmark</CODE> where it came from.</P>
+<H2>The <EM>CommonMark</EM> reference implementation</H2>
+<P>The core of the sources here is the <A href="http://spec.commonmark.org/0.22/"><EM>CommonMark</EM></A> <A href="https://github.com/jgm/CommonMark">reference
+implementation</A> in the <CODE>src/</CODE> directory. These sources are used
+to build two targets:</P>
+<OL>
+<LI>
+<P>The library <CODE>libcmark</CODE>, containing the parser itself, and</P>
+</LI>
+<LI>
+<P>the application <CODE>cmark</CODE>, a command-line processor to transform plain
+text in <EM>CommonMark</EM> mark-up into HTML, XHTML, etc.</P>
+</LI>
+</OL>
+<P>Other than the original <CODE>cmark</CODE> implementation (which uses <CODE>cmake</CODE>),
+this one is wholly built through <EM>Visual Studio 2008</EM> project files.
+There will certainly come the day where I want to build this on Linux
+(or rather: FreeBSD), and where I’ll take a look at <CODE>cmake</CODE> again, but
+don’t hold your breath.</P>
+<P>Only negligible changes were made to the <A href="https://github.com/jgm/cmark">original sources</A>:</P>
+<UL>
+<LI>
+<P>The command-line tool displays the <EM>Git</EM> version identifier and
+source repository URL;</P>
+</LI>
+<LI>
+<P>the ubiquitous <CODE>options</CODE> argument is not declared to be <CODE>int</CODE>, but
+a typedef’d <CODE>cmark_option_t</CODE>, which defaults to <CODE>int</CODE>. This is a nod
+to a future where there may be more than 32 options to pass around.</P>
+</LI>
+<LI>
+<P>the element type name <CODE>html</CODE> from the <A href="https://raw.githubusercontent.com/jgm/CommonMark/master/CommonMark.dtd"><EM>CommonMark</EM> DTD</A> is
+renamed to <CODE>block_html</CODE>, unless this prevented with a feature macro.</P>
+</LI>
+</UL>
+<P>That’s it, as far as I can remember (I’d have to check the commit
+history to be <EM>really</EM> sure).</P>
+<H2>An HTML document generator</H2>
+<P>Because the <CODE>cmark</CODE> tool does only output HTML/XHTML <EM>fragments</EM> (ie
+sequences of HTML/XHTML elements), it is not readily usable to create
+“free-standing” HTML documents from plain text input.</P>
+<P>This can be done using the <CODE>cm2html</CODE> tool, which generates HTML
+documents (hopefully) conforming to <A href="https://www.cs.tcd.ie/misc/15445/15445.html">ISO/IEC 15445:2000</A>
+(which is to W3C HTML what is <A href="https://en.wikipedia.org/wiki/PDF/A">ISO 19005:2005-1 PDF/A</A> to
+Adobe PDF, so to say).</P>
+<P>It inherits most of <CODE>cmark</CODE>’s options, and adds</P>
+<OL>
+<LI>
+<P><CODE>-t</CODE> or <CODE>--title</CODE> to set the document title;</P>
+</LI>
+<LI>
+<P><CODE>-c</CODE> or <CODE>--css</CODE> to include a link to a given CSS file/URL in the
+document header.</P>
+</LI>
+</OL>
+<P>Another modest extension is the support of “<EM>pandoc</EM>-style” document
+headers: if the input text starts with (up to three) lines each with a
+“<CODE>%</CODE>” character in column one, then these lines are not rendered in the
+output, but taken to specify meta-information, in the order:</P>
+<PRE><code>% Document Title
+% Author Name
+% Date
+</CODE></PRE>
+<P>If entered in this way, this meta-information will be placed in (up to
+three) <CODE>&lt;META&gt;</CODE> elements in the document header, in a form according to
+the <A href="http://dublincore.org/documents/dcq-html/"><EM>Dublin Core</EM></A> media meta-information standard (as I hope).</P>
+<H1>Using <EM>CommonMark</EM> in an XML/SGML tool chain</H1>
+<P>The most recent (still in flux) and certainly the most important part of
+this repostiory is concerned with “components” to make <EM>CommonMark</EM> in
+an “XML/SGML tool chain”—an idea that maybe needs explaining.</P>
+<H2>Purpose</H2>
+<P>The “traditional” model, implemented by <CODE>cmark</CODE> and <CODE>cm2html</CODE> works well
+in scenarios where it applies: plain-text in, out comes a formatted and
+transformed representation of the input.</P>
+<P>It does not work so well in use cases like these:</P>
+<UL>
+<LI>
+<P>What if I want to <EM>combine</EM> a <EM>CommonMark</EM> processor with tools
+for additonal syntaxes (in other words: how can one <EM>extend</EM> the
+<EM>CommonMark</EM> syntax without too much effort every time one does so)?</P>
+</LI>
+<LI>
+<P>What if I want to process not <EM>whole</EM> plain text documents as input,
+but only <EM>fragments</EM> of <EM>CommonMark</EM> marked-up text, embedded in
+other documents (like source code, or HTML text);</P>
+</LI>
+<LI>
+<P>Or more specifically: what if I want not only to <EM>generate</EM>, say,
+<A href="http://www.docbook.org/"><EM>DocBook</EM></A> or <A href="http://soc.if.usp.br/manual/linuxdoc-tools/html/guide-1.html"><EM>LinuxDoc</EM></A> documents from plain text files,
+but <EM>process</EM> such files too? The <EM>LinuxDoc</EM> source file could
+already exist, and I want to rewrite or add a section, for which I’d
+prefer to use <EM>CommonMark</EM> syntax (and not write the SGML mark-up
+myself)?</P>
+</LI>
+</UL>
+<P>If you think about it, all these cases have in common the notion of not
+processing “pure” <EM>plain text</EM>, but plain text embedded in “structured
+documents”: the difference between input and output is just that these
+plain text fragments got replaced by new “structured content”.</P>
+<P>This is logically <EM>exactly</EM> the same model as thinking about an abstract
+syntax tree, ie a hierarchy of nodes representing a document structure,
+which get processed and transformed by a host of (independant) processes
+rsp processors.</P>
+<H2>Concept</H2>
+<P>Now the concept, standards, tools and technology to represent,
+process and transform this kind of “structured documents” (concrete
+representations of abstract syntax trees) has been around for a
+few decades: SGML (<A href="https://en.wikipedia.org/wiki/Standard_Generalized_Markup_Language">ISO 8879:1986</A>) and XML (<A href="http://www.w3.org/TR/xml/">W3C since
+1998</A>) are really well-entrenched solutions for this kind of
+applications.</P>
+<P>The concept behind the implementation here follows more or less
+completely form this perspective:</P>
+<UL>
+<LI>
+<P>Process documents with tools follwing the “<A href="https://en.wikipedia.org/wiki/Unix_philosophy">UN*X philosophy</A>”:
+each should do only one job, and they should be easy to compose to
+flexibly do different jobs;</P>
+</LI>
+<LI>
+<P>the most obvious and simplest way to compose these tools is to
+put them into a sequential <A href="https://en.wikipedia.org/wiki/Pipeline_%28computing%29"><EM>pipeline</EM></A> (again, as the UN*X
+concept, but available of course on pretty much every OS today), or
+equivalently, but more cumbersome, use a tool like <EM>make</EM> to drive
+more complex processes.</P>
+</LI>
+<LI>
+<P>The information flow from processor to processor must at each stage
+represent the <EM>content</EM> of a well-formed “structured document” in a
+well-defined and “faithful” way, but</P>
+</LI>
+<LI>
+<P>the format (or representation) of this content at the interfaces
+between the tools can be choosen freely,</P>
+</LI>
+<LI>
+<P>because we certainly do not want to include an XML parser in each
+tool—let alone an SGML parser,</P>
+</LI>
+<LI>
+<P>but we must be able to transform from “external” formats like
+XML, SGML, or just good old plain text, <EM>into</EM> the internal
+representation, and at the end of the pipeline back again <EM>from</EM>
+the internal representation into (the same or another) “external”
+format,</P>
+</LI>
+<LI>
+<P>where XML/SGML should be one of the options at both ends.</P>
+</LI>
+</UL>
+<P>The meaning of “content” and “faithful” representation of it formalized
+by the standard <A href="http://xml.coverpages.org/WG8-n931a.html"><EM>Element Structure Information Set</EM></A> (ESIS) for
+SGML documents, and by the <A href="http://xml.coverpages.org/WG8-n931a.html"><EM>XML InfoSet</EM></A> for XML documents.</P>
+<H2>Internal Interface Format</H2>
+<P>The concept so far leaves open the choice of format for the input and
+output of each tool (except for the very first and last one, which will
+be transformations from and to “external” formats).</P>
+<P>In my opinion the best and obvious choice is the output format of James
+Clark’s SGML and XML parsers (like <CODE>nsgml</CODE>): it is a text format, it is
+very simple, it can be parsed and generated efficiently, and as a nice
+side-effect we gain the ability to feed <EM>any</EM> XML or SGML documents into
+our process chain by simply passing it through a parser which is freely
+available and well-proven. And by definition (and trust in James Clark
+;-), this format <EM>does</EM> represent the <EM>real</EM> content of a document,
+while disregarding questions of specific mark-up, which is precisely the
+job a parser does.</P>
+<H2>Infrastructure</H2>
+<P>To ease the process of adapting tools like <CODE>cmark</CODE> so that they can
+read and write the internal ESIS representation, functions to do so are
+collected in a separate library called <CODE>libesisio</CODE>.</P>
+<P>The input (parsing) side is handled by a call-back mechanism, and is
+intentionally very similar in style and function to the API of the
+<EM>Expat XML Parser</EM> library (again written—originally–by James Clark,
+and distributed under the liberal MIT license).</P>
+<P>The output (generating) side is just a procedural interface, but
+abstacts from the output format which is actually generated: an
+application uses the same function calls to produce output in the
+internal ESIS represenatation as it does when actually generating XML
+output.</P>
+<H2>Processing Tools</H2>
+<P>Right now there is only one “real” processing tool:</P>
+<UL>
+<LI><CODE>cmark_filter</CODE></LI>
+</UL>
+<P>This is the <CODE>cmark</CODE> implementation wrapped into interfacing code so
+that it does consume and generate text streams in the internal ESIS
+representation format, using the element types of the <EM>CommonMark</EM> DTD
+(which <CODE>cmark -t xml</CODE> does in “regular” XML).</P>
+<P>The other tools transform from and to formats in the “external world”:</P>
+<UL>
+<LI>
+<P><CODE>txtin</CODE> is the simplest of all: it reads plain text and “wraps” it
+into the internal format (by placing it as <CODE>CDATA</CODE> content in a
+dedicated “wrapping” or “transport” element, called <CODE>&lt;mark-up&gt;</CODE>).</P>
+<P>It’s source consists of a single file <CODE>txtin.c</CODE>, containing <EM>37</EM>
+lines of code, including blank lines.</P>
+</LI>
+<LI>
+<P><CODE>xmlin</CODE> is more “advanced”: it uses the <A href="http://www.jclark.com/xml/expat.html"><EM>Expat 1.2</EM></A> library
+(included in the <CODE>expat/</CODE> directory) to parse the input XML document
+(verifying thereby that it is well-formed), and outputs it in the
+internal ESIS representation.</P>
+<P>This more complex tool consists again of a single source file,
+<CODE>xmlin.c</CODE>, containing this time <EM>56</EM> lines of code—that’s what
+libraries are made for.</P>
+</LI>
+<LI>
+<P><CODE>xmlout</CODE> is finally the “end of line” tool, transforming the
+internal format back into XML/SGML/XHTML/HTML. Transforming the
+element set of <EM>CommonMark</EM> into (X)HTML does take some doing,
+therefore the single source file <CODE>xmlout.c</CODE> currently contains a
+whopping <EM>309</EM> lines of code.</P>
+<P>Apart from renaming/omitting/mapping <EM>CommonMark</EM> elements it is
+also responsible for “entity-encoding” content (ie replacing “<CODE>&lt;</CODE>”
+by “<CODE>&amp;lt;</CODE>” etc, and handling the difference between eg <CODE>&lt;br /&gt;</CODE>
+(XML) and <CODE>&lt;BR&gt;</CODE> (HTML).</P>
+</LI>
+</UL>
+<H1>Future Work</H1>
+<P>While the available tools seem to work—remember that they are brand
+new and barely tested—they are certainly not complete both regarding
+features, as well as for example robustness. The all need better error
+checking and reporting (though the infrastructure for it is in place in
+<CODE>libesisio</CODE>) for example.</P>
+<P>Concerning features and tools, I’d like to have:</P>
+<OL>
+<LI>
+<P>More comprehensive and flexible choices of output transformations:
+the <CODE>xmlout</CODE> tool manages to do it’s job, and the resulting XML and
+HTML is—according to the little testing done so far—in fact
+well-formed XML and valid HTML (tested by feeding it to <CODE>xmlwf</CODE> and
+<CODE>nsgmls</CODE>), all you can do with it is chossing between four options
+(like the <CODE>-t</CODE> option of <CODE>cmark</CODE>).</P>
+<P>I’d like to see a <EM>scriptable</EM> transformation at this process stage,
+which would be the perfect place to generate a <EM>table of contents</EM>,
+or an <EM>index</EM> for a document. And this again would be a perfect job
+for a scripting language.</P>
+<P>If it comes to implementing this, I’d probably opt for the
+<EM>squirrel</EM> language and interpreter, mostly for it’s style, and
+certainly for the interpreter’s compactness. (A more exotic
+language, but an even smaller implementation, would provide a core
+<EM>Scheme</EM> implementation like <EM>tinyscheme</EM>.)</P>
+</LI>
+<LI>
+<P>Of course more <EM>syntax</EM> or mark-up processors are needed, that’t one
+of the purposes of the whole endeavour after all.</P>
+<P>For me personally, this means that the next processor to fit into
+the tool chain will by an adaptation of my <EM>Z Notation</EM> mark-up
+processor.</P>
+<P>From the experience so far, adapting a given tool to read and write
+the internal ESIS representation is not that much effort, but it
+obviously depends on the design and quality of the given tool’s
+source code.</P>
+</LI>
+<LI>
+<P>More choices and flexibility on the input transformation side:
+while XML and SGML (HTML) covers many contents, and the input of
+“traditional” plain text <EM>CommonMark</EM> sources is already covered by
+<CODE>txtin</CODE>, I’d like to have a scriptable tool here, too.</P>
+</LI>
+<LI>
+<P>More <EM>specific</EM> output formats, like <EM>L<sub>A</sub>T<sub>E</sub>X</EM>.
+Or—like <CODE>cmark</CODE>—plain text in <EM>CommonMark</EM> syntax, maybe with
+prettier formatting (I have a plain-text formatter already to use as
+a base for this).</P>
+</LI>
+</OL>
+<P>I’m sure you’ll get your own ideas and preferences from experimenting
+with this concept.</P>
+</BODY>
+</HTML>
