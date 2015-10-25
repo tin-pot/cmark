@@ -284,6 +284,9 @@ int ESISAPI
 ESIS_ParseFile(ESIS_Parser parser, FILE *inputFile);
 
 int ESISAPI
+ESIS_FilterFile(ESIS_Parser parser, FILE *inputFile, FILE *outputFile);
+
+int ESISAPI
 ESIS_Parse(ESIS_Parser parser, const char *s, size_t len, int isFinal);
 
 void * ESISAPI

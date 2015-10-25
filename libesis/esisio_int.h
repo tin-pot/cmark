@@ -44,7 +44,7 @@ ref  esisStackPop(struct esis_stack_ *p, void *v, size_t n);
 extern ESIS_Writer ESISAPI
 ESIS_WriterCreateInt_(FILE *, unsigned options);
 
-extern const char **ESIS_Atts_(ESIS_Parser, ref att);
+extern const char **ESIS_Atts_(ESIS_Parser, unsigned n_att, ref r_att);
 
 #define ESIS_NONOPTION_ 07777U
 
@@ -83,12 +83,15 @@ struct ESIS_WriterStruct {
 struct ESIS_ParserStruct {
   struct esis_stack_    S[1];
   int                   err;
-  unsigned              n_att;
   
   struct esis_stack_    HD[1];
   struct esis_stack_    HI[1];
   unsigned              n_hi;
-  FILE                 *fp;
+  ESIS_ElementHandler   handler; /* Default handler */
+  long                  elemID;
+  void                 *userData;
+  FILE                 *infp;
+  FILE                 *outfp;
 };
 
 struct hi {

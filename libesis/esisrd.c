@@ -37,19 +37,28 @@ ESIS_SetElementHandler(ESIS_Parser pe,
   ref r_gi;
   ref r_hi;
   
-  n = strlen(elemGI) + 1;
-  r_gi = esisStackPush(pe->HD, elemGI, n);
+  if (elemGI == NULL) {
   
-  r_hi = esisStackMark(pe->HI, sizeof *p_hi);
-  p_hi = (struct hi *)(pe->HI->buf + r_hi);
+    pe->handler  = handler;
+    pe->elemID   = elemID;
+    pe->userData = userData;
+    
+  } else {
   
-  p_hi->r_ElemGI = r_gi;
-  p_hi->elemGI   = NULL; /* Set when parsing begins. */
-  p_hi->elemID   = elemID;
-  p_hi->userData = userData;
-  p_hi->handler  = handler;
-  
-  ++pe->n_hi;
+    n = strlen(elemGI) + 1;
+    r_gi = esisStackPush(pe->HD, elemGI, n);
+    
+    r_hi = esisStackMark(pe->HI, sizeof *p_hi);
+    p_hi = (struct hi *)(pe->HI->buf + r_hi);
+    
+    p_hi->r_ElemGI = r_gi;
+    p_hi->elemGI   = NULL; /* Set when parsing begins. */
+    p_hi->elemID   = elemID;
+    p_hi->userData = userData;
+    p_hi->handler  = handler;
+    
+    ++pe->n_hi;
+  }
 }
 
 
@@ -71,7 +80,7 @@ static int store_attr(ESIS_Parser pe)
 {
   int ch;
   ref r = TOP();
-  FILE *fp = pe->fp;
+  FILE *fp = pe->infp;
   
   while ((ch = getc(fp)) != EOF) {
     if (ch == '\n' || ch == ' ')
@@ -104,7 +113,7 @@ static int store_attr(ESIS_Parser pe)
 static int store_name(ESIS_Parser pe)
 {
   int ch;
-  FILE *fp = pe->fp;
+  FILE *fp = pe->infp;
   ref r = TOP();
   
   if ((ch = getc(fp)) != EOF) {
@@ -124,7 +133,7 @@ static int store_name(ESIS_Parser pe)
 static size_t store_cdata(ESIS_Parser pe)
 {
   int ch;
-  FILE *fp = pe->fp;
+  FILE *fp = pe->infp;
   size_t n = 0U;
   unsigned num, ndig;
   char dig[DIG_MAX];
@@ -184,11 +193,13 @@ static size_t store_cdata(ESIS_Parser pe)
 static void ParseLoop(ESIS_Parser pe)
 {
   int ch;
-  FILE *fp = pe->fp;
+  FILE *fp = pe->infp;
+  FILE *outfp = pe->outfp;
   int err = ESIS_ERROR_NONE;
   const byte *data;
   size_t len;
   const char **atts;
+  unsigned short n_att; /* Number of attributes collected. */
   ref r;
   
   static const ESIS_Char *const null_atts[2] = { NULL, NULL };
@@ -197,31 +208,35 @@ static void ParseLoop(ESIS_Parser pe)
    * onto the S stack, we push information about the now open
    * element above it, in a "frame" that also links back to
    * the enclosing element: the "frame" structure for this one
-   * is right in frot of r_att.
+   * is right in front of r_att.
    */
   struct fr {
-    ref       r_att;  /* Start of pushed attributes. */
-    ref       r_gi;   /* Start of pushed GI. */
-    long                elemID;
-    void               *userData;
+    unsigned short  n_att;  /* Number of attributes. */
+    ref             r_att;  /* Start of pushed attributes. */
+    ref             r_gi;   /* Start of pushed GI. */
+    long            elemID;
+    void           *userData;
     ESIS_ElementHandler handler;
   } frame;
   
   static const struct fr null_frame = {
-    0, 0,
+    0, 0, 0,
     0L, NULL, (ESIS_ElementHandler)NULL
   };
 
   frame = null_frame;
+  n_att = 0U;
   
   while ((ch = getc(fp)) != EOF) {
     
     switch (ch) {
       case '?':
-        /* :TODO: PI - Store for handler or pass through */
+        /* :TODO: PI - Store for handler ? */
         while ((ch = getc(fp)) != EOF)
           if (ch == '\n')
             break;
+          else if (outfp != NULL)
+            putc(ch, outfp);
         break;
 
       case 'A':
@@ -229,7 +244,7 @@ static void ParseLoop(ESIS_Parser pe)
            * Push frame of enclosing element.
            */
            
-        if (pe->n_att == 0) {
+        if (n_att == 0) {
           frame.r_att = esisStackPush(pe->S, &frame, sizeof frame);
         }
         
@@ -238,16 +253,18 @@ static void ParseLoop(ESIS_Parser pe)
         if (err)
           RELEASE(r);
         else
-          ++pe->n_att;
+          ++n_att;
         break;
 
       case '(':
  
-        if (pe->n_att == 0) {
+        if (n_att == 0) {
           r = esisStackPush(pe->S, &frame, sizeof frame);
           frame = null_frame;
           frame.r_att = r;
         }
+        frame.n_att = n_att;
+        
         frame.r_gi = TOP();
         err = store_name(pe);
         ERROR_SET(err);
@@ -257,29 +274,52 @@ static void ParseLoop(ESIS_Parser pe)
           hi.elemGI = P(frame.r_gi);
           p_hi = bsearch(&hi, HANDLER, pe->n_hi, sizeof hi, cmp_hi);
           
-          if (p_hi != NULL) {
+          if (p_hi != NULL || pe->handler != NULL) {
             ESIS_Elem elem;
+            
+            ESIS_ElementHandler handler;
+            void *userData;
+            long elemID;
+            
             ref r_atts = TOP();
             
-            frame.elemID   = p_hi->elemID;
-            frame.userData = p_hi->userData;
-            frame.handler  = p_hi->handler;
+            if (p_hi != NULL) {
+              handler  = p_hi->handler;
+              userData = p_hi->userData;
+              elemID   = p_hi->elemID;
+            } else {
+              handler  = pe->handler;
+              userData = pe->userData;
+              elemID   = pe->elemID;
+            }
             
-            atts = (pe->n_att > 0) ? ESIS_Atts_(pe, frame.r_att)
-                                   : null_atts;
+            frame.elemID   = elemID;
+            frame.userData = userData;
+            frame.handler  = handler;
+            
+            atts = (n_att > 0) ?
+                                ESIS_Atts_(pe, n_att, frame.r_att)
+                              : null_atts;
             
             elem.atts   = atts;
             elem.elemGI = P(frame.r_gi);
-            frame.handler(frame.userData, ESIS_START,
-                          frame.elemID, &elem, NULL, 0U);
+            
+            handler(userData, ESIS_START, elemID, &elem, NULL, 0U);
             
             RELEASE(r_atts);
-          } else {
-            /*
-             * :TODO: Element start w/o handler. Use Expat-style 
-             * handler if any, or pass through.
-             */
+          } else if (outfp != NULL) {
+            unsigned k;
+            char *p = P(frame.r_att);
+            
+            for (k = 0; k < n_att; ++k) {
+               char *q = p + strlen(p) + 1;
+               fprintf(outfp, "A%s CDATA %s\n", p, q);
+               p = q + strlen(q) + 1;
+            }
+            p = P(frame.r_gi);
+            fprintf(outfp, "(%s\n", p);
           }
+          n_att = 0U;
         }
         break;
 
@@ -293,8 +333,9 @@ static void ParseLoop(ESIS_Parser pe)
           elem.atts   = NULL;
           frame.handler(frame.userData, ESIS_CDATA,
                         frame.elemID, &elem, data, len);
-        } else
-          ; /* :TODO: character data w/o handler: pass through. */
+        } else if (outfp != NULL)
+          fprintf(outfp, "-%.*s\n", (int)len, data);
+          
         RELEASE(r);
         break;       
         
@@ -307,7 +348,9 @@ static void ParseLoop(ESIS_Parser pe)
           elem.atts   = NULL;
           frame.handler(frame.userData, ESIS_END,
                         frame.elemID, &elem, NULL, 0U);
-        }
+        } else if (outfp != NULL)
+          fprintf(outfp, ")%s\n", P(frame.r_gi));
+          
         RELEASE(r);
         /*
          * Pop frame of closed element, get outer element info in frame.
@@ -342,7 +385,8 @@ ESIS_ParseFile(ESIS_Parser pe, FILE *inputFile)
     qsort(p_hi, n_hi, sizeof p_hi[0], cmp_hi);
   }
   
-  pe->fp = inputFile;
+  pe->infp  = inputFile;
+  pe->outfp = NULL;
   
   ParseLoop(pe);
   
@@ -350,6 +394,29 @@ ESIS_ParseFile(ESIS_Parser pe, FILE *inputFile)
   return pe->err == ESIS_ERROR_NONE;
 }
 
+ESIS_FilterFile(ESIS_Parser pe, FILE *inputFile, FILE *outputFile)
+{
+  unsigned n_hi = pe->n_hi;
+  struct hi *p_hi = HANDLER;
+  
+  if (n_hi > 0U) {
+    unsigned k;
+    const char *hdbuf = pe->HD->buf;
+    
+    for (k = 0; k < n_hi; ++k)
+      p_hi[k].elemGI = hdbuf + p_hi[k].r_ElemGI;
+      
+    qsort(p_hi, n_hi, sizeof p_hi[0], cmp_hi);
+  }
+  
+  pe->infp  = inputFile;
+  pe->outfp = outputFile;
+  
+  ParseLoop(pe);
+  
+  ERROR_GET();
+  return pe->err == ESIS_ERROR_NONE;
+}
 
 #ifndef NDEBUG /* NOT IMPLEMENTED */
 int ESISAPI
@@ -396,9 +463,11 @@ ESIS_ParserCreate(const ESIS_Char *encoding)
   if (pe->S->buf == NULL) goto fail;
   
   pe->err    = ESIS_ERROR_NONE;
-  pe->n_att  = 0U;
   pe->n_hi   = 0U;
-  pe->fp     = NULL;
+  
+  pe->handler = NULL;
+  pe->infp    = NULL;
+  pe->outfp   = NULL;
   
   return pe;
   
@@ -425,21 +494,20 @@ enum ESIS_Error ESISAPI ESIS_GetParserError(ESIS_Parser pe)
 }
 
 
-const char **ESIS_Atts_(ESIS_Parser pe, ref att)
+const char **ESIS_Atts_(ESIS_Parser pe, unsigned n_att, ref r_att)
 {
-  unsigned n_att, k;
+  unsigned k;
   size_t n;
   ref r_atts;
   const ESIS_Char *p, **pp;
   const char **atts;
   
-  n_att = pe->n_att;
   n = (2 * n_att + 1 ) * sizeof p;
   r_atts = MARK(n + sizeof p);
   n = r_atts - r_atts % sizeof p + sizeof p;
   
   pp = P(n);
-  p  = P(att); 
+  p  = P(r_att); 
   
   atts = pp;
   
@@ -456,7 +524,6 @@ const char **ESIS_Atts_(ESIS_Parser pe, ref att)
     *pp++ = val;
   }
   *pp = NULL;
-  pe->n_att = 0U;
   
   return atts;
 }
