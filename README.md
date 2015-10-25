@@ -167,15 +167,15 @@ The concept so far leaves open the choice of format for the input and
 output of each tool (except for the very first and last one, which will
 be transformations from and to "external" formats).
 
-In my opinion the best and obvious choice is the output format of James
-Clark's SGML and XML parsers (like `nsgml`): it is a text format, it is
-very simple, it can be parsed and generated efficiently, and as a nice
-side-effect we gain the ability to feed *any* XML or SGML documents into
-our process chain by simply passing it through a parser which is freely
-available and well-proven. And by definition (and trust in James Clark
-;-), this format *does* represent the *real* content of a document,
-while disregarding questions of specific mark-up, which is precisely the
-job a parser does.
+In my opinion the best and obvious choice is the [output format][format]
+of James Clark's SGML and XML parsers (like `nsgml`): it is a text
+format, it is very simple, it can be parsed and generated efficiently,
+and as a nice side-effect we gain the ability to feed *any* XML or SGML
+documents into our process chain by simply passing it through a parser
+which is freely available and well-proven. And by definition (and trust
+in James Clark ;-), this format *does* represent the *real* content of
+a document, while disregarding questions of specific mark-up, which is
+precisely the job a parser does.
 
 
 Infrastructure
