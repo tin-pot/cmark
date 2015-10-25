@@ -5,12 +5,14 @@
 
 ESIS_Writer writer;
 
+#define LINELEN 32
+
 void pump(void)
 {
-    char buffer[BUFSIZ];
+    char buffer[LINELEN];
     size_t nread;
     
-    while ((nread = fread(buffer, 1, BUFSIZ, stdin)) > 0U)
+    while ((nread = fread(buffer, 1, sizeof buffer, stdin)) > 0U)
       ESIS_Cdata(writer, buffer, nread);
 }
 
