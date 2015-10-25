@@ -4,6 +4,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <esisio.h>
+#include <cmark.h>
 
 #define NELEM 19
 
@@ -25,7 +26,33 @@ struct trans {
   unsigned flags;
 };
 
+ESIS_Parser parser;
 ESIS_Writer writer;
+
+struct {
+    const char *elemGI;
+    long elemID;
+} elems[] = {
+    "none",		CMARK_NODE_NONE,
+    "document",		CMARK_NODE_DOCUMENT,
+    "block_quote",	CMARK_NODE_BLOCK_QUOTE,
+    "list",		CMARK_NODE_LIST,
+    "item",		CMARK_NODE_ITEM,
+    "code_block",	CMARK_NODE_CODE_BLOCK,
+    "html",		CMARK_NODE_HTML,
+    "paragraph",	CMARK_NODE_PARAGRAPH,
+    "header",		CMARK_NODE_HEADER,
+    "hrule",		CMARK_NODE_HRULE,
+    "text",		CMARK_NODE_TEXT,
+    "softbreak",	CMARK_NODE_SOFTBREAK,
+    "code",		CMARK_NODE_CODE,
+    "inline_html",	CMARK_NODE_INLINE_HTML,
+    "emph",		CMARK_NODE_EMPH,
+    "strong",		CMARK_NODE_STRONG,
+    "link",		CMARK_NODE_LINK,
+    "image",		CMARK_NODE_IMAGE,
+    NULL,		0L
+};
 
 struct trans xmltab[NELEM] = {
   { "none",           NULL,   EL_OMIT                    },
@@ -49,212 +76,45 @@ struct trans xmltab[NELEM] = {
   { "image",          NULL,   0,                         },
 };
 
-int cmp(const void *lhs, const void *rhs)
-{
-    const struct trans *tl = lhs, *tr = rhs;
-    return strcmp(tl->ingi, tr->ingi);
-}
 
-const struct trans *find_trans(const char *name)
+ESIS_Bool handler(void               *userData,
+                  ESIS_ElemEvent      elemEvent,
+                  long                elemID,
+                  const  ESIS_Elem   *elem,
+                  const  ESIS_Char   *charData,
+                  size_t              len)
 {
-  struct trans key;
+  ESIS_Writer w = userData;
   
-  key.ingi = name;
-  return bsearch(&key, xmltab, NELEM, sizeof xmltab[0], cmp);
-}
-
-void trans_pi()
-{
-  int ch;
-  
-  while ((ch = getchar()) != EOF)
-    if (ch == '\n')
-      break;
-
-  putchar('<');
-  putchar('?');
-  while ((ch = getchar()) != EOF) {
-    if (ch == '\n')
-      break;
-    putchar(ch);
-  }
-  putchar('?');
-  putchar('>');
-  putchar('\n');
-}
-
-int decode()
-{
-  int ch = getchar();
-  if (ch == '\n')
-    return EOF;
-  else if (ch != '\\')
-    return ch;
-  else switch (ch = getchar()) {
-    unsigned num, dig;
-    
-    case EOF:
-    case '\n': return EOF;
-    
-    case 'n': return RE_CHAR;
-    
-    case '0': case '1': case '2': case '3':
-    case '4': case '5': case '6': case '7':
-      num = ch - '0';
-      
-      ch = getchar();
-      if (ch == EOF || ch == '\n')
-        return EOF;
-      dig = ch - '0';
-      if (0 <= dig && dig <= 7)
-        num = num * 8 + dig;
-      else
-        return EOF;
-        
-      ch = getchar();
-      if (ch == EOF || ch == '\n')
-        return EOF;
-      dig = ch - '0';
-      if (0 <= dig && dig <= 7)
-        num = num * 8 + dig;
-      else
-        return EOF;
-      return (num == '\012') ? RS_CHAR : num;
-        
-    default:
-      return EOF;
-  }
-}
-
-size_t cdata(char *buf)
-{
-  int ch;
-  char *p = buf;
-  
-  while ((ch = decode()) != EOF)
-    if (ch != RS_CHAR)
-      *p++ = ch;
-  return p - buf;
-}
-
-void store_attr(char *buf, char **name, char **val)
-{
-  int ch;
-
-  *name = buf;
-  while ((ch = getchar()) != EOF) {
-    if (ch == ' ' || ch == '\n')
-      break;
-    *buf++ = ch;
+  switch (elemEvent) {
+  case ESIS_START:
+    ESIS_Start(w, elem->elemGI, elem->atts); break;
+  case ESIS_CDATA:
+    ESIS_PCdata(w, charData, len); break;
+  case ESIS_END:
+    ESIS_End(w, elem->elemGI); break;
   }   
-  *buf++ = '\0';
-
-  *val = buf;
-  if (ch == ' ') {
-    while ((ch = getchar()) != EOF) {
-      if (ch == ' ' || ch == '\n')
-        break;
-    }
-    if (ch == ' ') {
-      *val = buf;
-      while ((ch = getchar()) != EOF) {
-        if (ch == '\n')
-          break;
-        *buf++ = ch;
-      }
-    }
-  }
-  *buf++ = '\0';
+  return ESIS_TRUE;
 }
-
-void store_name(char *buf, char **name)
-{
-  int ch;
-  
-  *name = buf;
-  
-  while ((ch = getchar()) != EOF) {
-    if (ch == '\n')
-      break;
-    *buf++ = ch;
-  }
-  *buf = '\0';
-}
-
-void translate(const struct trans tab[])
-{
-  int ch;
-  char buf[BUF_SIZE], *name, *val;
-  const char *outname;
-  const struct trans *tp;
-  unsigned flags;
-  size_t len;
-  int havepi = 0;
-  
-  while ((ch = getchar()) != EOF) {
-    switch (ch) {
-      case '?':
-        trans_pi();
-        havepi = 1;
-        break;
-        
-      case 'A':
-        store_attr(buf, &name, &val);
-        ESIS_Attr(writer, name, val, ESIS_NTS);
-        break;
-        
-      case '(':
-        store_name(buf, &name);
-        outname = name;
-        if ((tp = find_trans(name)) != NULL) {
-          flags = tp->flags;
-          if (tp->outgi != NULL)
-            outname = tp->outgi;
-        }
-        if (flags & EL_EMPTY)
-          ESIS_Empty(writer, name, NULL);
-        else
-          ESIS_Start(writer, name, NULL);
-        break;
-        
-      case '-':
-        len = cdata(buf);
-        if (flags & EL_CDATA)
-          ESIS_Cdata(writer, buf, len);
-        else
-          ESIS_PCdata(writer, buf, len);
-        break;
-      case ')':
-        store_name(buf, &name);
-        outname = name;
-        flags = 0;
-        if ((tp = find_trans(name)) != NULL) {
-          flags = tp->flags;
-          if (tp->outgi != NULL)
-            outname = tp->outgi;
-        }
-        if ((flags & EL_OMIT) == 0) {
-          if ((flags & EL_EMPTY) == 0)
-            ESIS_End(writer, outname);
-        }
-        break;
-      case 'C':
-      default: /* `&`, `D`, `N`, `E`, `I`, `S`, `T`,
-                  `s`, `p`, `f`, `{`, `}`, `L`, `#`, `C`, `i`, `e` */
-        ;
-    }
-    if (!havepi) puts("<?xml version=\"1.0\" encoding=\"UTF-8\"?>");
-    havepi = 1;
-  }
-}
-
 
 int main(int argc, char *argv)
 {
-  unsigned opts = ESIS_CANONICAL;
-  qsort(xmltab, NELEM, sizeof xmltab[0], cmp);
-  writer = ESIS_XmlWriterCreate(stdout, opts);
-  translate(xmltab);
+  int i;
+  
+  parser = ESIS_ParserCreate(NULL);
+  writer = ESIS_XmlWriterCreate(stdout, ESIS_CANONICAL);
+  
+  for (i = 0; elems[i].elemGI != NULL; ++i)
+    ESIS_SetElementHandler(parser, handler,
+	                   elems[i].elemGI, elems[i].elemID,
+			   writer);
+			   
+  if (ESIS_ParseFile(parser, stdin) == 0) {
+    ESIS_Error err = ESIS_GetParserError(parser);
+    fprintf(stderr, "ESIS_Error: %d\n", (int)err);
+  }
+  
   ESIS_WriterFree(writer);
+  ESIS_ParserFree(parser);
   return 0;
 }
