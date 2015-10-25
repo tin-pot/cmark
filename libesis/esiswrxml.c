@@ -31,7 +31,7 @@ WriteCDATA(FILE *outputFile, const byte *data, size_t len)
   
   for (k = 0; k < len; ++k) {
     byte b = data[k];
-    if (b < 0x20 && b != '\n') 
+    if (b < 0x20 && b != '\n' && b != '\t') 
       fprintf(outputFile, "&#%u;", b);
     else
       putc(b, outputFile);
@@ -49,22 +49,25 @@ WritePCDATA(FILE *outputFile,
     const char *ent = NULL;
     char buf[8];
     
-    if (b < 0x20 && b != '\n')
-      sprintf(buf, "&#%u;", b), ent = buf;
-    else switch (b) {
+    switch (b) {
       case '<':  ent = "&lt;";   break;
       case '>':  ent = "&gt;";   break;
       case '"':  ent = "&quot;"; break;
       case '&':  ent = "&amp;";  break;
-      case '\n': if (canon) {
-                 ent = "&#10;";  break; 
-                 }
-        /* FALLTHROUGH */
+      case '\t':
+      case '\n':
+        if (canon)
+          ent = "&#10;";
+        break;
       default: 
-        putc(b, outputFile);
-        continue;
+        if (b < 0x20)
+          sprintf(buf, "&#%u;", b), ent = buf;
     }
-    fputs(ent, outputFile);
+    
+    if (ent)
+      fputs(ent, outputFile);
+    else
+      putc(b, outputFile);
   }
 }
 
