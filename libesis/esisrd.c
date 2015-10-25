@@ -46,7 +46,8 @@ ESIS_SetElementHandler(ESIS_Parser pe,
   } else {
   
     n = strlen(elemGI) + 1;
-    r_gi = esisStackPush(pe->HD, elemGI, n);
+    r_gi = pe->HD->top;
+    esisStackPush(pe->HD, elemGI, n);
     
     r_hi = esisStackMark(pe->HI, sizeof *p_hi);
     p_hi = (struct hi *)(pe->HI->buf + r_hi);
@@ -272,7 +273,8 @@ static void ParseLoop(ESIS_Parser pe)
           struct hi hi, *p_hi;
           
           hi.elemGI = P(frame.r_gi);
-          p_hi = bsearch(&hi, HANDLER, pe->n_hi, sizeof hi, cmp_hi);
+          p_hi = HANDLER;
+          p_hi = bsearch(&hi, p_hi, pe->n_hi, sizeof hi, cmp_hi);
           
           if (p_hi != NULL || pe->handler != NULL) {
             ESIS_Elem elem;
