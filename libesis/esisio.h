@@ -69,7 +69,8 @@ typedef enum ESIS_Error {
 } ESIS_Error;
 
 enum {
-    ESIS_CANONICAL  = 010000,       /* Output Canonical XML. */
+    ESIS_CANONICAL  = 010000,       /* Output Canonical XML.          */
+    ESIS_SGML       = 020000,       /* Output SGML (no `<../>`        */
 };
 
 typedef enum {
