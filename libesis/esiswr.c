@@ -171,13 +171,15 @@ ESIS_EndElem(ESIS_Writer pe, ESIS_Elem *elem)
 void ESISAPI
 ESIS_PCdata(ESIS_Writer pe, const ESIS_Char *cd, size_t len)
 {
+  if (len == ESIS_NTS) len = strlen(cd);
   ShipData(pe, ESIS_PCDATA_, cd,len);
 }
 
 void ESISAPI
 ESIS_Cdata(ESIS_Writer pe, const ESIS_Char *cd, size_t len)
 {
-  ShipData(pe, ESIS_CDATA_, cd,len);
+  if (len == ESIS_NTS) len = strlen(cd);
+  ShipData(pe, ESIS_CDATA_, cd, len);
 }
 
 
