@@ -136,27 +136,65 @@ void print_usage() {
 
 ESIS_Bool
 markup(void *userData, ESIS_ElemEvent ev,
-                       long elemID, const ESIS_Elem *elem,
+                       long elemID, ESIS_Elem *elem,
                        const ESIS_Char *charData, size_t len)
 {
   struct UserData *the = userData;
   cmark_node *document;
+  const char **attrn, **attrv;
+  bool ours = false;
   
-  switch (ev) {
-  case ESIS_START:
-    the->parser = cmark_parser_new(the->options);
-    break;
-  case ESIS_CDATA:
-    cmark_parser_feed(the->parser, charData, len);
-    break;
-  case ESIS_END:
-    document = cmark_parser_finish(the->parser);
-    cmark_render_esis(the->writer, document);
-    cmark_node_free(document);
-    cmark_parser_free(the->parser);
-    the->parser = NULL;
+  if (ev == ESIS_START) {
+    for (attrn = elem->atts; !ours && *attrn != NULL; attrn += 2) {
+      attrv = attrn + 1;
+      if (stricmp(*attrn, "syntax") == 0) {
+        ours = stricmp(*attrv, "cmark") == 0;
+      }
+    }
+    elem->userData = (uintptr_t)ours;
+  } else {
+    ours = elem->userData;
   }
-  return ESIS_TRUE;
+  
+  if (ours) {
+    switch (ev) {
+    case ESIS_START:
+      the->parser = cmark_parser_new(the->options);
+      break;
+    case ESIS_CDATA:
+      if (the->parser == NULL)
+        the->parser = cmark_parser_new(the->options);
+      cmark_parser_feed(the->parser, charData, len);
+      break;
+    case ESIS_END:
+      document = cmark_parser_finish(the->parser);
+      cmark_render_esis(the->writer, document);
+      cmark_node_free(document);
+      cmark_parser_free(the->parser);
+      the->parser = NULL;
+    }
+  } else {
+    if (the->parser != NULL) {
+      document = cmark_parser_finish(the->parser);
+      cmark_render_esis(the->writer, document);
+      cmark_node_free(document);
+      cmark_parser_free(the->parser);
+      the->parser = NULL;
+    }
+    
+    switch (ev) {
+    case ESIS_START:
+      ESIS_Start(the->writer, elem->elemGI, elem->atts);
+      break;
+    case ESIS_CDATA:
+      ESIS_Cdata(the->writer, charData, len);
+      break;
+    case ESIS_END:
+      ESIS_End(the->writer, elem->elemGI);
+      break;
+    }
+  }
+  return ESIS_TRUE;   /* Indicate that *we* processed the elem. */
 }
 
 int main(int argc, char *argv[]) {
@@ -201,6 +239,7 @@ int main(int argc, char *argv[]) {
   ud.parser  = NULL;
   
   ESIS_SetElementHandler(eparser, markup, "mark-up",  1L, &ud);
+  ESIS_SetElementHandler(eparser, markup, "MARK-UP",  1L, &ud);
   
   ESIS_FilterFile(eparser, stdin, stdout);
   ESIS_WriterFree(ud.writer);
