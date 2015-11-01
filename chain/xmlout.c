@@ -194,7 +194,7 @@ ESIS_Bool handler(void               *userData,
         if (elemID == CMARK_NODE_LIST) {
           if (trans && elem->userData == 'OL')
             strcpy(outGI, xml ? "ol" : "OL");
-        } else if (elemID == CMARK_NODE_HEADER) {
+        } else if (trans && elemID == CMARK_NODE_HEADER) {
            outGI[1] = elem->userData & 0xFF;
         }
         ESIS_End(w, outGI);
