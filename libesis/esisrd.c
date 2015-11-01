@@ -2,6 +2,7 @@
 
 #include "esisio.h"
 #include "esisio_int.h"
+#include <assert.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -209,6 +210,19 @@ static size_t store_cdata(ESIS_Parser pe)
   return n;
 }
 
+#ifndef NDEBUG
+#define FRAMETOKEN     0xfeedU
+#define STACKTOKEN     0xbeefU
+#define DECL_TOKEN     unsigned short token;
+#else
+#define DECL_TOKEN    
+#endif
+
+#define CHECK_STACK    assert(frame.token == STACKTOKEN)
+#define CHECK_FRAME    assert(frame.token == FRAMETOKEN)
+#define SET_STACK      assert(frame.token =  STACKTOKEN)
+#define SET_FRAME      assert(frame.token =  FRAMETOKEN)
+
 
 static void ParseLoop(ESIS_Parser pe)
 {
@@ -231,6 +245,7 @@ static void ParseLoop(ESIS_Parser pe)
    * is right in front of r_att.
    */
   struct fr {
+    DECL_TOKEN
     unsigned short  n_att;  /* Number of attributes. */
     ref             r_att;  /* Start of pushed attributes. */
     ref             r_gi;   /* Start of pushed GI. */
@@ -240,7 +255,12 @@ static void ParseLoop(ESIS_Parser pe)
     ESIS_ElementHandler handler;
   } frame;
   
+  const size_t frsize = sizeof frame;
+  
   static const struct fr null_frame = {
+#ifndef NDEBUG
+    0U, /* TOKEN */
+#endif
     0, 0, 0, NULL, -1L,
     { NULL, NULL, 0U },
     (ESIS_ElementHandler)NULL
@@ -248,6 +268,7 @@ static void ParseLoop(ESIS_Parser pe)
 
   frame = null_frame;
   n_att = 0U;
+  SET_FRAME;
   
   while ((ch = getc(fp)) != EOF) {
     
@@ -266,23 +287,37 @@ static void ParseLoop(ESIS_Parser pe)
            * Push frame of enclosing element.
            */
            
+        CHECK_FRAME;
         if (n_att == 0) {
-          frame.r_att = esisStackPush(pe->S, &frame, sizeof frame);
-        }
+          SET_STACK;
+          r = esisStackPush(pe->S, &frame, frsize);
+          frame = null_frame;
+          SET_FRAME;
+          frame.r_att = r;
+        } else
+          r = TOP();
         
         err = store_attr(pe);
         ERROR_SET(err);
-        if (err)
+        if (err) {
           RELEASE(r);
-        else
+          if (n_att == 0) {
+            CHECK_FRAME;
+            r = esisStackPop(pe->S, &frame, frsize);
+            CHECK_STACK; SET_FRAME;
+          }
+        } else
           ++n_att;
         break;
 
       case '(':
  
+        CHECK_FRAME;
         if (n_att == 0) {
-          r = esisStackPush(pe->S, &frame, sizeof frame);
+          SET_STACK;
+          r = esisStackPush(pe->S, &frame, frsize);
           frame = null_frame;
+          SET_FRAME;
           frame.r_att = r;
         }
         frame.n_att = n_att;
@@ -351,6 +386,7 @@ static void ParseLoop(ESIS_Parser pe)
         len = store_cdata(pe);
         data = P(r);
         if (frame.handler != NULL && len > 0U) {
+          CHECK_FRAME;
           frame.elem.elemGI = P(frame.r_gi);
           frame.elem.atts   = NULL;
           frame.handler(frame.userData, ESIS_CDATA,
@@ -365,6 +401,7 @@ static void ParseLoop(ESIS_Parser pe)
         r = TOP();
         store_name(pe);
         if (frame.handler != NULL) {
+          CHECK_FRAME;
           frame.elem.elemGI = P(frame.r_gi);
           frame.elem.atts   = NULL;
           frame.handler(frame.userData, ESIS_END,
@@ -378,10 +415,15 @@ static void ParseLoop(ESIS_Parser pe)
          */
         r = frame.r_att;
         RELEASE(r);
-        if (r >= sizeof frame)
-          r = esisStackPop(pe->S, &frame, sizeof frame);
-        else
+        CHECK_FRAME;
+        if (r >= frsize) {
+          r = esisStackPop(pe->S, &frame, frsize);
+          CHECK_STACK;
+          SET_FRAME;
+        } else {
           frame = null_frame;
+          SET_FRAME;
+        }
         break;
                
       default:
