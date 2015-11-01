@@ -1,0 +1,53 @@
+<!DOCTYPE doc [
+<!ENTITY lt SDATA "&#60;">
+<!ENTITY gt SDATA "&#62;">
+<!NOTATION cmark SYSTEM "CommonMark">
+<!NOTATION z SYSTEM "Z e-mail mark-up">
+<!NOTATION C SYSTEM "C source code">
+<!ELEMENT doc O - (p | list | mark-up)* >
+<!ELEMENT list - - (li)+ >
+<!ELEMENT p - O (#PCDATA | list)* >
+<!ELEMENT li O O (#PCDATA | list)* >
+<!ELEMENT mark-up - - (#PCDATA)>
+<!ATTLIST mark-up syntax NOTATION (z|cmark|C) #REQUIRED
+                  mode   (block|inline)       #IMPLIED>
+<!ENTITY xml CDATA "&lt;XML&gt;">
+]>
+    <p>Sample &xml; document
+    <list>
+	No reference to external DTD.<>
+        All elements declared in internal subset.
+    </list>
+    <p>This should be easy!
+<mark-up syntax="cmark"><!-- We *must* use quotes here for XML -->
+<![CDATA[
+Using CommonMark
+================
+
+We can use _CommonMark_ syntax *inside* a `<mark-up>` element,
+but we must take care to avoid to accidentally use
+&lt;XML&gt; mark-up: eg, place the script inside a `CDATA`
+section.
+
+Here is an `<mark-up>` element containing C source code:
+]]></mark-up>
+<mark-up syntax="C">
+int main(void)
+{
+  printf("Hello world!\n");
+  return 0;
+}
+</mark-up>
+
+<p>Here is an example in Z Notation:
+<mark-up syntax="z">
++-- Name ---
+    n : %N
+|--
+    %E m : %N | m > n
+---
+</mark-up>
+    <p>That concludes our little example.
+    <>It did show some SGML mark-up aspects, too.
+</doc>
+
