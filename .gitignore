@@ -37,4 +37,10 @@ cmark.dSYM/*
 /VC9/*.ncb
 /VC9/*.suo
 /VC9/*.user
+/VC12/Debug
+/VC12/Release
+/VC12/Release_MT
+/VC12/*.sdf
+/VC12/*.opensdf
+/VC12/*.suo
 /expat/xmltok/nametab.h
