@@ -1,0 +1,220 @@
+<!DOCTYPE html>
+<html lang="en"><head>
+<meta http-equiv="Content-Type" content="text/html; charset=windows-1252">
+<link rel="shortcut icon" href="http://oldblog.antirez.com/favicon.ico">
+<link rel="stylesheet" href="README_Sanfilippo/style.css" type="text/css">
+<link rel="alternate" title="feed antirez blog" type="application/rss+xml" href="http://antirez.com/rss">
+<link rel="microsummary" href="http://oldblog.antirez.com/microsummary.php">
+<script type="text/javascript" src="README_Sanfilippo/blog.js"></script>
+<title>picol, a Tcl interpreter in 550 lines of C code</title>
+</head>
+<body>
+
+<div id="page">
+<div id="header">
+<a href="http://oldblog.antirez.com/"><h1>antirez weblog</h1></a>
+<div id="navbar">
+<a href="http://antirez.com/rss" class="feed">rss</a> /
+<a href="http://invece.org/">about</a> /
+<a href="http://zzimma.antirez.com/">it</a>
+</div>
+</div>
+
+<div id="content">
+<div class="blogpost"><h2 class="blogposttitle"><a href="http://antirez.com/page/picol.html">picol, a Tcl interpreter in 550 lines of C code </a></h2><div style="clear:both"></div><div class="blogposttext">After I found <a href="http://lambda-the-ultimate.org/node/2124">this story</a> on <a href="http://programming.reddit.com/">programming.reddit.com</a> I was too tempted to write a 500 lines of C code Tcl interpreter for fun, as <a href="http://programming.reddit.com/info/1a1zh/comments">commented here</a>. It took three hours of work, <b>556</b> lines of C code, and was pretty interesting to do. The following is a description of the experiment.
+<h3>Rules</h3>
+I had some rule in mind:
+<ul><li>Unlike the <a href="http://www.modeemi.fi/%7Echery/lisp500/">lisp500</a>
+ interpreter I wanted to use more or less my normal C style. Lisp500 
+isn't actually 500 lines of code, but 500 lines of human gzipped code 
+;). In Picol you'll find normal C spacing and even comments.</li>
+
+<li>I wanted to write an interpreter with a design similar to a real 
+one. One of the few useful things you can do with picol is to learn how 
+to write a Tcl interpreter if you are a newbie programmer I guess, so 
+the point was to write a simple to understand program.</li>
+
+<li>The resulting interpreter should be able to run some kind of non 
+trivial program, to set few vars and print hello world was not an 
+option.</li>
+
+</ul>
+<h3>The resulting interpreter: Picol</h3>
+<a href="http://antirez.com/picol/picol.c.txt">This is the picol source code</a>,
+ that tells very little without to know the supported features. The 
+parser is very similar to the Tcl one, Picol supports interpolation as 
+well, for example you can write:
+<pre class="code">set a "pu"
+set b {ts}
+$a$b "Hello World!"
+</pre>
+<b>Note that Picol has an interactive shell!</b> so just launch it without arguments to start to play (to compile just write <i>gcc -O2 -Wall -o picol picol.c</i>).
+<br><br>
+
+To run a program stored in a file instead use <i>picol filename.tcl</i>.
+<br><br>
+
+Probably the parser should be rewritten in order to take less space, 
+currently it takes almost 250 lines of code: this is too much and leaves
+ little room for all the rest. A Raw list of the supported features:
+<ul><li>Interpolation, as seen above. You can also write "2+2 = [+ 2 2]" or "My name is: $foobar".</li>
+
+<li>Procedures, with return. Like Tcl if return is missing the result of the last command executed is returned.</li>
+
+<li><b>If</b>, <b>if .. else ..</b>, <b>while</b> with <b>break</b> and <b>continue</b></li>
+
+<li>Recursion</li>
+
+<li>Variables inside procedures are limited in scope like Tcl, i.e. there are real call frames in Picol.</li>
+
+<li>The following other commands: <b>set + -</b> * <b>/ == != &gt; &lt; &gt;= &lt;= puts</b></li>
+
+</ul>
+This is an example of programs Picol can run:
+<pre class="code">proc fib {x} {
+    if {&lt;= $x 1} {
+        return 1
+    } else {
+        + [fib [- $x 1]] [fib [- $x 2]]
+    }
+}<br><br>puts [fib 20]
+</pre>
+that of course will output fib(20). Another example:
+<pre class="code">proc square {x} {
+    * $x $x
+}<br><br>set a 1
+while {&lt;= $a 10} {
+    if {== $a 5} {
+        puts {Missing five!}
+        set a [+ $a 1]
+        continue
+    }
+    puts "I can compute that $a*$a = [square $a]"
+    set a [+ $a 1]
+}
+</pre>
+<h3>Design</h3>
+It's pretty straightforward, the first important part you see in the source code
+is an hand written parser. The main function of the parser is <b>picolGetToken</b> that just calls functions able to parse the different parts of a Tcl program and return in the parsing structure the type of the token and start/end pointers in order to extract it.
+<br><br>
+
+This function is in turn used by <b>picolEval</b> in order to execute the program. Every token is used either to form a new argument if a separator token was found before, or concatenated to the last argument (this is how interpolation is performed in Picol). Once an EOL (end of line) token is returned <b>picolEval</b> will call the command looking it up in a linked list of commands stored inside the interpreter structure.
+<br><br>
+
+Variables and commands substitution is performed by <b>picolEval</b> itself. The parser is able to return variables and commands tokens already stripped by $ and [], so all it's required to do is to lookup the variable in the call frame and substitute the value with the token, or to recursively call <b>picolEval</b> if it's a command substitution, using the result instead of the original token.
+<br><br>
+
+Commands are described by a name and a pointer to a C function implementing the command. In the command structure there is also a <b>private data</b> void pointer used in order to store data private to the command. This makes you able to implement multiple Picol commands using a single C function. User defined procedures are just like commands, but they are implemented by passing as private data the argument list and the body of the procedure, so a single C function is able to implement all the existing user defined procedures.
+<br><br>
+
+Procedures call is trivial. The interpreter structure contains a call frame structure having more or less just a pointer to a liked list of variables (that are in turn structures with two fileds: name and value). When a procedure is called a new call frame is created and put at the top of the old one. When the procedure returns the top call frame is destroyed.
+<h3>Next steps</h3>
+I'll hardly find more time to hack on Picol but with other 100 lines of code it is possible to write [eval], [uplevel] and a minimal support for Tcl lists. This could make the interpreter much more useful, assuming this kind of minimal interpreters have some kind of usefulness at all ;)
+<br><br>
+
+Actually what I want to do one of this days is to redesign it to make the parser smaller and simpler to read, and at the same time to make space for <b>uplevel</b>, <b>lindex</b>, <b>lappend</b>, <b>lset</b> and a few of string commands.
+<h3>Conclusions</h3>
+Writing interpreters is fun, but trying to write a small one in C makes very clear how much of C code is memory management, pointers exercise in order to parse strings, and implementation of trivial data structures like linked lists for the lack of some kind of dictionaries-alike data structure in the C library. Probably Picol can be rewritten in a dynamic language like Ruby or Tcl itself in 200 lines of code.
+<br><br>
+
+<div class="emph">
+Inside every large program there is a small program trying to get out.
+- Sir Tony Hoare -
+</div>
+<br><br>
+
+Feel free to comment this stuff <a href="http://programming.reddit.com/info/1aefl/comments">at reddit</a>.</div><div class="blogpostinfo">Pagina creata il Thursday, 15 March 07 | <a href="http://oldblog.antirez.com/print.php?pageid=128">stampa</a></div>
+<h4>Comments</h4>
+
+<b>comments closed</b>
+<script type="text/javascript">
+function sillyCheck() {
+    var f = document.getElementById('f');
+    if (f.silly.value != "limone") {
+        alert("You must write 'limone' where specified!");
+        return false;
+    }
+    return true;
+}
+</script>
+
+</div>
+<div id="footer">
+<div class="infoboxdiv">
+<h3>PROGRAMMING AND WEB</h3>
+<div id="about">
+Welcome, this blog is about programming, web, open source projects I develop, and rants I love to share from time to time. From the point of view of a programmer that loves to define himself a craftsman.
+</div>
+</div>
+
+<div class="infoboxdiv">
+<h3>HOT ARTICLES</h3>
+<ul><li><a href="http://antirez.com/post/take-advantage-of-redis-adding-it-to-your-stack.html">How to take advantage of Redis just adding it to your stack</a></li>
+<li><a href="http://antirez.com/post/redis-persistence-demystified.html">Redis persistence demystified</a></li>
+<li><a href="http://antirez.com/post/autocomplete-with-redis.html">Auto Complete with Redis</a></li>
+<li><a href="http://antirez.com/post/redis-memcached-benchmark.html">On Redis, Memcached, Speed, Benchmarks and The Toilet</a></li>
+<li><a href="http://antirez.com/post/redis-manifesto.html">Redis Manifesto</a></li>
+<li><a href="http://antirez.com/post/everything-about-redis-24.html">Everything about Redis 2.4</a></li>
+<li><a href="http://antirez.com/post/redis-win32-msft-patch.html">Redis for win32 and the Microsoft patch</a></li>
+<li><a href="http://antirez.com/post/redis-as-LRU-cache.html">Redis as an LRU cache</a></li>
+<li><a href="http://antirez.com/post/redis-2.6-is-near.html">Redis 2.6 is near, and a few more updates</a></li>
+<li><a href="http://antirez.com/post/my-todo-list.html">How my todo list works</a></li>
+</ul><a href="http://oldblog.antirez.com/topposts.php"><strong>» full listing</strong></a>
+</div>
+
+<div class="infoboxdiv">
+<h3>NEWSLETTER</h3>
+<form style="padding:3px;" action="http://www.feedburner.com/fb/a/emailverify" method="post"><p>It's possible to receive new posts in your mailbox writing your email address and hitting the <i>subscribe</i> button:</p><p><input style="width:140px" name="email" type="text"><input value="http://feeds.feedburner.com/~e?ffid=844731" name="url" type="hidden"><input value="antirez weblog" name="title" type="hidden"><input value="Subscribe" type="submit"></p><p>Delivered by <a href="http://www.feedburner.com/">FeedBurner</a></p></form>
+</div>
+
+
+<!--
+<div class="infoboxdiv">
+<h3 title="ordine inverso alla data di inserimento">BLOG LIST</h3>
+<ul>
+<li><a href="http://hatingline.splinder.com/">Hatingline</a></li>
+<li><a href="http://riffraff.blogsome.com/">PDI^2</a></li>
+<li><a href="http://pollycoke.wordpress.com/">Pollycoke</a></li>
+<li><a href="http://exploit.blogosfere.it/">Exploit</a></li>
+<li><a href="http://lenergia.net/">Blog su energia e fonti rinnovabili</a></li>
+</ul>
+</div>
+-->
+<form method="post" action="/sendfeedbacks.php" id="fb" onsubmit="return feedbacks()">
+<div id="feedbacks">
+Send me a feedback:
+<select name="fbsubject">
+<option selected="selected">I wish to see an article about</option>
+<option>You can improve your blog by doing...</option>
+<option>antirez, I want to tell you...</option>
+<option>Instead to write this crap go to...</option>
+</select>
+<input name="fbrealvalue" value="" type="hidden">
+<input name="fbvalue" size="15" type="text">
+<input name="doit" value="send" type="submit">
+</div>
+</form>
+<div id="copyright">Copyright (C) 2006-2015 Salvatore Sanfilippo - <a href="http://validator.w3.org/check?uri=referer">Valid xhtml strict</a> -
+<a href="http://oldblog.antirez.com/m">mobile edition</a></div>
+</div>
+<script type="text/javascript"><!--
+lloogg_clientid = "20bb9c026e";
+//--></script>
+<script type="text/javascript" src="README_Sanfilippo/l2.htm"></script>
+
+<script type="text/javascript">
+    /* * * CONFIGURATION VARIABLES: EDIT BEFORE PASTING INTO YOUR WEBPAGE * * */
+    var disqus_shortname = 'antirezweblog';
+
+    /* * * DON'T EDIT BELOW THIS LINE * * */
+    (function () {
+        var s = document.createElement('script'); s.async = true;
+        s.type = 'text/javascript';
+        s.src = 'http://' + disqus_shortname + '.disqus.com/count.js';
+        (document.getElementsByTagName('HEAD')[0] || document.getElementsByTagName('BODY')[0]).appendChild(s);
+    }());
+</script>
+</div> <!-- page -->
+
+
+</div></body></html>

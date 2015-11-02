@@ -1,0 +1,74 @@
+<!DOCTYPE HTML PUBLIC "ISO/IEC 15445:2000//DTD HTML//EN">
+<HTML>
+<HEAD>
+  <META name="GENERATOR"
+        content="cmark 0.22.0 ( git@github.com:tin-pot/cmark.git 362efa269f3a )">  <META http-equiv="Content-Type" content="text/html; charset=UTF-8">
+  <LINK rel="schema.DC"   href="http://purl.org/dc/elements/1.1/">
+  <META name="DC.format"  scheme="DCTERMS.IMT"      content="text/html">
+  <META name="DC.type"    scheme="DCTERMS.DCMIType" content="Text">
+  <META name="DC.title"   content="About the picol Directory">
+  <META name="DC.creator" content="mh@tin-pot.net">
+  <META name="DC.date"    content="2015-11-02">
+  <LINK rel="stylesheet"  type="text/css"
+        href="default.css">
+  <TITLE>About the picol Directory</TITLE>
+</HEAD>
+<BODY>
+<H1>About the <CODE>picol/</CODE> directory</H1>
+<P>To implement a <EM>“scripted document transformation”</EM> that can be used in
+the mark-up chain for example to rename tags, set attributes, insert
+section numbers etc, I was looking for a script interpreter which would
+be as small and simple as the job at hand is.</P>
+<P>Because I know <EM><A href="https://en.wikipedia.org/wiki/Tcl">Tcl</A></EM> pretty well, which is both a simple scripting
+language (at it’s core …) and provides good string handling
+capabilities, the <EM>Tcl</EM> language was on the list of candidates right
+from the start (among others such as <A href="http://squirrel-lang.org">Squirrel</A>, or <A href="https://en.wikipedia.org/wiki/Scheme_%28programming_language%29">Scheme</A> in the
+incarnation of <EM><A href="http://tinyscheme.sourceforge.net">tinyscheme</A></EM>).</P>
+<P>Apart from the current <A href="http://www.activestate.com/activetcl/activetcl-8-6"><EM>Tcl</EM> 8.6</A>, there are several
+“<A href="http://wiki.tcl.tk/1363">small</A>” variants of <EM>Tcl</EM>, which share the concept, but
+not the (current) <EM>Tcl</EM> source code. Among them are:</P>
+<UL>
+<LI>
+<P><EM><A href="https://github.com/antirez/Jim">Jim</A></EM>: developed from scratch and actively developed;</P>
+</LI>
+<LI>
+<P><EM><A href="http://tinytcl.sourceforge.net">Tiny Tcl 6.8</A></EM>: primarily by <A href="http://wiki.tcl.tk/83">Karl Lehenbauer</A>, and
+targeted at embedded systems;</P>
+</LI>
+<LI>
+<P><EM><A href="http://fossil-scm.org/index.html/doc/trunk/www/th1.md">TH1</A></EM>: A Tcl-like interpreter used in the <EM><A href="http://fossil-scm.org">fossil</A></EM> version
+control system, written by <A href="https://en.wikipedia.org/wiki/D._Richard_Hipp">Richard Hipp</A> (of <EM><A href="https://www.sqlite.org">sqlite</A></EM>
+fame).</P>
+</LI>
+<LI>
+<P><EM><A href="http://wiki.tcl.tk/17893">picol</A></EM>: Is not small, but <STRONG>tiny</STRONG> (around 500 LOC)—written
+originally by <A href="http://wiki.tcl.tk/9497">Salvatore Sanfilippo</A> (who is also a co-author of
+<EM><A href="https://github.com/antirez/Jim">Jim</A></EM>, and then extended by <A href="http://wiki.tcl.tk/1683">Richard Suchenwirth</A>.</P>
+</LI>
+</UL>
+<P>I have collected two implementations of the <EM>picol</EM> interpreter here:</P>
+<OL>
+<LI>
+<P>The 500-LOC tiny source <CODE>picol0.c</CODE> (renamed from <CODE>picol.c</CODE>):
+implementation written by Salvatore Sanfilippo.</P>
+</LI>
+<LI>
+<P>The version extended by <A href="http://wiki.tcl.tk/1683">Richard Suchenwirth</A>: the sources are
+distributed as <A href="http://wiki.tcl.tk/_repo/wiki_images/picol0-1-22.zip"><CODE>picol0-1-22.zip</CODE></A>, and the <CODE>picol.h</CODE>,
+<CODE>picol.c</CODE>, <CODE>*.pcl</CODE>, as well as the <CODE>tclIndex</CODE> file are from this
+archive.</P>
+</LI>
+</OL>
+<P>I also “polished” the introductory texts accompanying the sources (the
+<CODE>README.txt</CODE> written by Richard Suchenwirth, and the <A href="http://oldblog.antirez.com/post/picol.html">blog entry</A>
+about <EM>picol</EM> writen by Salvatore Sanfilippo) and placed them here as
+<CODE>README_*.html</CODE> files.</P>
+<P>As of now (2015-11-02) I’m not sure yet which one (if any) of these two
+variants will be sufficient for my purposes—but getting away with
+a 500-LOC interpreter to transform XML streams is certainly worth a
+try …</P>
+<P>And in the case that <EM>both</EM> <EM>picol</EM> variants turn out to be too
+minimalistic and restrictive, there’s still <EM><A href="http://tinytcl.sourceforge.net">TinyTcl</A></EM> to fill the
+gap between <EM>picol</EM> and a full-fledged, current <EM><A href="http://www.activestate.com/activetcl/activetcl-8-6">Tcl 8.6</A></EM>.</P>
+</BODY>
+</HTML>
