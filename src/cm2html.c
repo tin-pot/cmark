@@ -58,11 +58,11 @@ static void print_document(cmark_node *document,
   puts("<!DOCTYPE HTML PUBLIC \"ISO/IEC 15445:2000//DTD HTML//EN\">");
   puts("<HTML>");
   puts("<HEAD>");
+  puts("  <META http-equiv=\"Content-Type\" content=\"text/html; charset=UTF-8\">");
 printf("  <META name=\"GENERATOR\"\n"
        "        content=\"cmark " CMARK_VERSION_STRING
-                                    " ( %s %s )\">",
+                                    " ( %s %s )\">\n",
                                     cmark_repourl, cmark_gitident);
-  puts("  <META http-equiv=\"Content-Type\" content=\"text/html; charset=UTF-8\">");
        
   for (iter = 0; iter < NUM_DCITEM; ++iter) {
     if (iter == 0) {
