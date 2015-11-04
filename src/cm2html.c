@@ -66,17 +66,20 @@ printf("  <META name=\"GENERATOR\"\n"
        
   for (iter = 0; iter < NUM_DCITEM; ++iter) {
     if (iter == 0) {
-       puts("  <LINK rel=\"schema.DC\"   href=\"http://purl.org/dc/elements/1.1/\">");
-       puts("  <META name=\"DC.format\"  scheme=\"DCTERMS.IMT\"      content=\"text/html\">");
-       puts("  <META name=\"DC.type\"    scheme=\"DCTERMS.DCMIType\" content=\"Text\">");
+       puts("  <LINK rel=\"schema.DC\"   "
+                          "href=\"http://purl.org/dc/elements/1.1/\">");
+       puts("  <META name=\"DC.format\"  "
+                  "content=\"text/html\" scheme=\"DCTERMS.IMT\">");
+       puts("  <META name=\"DC.type\"    "
+                  "content=\"Text\"      scheme=\"DCTERMS.DCMIType\">");
     }
     if (pdc->item[iter] != NULL)
-       printf("  <META name=%s content=\"%s\">\n",
-              dcitem[iter], pdc->item[iter]);
+     printf("  <META name=%s content=\"%s\">\n",
+                                         dcitem[iter], pdc->item[iter]);
   }
               
-  printf("  <LINK rel=\"stylesheet\"  type=\"text/css\"\n"
-         "        href=\"%s\">\n", css);
+  printf("  <LINK rel=\"stylesheet\"  type=\"text/css\" href=\"%s\">\n",
+                                                                   css);
   printf("  <TITLE>%s</TITLE>\n", title);
   puts("</HEAD>");
   puts("<BODY>");
