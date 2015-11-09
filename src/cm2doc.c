@@ -77,7 +77,7 @@ ESIS_Char *push_xbuf(const ESIS_Char *s)
  * Add a string pointer into the atts pointer buffer,
  * and the pointed-to string into the string buffer.
  */
-ESIS_Char *push_xatts(const ESIS_Char *s)
+ESIS_Char *push_xatts_str(const ESIS_Char *s)
 {
     ESIS_Char *p = NULL;
     
@@ -102,11 +102,11 @@ void x_add(cmark_node_type nt,
     p_GI = push_xbuf(GI);
     if (atts != NULL) for (k = 0; atts[2*k] != NULL; ++k) {
         ESIS_Char *p_name, *p_val;
-        p_name = push_xatts(atts[2*k+0]);
-        p_val  = push_xatts(atts[2*k+1]);
-        push_xatts(NULL);
+        p_name = push_xatts_str(atts[2*k+0]);
+        p_val  = push_xatts_str(atts[2*k+1]);
         ++natt;
     }
+    push_xatts_str(NULL);
     trans[nt].GI = p_GI;
     trans[nt].atts = p_atts;
 }
@@ -137,9 +137,9 @@ static ESIS_Char buf_name[STAG_MAX + 1];
 static ESIS_Char buf_val[STAG_MAX + 1];
 size_t nbuf_name = 0U;
 size_t nbuf_val = 0U;
-size_t natt = 0U;
+size_t nbuf_atts = 0U;
 
-#define reset_atts() do { natt = nbuf_name = nbuf_val = 0U; } while (0)
+#define reset_atts() do { nbuf_atts = nbuf_name = nbuf_val = 0U; } while (0)
 
 void push_att(
             const ESIS_Char *name,
@@ -158,7 +158,7 @@ void push_att(
     if (avail_name < (n = strlen(name) + 1)) {
 	exit(EXIT_FAILURE);
     }
-    if (natt >= ATTR_MAX) {
+    if (nbuf_atts >= ATTR_MAX) {
 	exit(EXIT_FAILURE);
     }
     
@@ -168,10 +168,10 @@ void push_att(
     nbuf_val += len;
     buf_val[nbuf_val++] = '\0';
     
-    buf_atts[2*natt+0] = bname;
-    buf_atts[2*natt+1] = bval;
-    buf_atts[2*natt+2] = NULL;
-    ++natt;
+    buf_atts[2*nbuf_atts+0] = bname;
+    buf_atts[2*nbuf_atts+1] = bval;
+    buf_atts[2*nbuf_atts+2] = NULL;
+    ++nbuf_atts;
 }
 
 void push_atts(const ESIS_Char **atts)
@@ -191,7 +191,7 @@ const ESIS_Char* attval(const ESIS_Char *name)
 {
     size_t k;
     
-    for (k = 0; k < natt; ++k)
+    for (k = 0; k < nbuf_atts; ++k)
 	if (!strcmp(buf_atts[2*k], name))
 	    return buf_atts[2*k+1];
     return NULL;
@@ -239,7 +239,8 @@ void x_Start(ESIS_Writer w,
 	    
 	    xval = (val[0] == SUB) ? attval(val+1) : val;
 
-	    ESIS_Attr(w, name, xval, ESIS_NTS);
+	    if (xval != NULL)
+		ESIS_Attr(w, name, xval, ESIS_NTS);
 	}
 	
 	ESIS_Start(w, GI, NULL);
@@ -521,14 +522,19 @@ size_t do_pandoc(char *buffer, size_t nbuf, struct meta_ *meta)
 
 void setup(const char *trfile)
 {
-    const ESIS_Char **atts = buf_atts;
-    
+    const ESIS_Char *atts[42];
+    size_t natt = 0U;
+#define PUSH(n, v) do { atts[2*natt] = n; atts[2*natt+1] = v; \
+                        atts[2*natt+2] = NULL; ++natt; } while (0)
+#define RESET() natt = 0U
+
     x_add(CMARK_NODE_DOCUMENT,	    "CM-DOC", NULL);
     x_add(CMARK_NODE_BLOCK_QUOTE,   "CM-BQ", NULL);
     
-    push_att("first", SUBS "start", ESIS_NTS);
+    PUSH("first", SUBS "start");
+    PUSH("style", SUBS "type");
     x_add(CMARK_NODE_LIST,	    "CM-LST", atts);
-    reset_atts();
+    RESET();
     
     x_add(CMARK_NODE_ITEM,	    "CM-LIT", NULL);
     x_add(CMARK_NODE_CODE_BLOCK,    "CM-CB", NULL);
@@ -537,7 +543,7 @@ void setup(const char *trfile)
     x_add(CMARK_NODE_HEADER,	    "CM-H" SUBS "level" , NULL);
     x_add(CMARK_NODE_HRULE,	    "CM-HR", NULL);
     
-    x_add(CMARK_NODE_TEXT,          "CM-TXT", NULL);
+    /* x_add(CMARK_NODE_TEXT,          "CM-TXT", NULL); */
     x_add(CMARK_NODE_SOFTBREAK,	    "CM-SBR", NULL);
     x_add(CMARK_NODE_LINEBREAK,	    "CM-LBR", NULL);
     x_add(CMARK_NODE_CODE,	    "CM-COD", NULL);
