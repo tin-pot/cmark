@@ -2,7 +2,6 @@
 #include <stdio.h>
 #include <string.h>
 #include <errno.h>
-#include <esisio.h>
 
 #include "config.h"
 #include "cmark.h"
@@ -16,13 +15,64 @@
 extern const char cmark_gitident[];
 extern const char cmark_repourl[];
 
-#define SUB '\23' /* ASCII SUB = Subst attr val */
-#define SUBS "\23"
+static const char* const nodename[] = {
+    "",
+    "DOCUMENT",
+    "BLOCK_QUOTE",
+    "LIST",
+    "ITEM",
+    "CODE_BLOCK",
+    "HTML",
+    "PARAGRAPH",
+    "HEADER",
+    "HRULE",
+    "TEXT",
+    "SOFTBREAK",
+    "LINEBREAK",
+    "CODE",
+    "INLINE_HTML",
+    "EMPH",
+    "STRONG",
+    "LINK",
+    "IMAGE",
+};
 
-#define NODE_MAX   (1U <<  5)
-#define TRANS_MAX  (1U << 11)
-#define ATTR_MAX   (1U <<  8)
-#define STAG_MAX   (1U << 16)
+#define NUL  0
+#define SOH  1
+#define STX  2
+#define ETX  3
+#define SO  14
+#define SI  15
+#define SP  32
+
+#define NTS (~0U)
+
+FILE *outfp;
+
+#if 0
+/*
+ * Unicode
+ */
+
+typedef long ucs_t;
+
+#define U(X)   ((0x ## X) & 0xFFFFFFL)
+#define UCS(c) ((ucs_t)((c) & 0xFF))
+#define UEOF   (-1L)
+#endif /* Not needed yet. */
+
+void error(const char *msg)
+{
+    fputs(msg, stderr);
+    exit(EXIT_FAILURE);
+}
+
+/*
+ * Dublin Core and document meta.
+ */
+ 
+static const char DEFAULT_CSS[]   = "default.css";
+static const char DEFAULT_TITLE[] = "Untitled document";
 
 enum {
   DC_TITLE,
@@ -41,77 +91,74 @@ struct meta_ {
   struct dcdata dc;
 };
 
-struct trans_ {
-  const ESIS_Char *GI;
-  const ESIS_Char **atts;
-};
+/*
+ * Translation definition.
+ */
+ 
+#define STAG_BIT 1
+#define ETAG_BIT 2
 
-static const char DEFAULT_CSS[]   = "default.css";
-static const char DEFAULT_TITLE[] = "Untitled document";
+typedef size_t textidx_t; /* Index into textbuf */
+typedef size_t attridx_t; /* Index into attrbuf */
+
+struct trans_ {
+  const char* stag_repl;
+  const char* etag_repl;
+  unsigned defined; /* STAG_BIT, ETAG_BIT */
+};
 
 /*
  * The translation definitions.
  */
  
-static struct trans_ trans[NODE_MAX] = { NULL, NULL };
+#define NODE_MAX (CMARK_NODE_LAST_INLINE + 1)
+#define NODENAME_MAX 32
+#define INIT_SIZE  2048
 
-static ESIS_Char x_buf[TRANS_MAX];
-static ESIS_Char *x_atts[TRANS_MAX];
-static size_t nxbuf = 0U;
-static size_t nxatts = 0U;
-
-/*
- * Add a string into the string buffer.
- */
-ESIS_Char *push_xbuf(const ESIS_Char *s)
-{
-    ESIS_Char *p = x_buf + nxbuf;
-    size_t n = strlen(s) + 1;
-    
-    memcpy(p, s, n);
-    nxbuf += n;
-    return p;
-}
+static struct trans_ trans[NODE_MAX];
 
 /*
- * Add a string pointer into the atts pointer buffer,
- * and the pointed-to string into the string buffer.
+ * Replacement texts.
  */
-ESIS_Char *push_xatts_str(const ESIS_Char *s)
-{
-    ESIS_Char *p = NULL;
-    
-    if (s != NULL) 
-	p = push_xbuf(s);
-	
-    return x_atts[nxatts++] = p;
-}
+static cmark_strbuf textbuf;
+
+/*
+ *Attribute names and values of current node.
+ */
+static cmark_strbuf attrbuf;
+
+/*
+ * Attribute name/value list.
+ *
+ * ATTCNT is the 
+ * 
+ * > Number of attribute names and name tokens in an element's
+ * > attribute definitions.
+ *
+ * Reference Quantity Set: 40.
+ */
+#define ATTCNT 255
+
+static attridx_t atts[2*ATTCNT+1];
+static size_t natts = 0U;
+
 
 /*
  * Add a translation to the table.
  */
-void x_add(cmark_node_type nt,
-           const ESIS_Char *GI,
-           const ESIS_Char **atts)
+void set_trans(cmark_node_type nt,
+	   unsigned tag_bit, /* STAG_BIT or ETAG_BIT */
+           const char *repl)
 {
-    ESIS_Char *p_GI;
-    ESIS_Char **p_atts;
-    size_t k, natt = 0U;
-    
-    p_atts = x_atts + nxatts;
-    p_GI = push_xbuf(GI);
-    if (atts != NULL) for (k = 0; atts[2*k] != NULL; ++k) {
-        ESIS_Char *p_name, *p_val;
-        p_name = push_xatts_str(atts[2*k+0]);
-        p_val  = push_xatts_str(atts[2*k+1]);
-        ++natt;
+    switch (tag_bit) {
+    case STAG_BIT: trans[nt].stag_repl = repl; break;
+    case ETAG_BIT: trans[nt].etag_repl = repl; break;
+    default:
+	error("Invalid tag_bit");
     }
-    push_xatts_str(NULL);
-    trans[nt].GI = p_GI;
-    trans[nt].atts = p_atts;
+    trans[nt].defined |= tag_bit;
 }
 
-#define RANKGI(_GI, _R) ( sprintf(gi, "%s%d", (_GI), (_R)), gi )
 
 void print_usage() {
   printf("Usage:   cm2html spec [FILE*]\n");
@@ -128,58 +175,32 @@ void print_usage() {
   printf("  --version        Print version\n");
 }
 
-/*
- * Translating start and end tags for cmark node types.
- */
- 
-static ESIS_Char *buf_atts[2*ATTR_MAX + 1];
-static ESIS_Char buf_name[STAG_MAX + 1];
-static ESIS_Char buf_val[STAG_MAX + 1];
-size_t nbuf_name = 0U;
-size_t nbuf_val = 0U;
-size_t nbuf_atts = 0U;
+#define reset_atts() do { natts = 0U; } while (0)
 
-#define reset_atts() do { nbuf_atts = nbuf_name = nbuf_val = 0U; } while (0)
-
-void push_att(
-            const ESIS_Char *name,
-            const ESIS_Char *val, size_t len)
+void push_att(const char *name, const char *val, size_t len)
 {
-    const size_t avail_val = sizeof buf_val - nbuf_val;
-    const size_t avail_name = sizeof buf_name - nbuf_name;
-    ESIS_Char *bname, *bval;
-    size_t n;
+    attridx_t nameidx, validx;   
     
-    if (len == ESIS_NTS) len = (val == NULL) ? 0U : strlen(val);
+    if (len == NTS) len = strlen(val);
     
-    if (avail_val < len) {
-	exit(EXIT_FAILURE);
-    }
-    if (avail_name < (n = strlen(name) + 1)) {
-	exit(EXIT_FAILURE);
-    }
-    if (nbuf_atts >= ATTR_MAX) {
-	exit(EXIT_FAILURE);
-    }
+    cmark_strbuf_putc(&attrbuf, NUL);
+    nameidx = attrbuf.size;
+    cmark_strbuf_puts(&attrbuf, name);
+    cmark_strbuf_putc(&attrbuf, NUL);
+    validx = attrbuf.size;
+    cmark_strbuf_put (&attrbuf, val, len);
+    cmark_strbuf_putc(&attrbuf, NUL);
     
-    memcpy((bname = buf_name + nbuf_name), name, n);
-    memcpy((bval  = buf_val  + nbuf_val),  val,  len);
-    nbuf_name += n;
-    nbuf_val += len;
-    buf_val[nbuf_val++] = '\0';
-    
-    buf_atts[2*nbuf_atts+0] = bname;
-    buf_atts[2*nbuf_atts+1] = bval;
-    buf_atts[2*nbuf_atts+2] = NULL;
-    ++nbuf_atts;
+    atts[2*natts+0] = nameidx;
+    atts[2*natts+1] = validx;
 }
 
-void push_atts(const ESIS_Char **atts)
+void push_atts(const char **atts)
 {
     size_t k;
     
     if (atts != NULL) for (k = 0; atts[2*k] != NULL; ++k)
-	push_att(atts[2*k+0], atts[2*k+1], ESIS_NTS);
+	push_att(atts[2*k+0], atts[2*k+1], NTS);
 	    
 }
 
@@ -187,105 +208,80 @@ void push_atts(const ESIS_Char **atts)
  * Find attribute in active input element (ie in buf_atts),
  * return the value.
  */
-const ESIS_Char* attval(const ESIS_Char *name)
+const char* attval(const char *name)
 {
     size_t k;
     
-    for (k = 0; k < nbuf_atts; ++k)
-	if (!strcmp(buf_atts[2*k], name))
-	    return buf_atts[2*k+1];
+    for (k = 0; k < natts; ++k)
+	if (!strcmp(attrbuf.ptr+atts[2*k+0], name))
+	    return attrbuf.ptr+atts[2*k+1];
+	    
     return NULL;
 }
 
-void x_Attr(ESIS_Writer w,
-            const ESIS_Char *name, const ESIS_Char *val, size_t len)
+void putval(const char *name)
+{
+    const char *val = attval(name);
+    if (val != NULL)
+	fputs(val, outfp);
+}
+
+void do_Attr(const char *name, const char *val, size_t len)
 {
     push_att(name, val, len);
 }
 
-void x_Start(ESIS_Writer w,
-             cmark_node_type nt, const ESIS_Char *atts[])
-{
-    size_t k;
-    const struct trans_ *tr = &trans[nt];
-    const ESIS_Char *GI;
-    ESIS_Char GI_buf[24];
-    
-    if (tr != NULL && (GI = tr->GI) != NULL) {
-	const ESIS_Char *p;
-    
-        if ((p = strchr(GI, SUB)) != NULL) {
-	    const ESIS_Char *v;
-	    ESIS_Char *q;
-	    
-	    strcpy(GI_buf, GI);
-	    q = GI_buf + (p - GI);
-	    v = attval(p + 1);
-	    if (v != NULL)
-		strcpy(q, v);
-	    else
-		q[0] = '\0';
-	    GI = GI_buf;
-        }
-        
-	push_atts(atts);
-    
-	for (k = 0; tr->atts[2*k] != NULL; ++k) {
-	    const ESIS_Char *name, *val;
-	    const ESIS_Char *xval;
-	    
-	    name = tr->atts[2*k+0];
-	    val  = tr->atts[2*k+1];
-	    
-	    xval = (val[0] == SUB) ? attval(val+1) : val;
 
-	    if (xval != NULL)
-		ESIS_Attr(w, name, xval, ESIS_NTS);
-	}
+void do_Start(cmark_node_type nt, const char *atts[])
+{
+    const struct trans_ *tr = &trans[nt];
+    const char *repl;
+    const char *p;
+    char ch;
+    
+    if ((tr->defined & STAG_BIT) == 0U) 
+	return;
+
+    repl = textbuf.ptr;
 	
-	ESIS_Start(w, GI, NULL);
+    for (p = repl; (ch = *p) != NUL; ++p) {
+	if (ch != SO)
+	    putc(ch, outfp);
+	else {
+	    const char *name = p + 1;
+	    p += strlen(name) + 1;
+	    putval(name);
+	}
     }
     
     reset_atts();
 }
 
-void x_Empty(ESIS_Writer w,
-             cmark_node_type nt, const ESIS_Char *atts[])
+void do_Empty(cmark_node_type nt, const char *atts[])
 {
-    size_t k;
-    const struct trans_ *tr = &trans[nt];
-    const ESIS_Char *GI;
-    
-    if (tr != NULL && (GI = tr->GI) != NULL) {
-    
-	push_atts(atts);
-	    
-	for (k = 0; tr->atts[2*k] != NULL; ++k) {
-	    const ESIS_Char *name, *val;
-	    const ESIS_Char *xval;
-	    
-	    name = tr->atts[2*k+0];
-	    val  = tr->atts[2*k+1];
-	    
-	    xval = (val[0] == SUB) ? attval(val+1) : val;
-
-	    ESIS_Attr(w, name, xval, ESIS_NTS);
-	}
-	
-	ESIS_Empty(w, GI, NULL);
-    }
-    
-    reset_atts();
+    do_Start(nt, atts);
 }
 
-void x_End(ESIS_Writer w, cmark_node_type nt)
+void do_Cdata(const char *cdata, size_t len)
+{
+    size_t k;
+    
+    if (len == NTS) len = strlen(cdata);
+    for (k = 0U; k < len; ++k)
+	putc(cdata[k], outfp);
+}
+
+void do_End(cmark_node_type nt)
 {
     const struct trans_ *tr = &trans[nt];
-    const ESIS_Char *GI;
+    const char *repl;
     
-    if (tr != NULL && (GI = tr->GI) != NULL) {
-	ESIS_End(w, GI);
-    }
+    if ((tr->defined & STAG_BIT) == 0U) 
+	return;
+
+    repl = textbuf.ptr;
+	
+    fputs(repl, outfp);
 }
  
  
@@ -293,8 +289,7 @@ void x_End(ESIS_Writer w, cmark_node_type nt)
  * Rendering into the translator.
  */
  
-static int S_render_node(cmark_node *node, cmark_event_type ev_type,
-			 ESIS_Writer w)
+static int S_render_node(cmark_node *node, cmark_event_type ev_type)
 {
   cmark_delim_type delim;
   bool entering = (ev_type == CMARK_EVENT_ENTER);
@@ -307,74 +302,74 @@ static int S_render_node(cmark_node *node, cmark_event_type ev_type,
     case CMARK_NODE_CODE:
     case CMARK_NODE_HTML:
     case CMARK_NODE_INLINE_HTML:
-      x_Start(w, node->type, NULL);
-      ESIS_Cdata(w, node->as.literal.data, node->as.literal.len);
-      x_End(w,  node->type);
+      do_Start(node->type, NULL);
+      do_Cdata(node->as.literal.data, node->as.literal.len);
+      do_End(node->type);
       break;
 
     case CMARK_NODE_LIST:
       switch (cmark_node_get_list_type(node)) {
       case CMARK_ORDERED_LIST:
-        x_Attr(w, "type", "ordered", ESIS_NTS); 
+        do_Attr("type", "ordered", NTS); 
         sprintf(buffer, "%d", cmark_node_get_list_start(node));
-        x_Attr(w, "start", buffer, ESIS_NTS);
+        do_Attr("start", buffer, NTS);
         delim = cmark_node_get_list_delim(node);
-        x_Attr(w, "delim", (delim == CMARK_PAREN_DELIM) ?
-                              "paren" : "period", ESIS_NTS);
+        do_Attr("delim", (delim == CMARK_PAREN_DELIM) ?
+                              "paren" : "period", NTS);
         break;
       case CMARK_BULLET_LIST:
-        x_Attr(w, "type", "bullet", ESIS_NTS);
+        do_Attr("type", "bullet", NTS);
         break;
       default:
         break;
       }
-      x_Attr(w, "tight", cmark_node_get_list_tight(node) ?
-                                            "true" : "false", ESIS_NTS);
-      x_Start(w, node->type, NULL);
+      do_Attr("tight", cmark_node_get_list_tight(node) ?
+                                            "true" : "false", NTS);
+      do_Start(node->type, NULL);
       break;
 
     case CMARK_NODE_HEADER:
       sprintf(buffer, "%d", node->as.header.level);
-      x_Attr(w, "level", buffer, ESIS_NTS);
-      x_Start(w, node->type, NULL);
+      do_Attr("level", buffer, NTS);
+      do_Start(node->type, NULL);
       break;
 
     case CMARK_NODE_CODE_BLOCK:
       if (node->as.code.info.len > 0)
-        x_Attr(w, "info", 
+        do_Attr("info", 
 		       node->as.code.info.data, node->as.code.info.len);
-      x_Start(w, node->type, NULL);
-      ESIS_Cdata(w,
+      do_Start(node->type, NULL);
+      do_Cdata(
 	         node->as.code.literal.data, node->as.code.literal.len);
-      x_End(w, node->type);
+      do_End(node->type);
       break;
 
     case CMARK_NODE_LINK:
     case CMARK_NODE_IMAGE:
-      x_Attr(w, "destination", node->as.link.url.data, node->as.link.url.len);
-      x_Attr(w, "title", node->as.link.title.data, node->as.link.title.len);
-      x_Start(w, node->type, NULL);
+      do_Attr("destination", node->as.link.url.data, node->as.link.url.len);
+      do_Attr("title", node->as.link.title.data, node->as.link.title.len);
+      do_Start(node->type, NULL);
       break;
 
     case CMARK_NODE_HRULE:
     case CMARK_NODE_SOFTBREAK:
     case CMARK_NODE_LINEBREAK:
-      x_Empty(w, node->type, NULL);
+      do_Empty(node->type, NULL);
       break;
 
     case CMARK_NODE_DOCUMENT:
     default:
-      x_Start(w, node->type, NULL);
+      do_Start(node->type, NULL);
       break;
     } /* entering switch */
   } else if (node->first_child) { /* NOT entering */
-    x_End(w, node->type);
+    do_End(node->type);
   }
 
   return 1;
 }
 
-char *cmark_render_esis(ESIS_Writer w, cmark_node *root)
+char *cmark_render_esis(cmark_node *root)
 {
   cmark_event_type ev_type;
   cmark_node *cur;
@@ -382,7 +377,7 @@ char *cmark_render_esis(ESIS_Writer w, cmark_node *root)
 
   while ((ev_type = cmark_iter_next(iter)) != CMARK_EVENT_DONE) {
     cur = cmark_iter_get_node(iter);
-    S_render_node(cur, ev_type, w);
+    S_render_node(cur, ev_type);
   }
   cmark_iter_free(iter);
   return NULL;
@@ -399,7 +394,6 @@ char *cmark_render_esis(ESIS_Writer w, cmark_node *root)
  * data into the writer.
  */
 static void gen_document(cmark_node *document,
-                         ESIS_Writer writer,
                          cmark_option_t options, 
                          struct meta_ *meta
                          ) {
@@ -442,7 +436,7 @@ printf("  <META name=\"GENERATOR\"\n"
   puts("<BODY>");
 #endif /* HTML prolog */
 
-  cmark_render_esis(writer, document);
+  cmark_render_esis(document);
 #if 0 /* HTML epilog */
   puts("</BODY>");
   puts("</HTML>");
@@ -520,38 +514,158 @@ size_t do_pandoc(char *buffer, size_t nbuf, struct meta_ *meta)
     return nused;
 }
 
+void comment(FILE *trfp)
+{
+}
+
+void stagrepl(FILE *trfp)
+{
+    int ch;
+    char name[NODENAME_MAX];
+    char *p = name;
+    cmark_node_type nt;
+    cmark_strbuf repl;
+    
+    while ((ch = getc(trfp)) != EOF && ch != '>')
+	*p++ = ch;
+    *p = NUL;
+    
+    for (nt = CMARK_NODE_FIRST_BLOCK; nt <= CMARK_NODE_LAST_INLINE; ++nt)
+	if (!strcmp(nodename[nt], name))
+	    break;
+    if (nt > CMARK_NODE_LAST_INLINE) {
+	error("Not a node type!");
+    }
+    
+    cmark_strbuf_init(&repl, 64);
+    
+    while ((ch = getc(trfp)) != EOF && ch != '"') 
+	;
+	
+again:
+    while ((ch = getc(trfp)) != EOF && ch != '"') {
+	switch (ch) {
+	case '\\':
+	    ch = getc(trfp);
+	    switch (ch) {
+	    case '\\': cmark_strbuf_putc(&repl, '\\');
+	    case 'n': cmark_strbuf_putc(&repl, '\n');
+	    case 'r': cmark_strbuf_putc(&repl, '\r');
+	    case 's': cmark_strbuf_putc(&repl,  SP );
+	    case 't': cmark_strbuf_putc(&repl, '\t');
+	    case '[': cmark_strbuf_putc(&repl, '[' );
+	    case '"': cmark_strbuf_putc(&repl, '"' );
+	    default:  cmark_strbuf_putc(&repl, '\\');
+	              cmark_strbuf_putc(&repl,  ch );
+            }
+            break;
+	case '[':
+	    cmark_strbuf_putc(&repl, SOH);
+	    while ((ch = getc(trfp)) != EOF && ch != ']')
+		cmark_strbuf_putc(&repl, ch);
+	    cmark_strbuf_putc(&repl, NUL);
+	    break;
+	default:
+	    cmark_strbuf_putc(&repl, ch);
+	    break;
+	}
+    }
+    
+    while ((ch = getc(trfp)) != EOF)
+	if (ch == '\"')
+	    goto again;
+	    
+    ungetc(ch, trfp);
+    cmark_strbuf_putc(&repl, NUL);
+    
+    set_trans(nt, STAG_BIT, repl.ptr);
+}
+
+void etagrepl(FILE *trfp)
+{
+    int ch;
+    char name[NODENAME_MAX];
+    char *p = name;
+    cmark_node_type nt;
+    cmark_strbuf repl;
+    
+    while ((ch = getc(trfp)) != EOF && ch != '>')
+	*p++ = ch;
+    *p = NUL;
+    
+    for (nt = CMARK_NODE_FIRST_BLOCK; nt <= CMARK_NODE_LAST_INLINE; ++nt)
+	if (!strcmp(nodename[nt], name))
+	    break;
+    if (nt > CMARK_NODE_LAST_INLINE) {
+	error("Not a node type!");
+    }
+    
+    cmark_strbuf_init(&repl, 64);
+    
+    while ((ch = getc(trfp)) != EOF && ch != '\\') 
+	;
+	
+again:
+    while ((ch = getc(trfp)) != EOF && ch != '\\') {
+	switch (ch) {
+	case '\\':
+	    ch = getc(trfp);
+	    switch (ch) {
+	    case '\\': cmark_strbuf_putc(&repl, '\\');
+	    case 'n':  cmark_strbuf_putc(&repl, '\n');
+	    case 'r':  cmark_strbuf_putc(&repl, '\r');
+	    case 's':  cmark_strbuf_putc(&repl,  SP );
+	    case 't':  cmark_strbuf_putc(&repl, '\t');
+	    case '[':  cmark_strbuf_putc(&repl, '[' );
+	    case '"':  cmark_strbuf_putc(&repl, '"' );
+	    default:   cmark_strbuf_putc(&repl, '\\');
+	               cmark_strbuf_putc(&repl,  ch );
+            }
+            break;
+	default:
+	    cmark_strbuf_putc(&repl, ch);
+	    break;
+	}
+    }
+    
+    while ((ch = getc(trfp)) != EOF)
+	if (ch == '\"')
+	    goto again;
+	    
+    ungetc(ch, trfp);
+    cmark_strbuf_putc(&repl, NUL);
+    
+    set_trans(nt, ETAG_BIT, repl.ptr);
+}
+
 void setup(const char *trfile)
 {
-    const ESIS_Char *atts[42];
-    size_t natt = 0U;
-#define PUSH(n, v) do { atts[2*natt] = n; atts[2*natt+1] = v; \
-                        atts[2*natt+2] = NULL; ++natt; } while (0)
-#define RESET() natt = 0U
+    FILE *trfp = fopen(trfile, "r");
+    int ch;
+    
+    if (trfp == NULL) {
+	error("Can't open translation file.");
+    }
+    
+    cmark_strbuf_init(&textbuf, INIT_SIZE);
 
-    x_add(CMARK_NODE_DOCUMENT,	    "CM-DOC", NULL);
-    x_add(CMARK_NODE_BLOCK_QUOTE,   "CM-BQ", NULL);
+    while ((ch = getc(trfp)) != EOF) {
+	if (ch != '<')
+	    continue;
+	ch = getc(trfp);
+	switch (ch) {
+	case '-':
+	    comment(trfp);
+	    break;
+	case '/':
+	    etagrepl(trfp);
+	    break;
+	default:
+	    stagrepl(trfp);
+	    break;
+	}
+    }
     
-    PUSH("first", SUBS "start");
-    PUSH("style", SUBS "type");
-    x_add(CMARK_NODE_LIST,	    "CM-LST", atts);
-    RESET();
-    
-    x_add(CMARK_NODE_ITEM,	    "CM-LIT", NULL);
-    x_add(CMARK_NODE_CODE_BLOCK,    "CM-CB", NULL);
-    x_add(CMARK_NODE_HTML,	    "CM-HTMB", NULL);
-    x_add(CMARK_NODE_PARAGRAPH,	    "CM-PAR", NULL);
-    x_add(CMARK_NODE_HEADER,	    "CM-H" SUBS "level" , NULL);
-    x_add(CMARK_NODE_HRULE,	    "CM-HR", NULL);
-    
-    /* x_add(CMARK_NODE_TEXT,          "CM-TXT", NULL); */
-    x_add(CMARK_NODE_SOFTBREAK,	    "CM-SBR", NULL);
-    x_add(CMARK_NODE_LINEBREAK,	    "CM-LBR", NULL);
-    x_add(CMARK_NODE_CODE,	    "CM-COD", NULL);
-    x_add(CMARK_NODE_INLINE_HTML,   "CM-HTM", NULL);
-    x_add(CMARK_NODE_EMPH,	    "CM-EMP", NULL);
-    x_add(CMARK_NODE_STRONG,	    "CM-STR", NULL);
-    x_add(CMARK_NODE_LINK,	    "CM-LNK", NULL);
-    x_add(CMARK_NODE_IMAGE,	    "CM-IMG", NULL);
 }
 
 int main(int argc, char *argv[]) {
@@ -567,8 +681,6 @@ int main(int argc, char *argv[]) {
   cmark_node *document;
   cmark_option_t options = CMARK_OPT_DEFAULT | CMARK_OPT_ISO;
   
-  ESIS_Writer writer;
-
   setup("dummy.tr"); /* Get things going */
   
   meta.css = NULL;
@@ -659,13 +771,12 @@ int main(int argc, char *argv[]) {
   /*
    * Walk the document tree, generating output.
    */
-  writer = ESIS_XmlWriterCreate(stdout, 0U);
-  gen_document(document, writer, options, &meta);
+  outfp = stdout;
+  gen_document(document, options, &meta);
 
   /*
    * Discard the document tree.
    */
-  ESIS_WriterFree(writer);
   cmark_node_free(document);
 
   return 0;
