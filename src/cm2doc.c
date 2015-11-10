@@ -41,11 +41,17 @@ static const char* const nodename[] = {
 #define SOH  1
 #define STX  2
 #define ETX  3
+#define HT   9
+#define LF  10
+#define CR  13
 #define SO  14
 #define SI  15
 #define SP  32
+#define EOL LF
 
 #define NTS (~0U)
+
+#define BLANK(C) ((C) == SP || (C) == EOL || (C) == HT)
 
 FILE *outfp;
 
@@ -175,7 +181,9 @@ void print_usage() {
   printf("  --version        Print version\n");
 }
 
-#define reset_atts() do { natts = 0U; } while (0)
+#define reset_atts() do { \
+	natts = 0U; cmark_strbuf_clear(&attrbuf); \
+    } while (0)
 
 void push_att(const char *name, const char *val, size_t len)
 {
@@ -539,9 +547,14 @@ void stagrepl(FILE *trfp)
     
     cmark_strbuf_init(&repl, 64);
     
-    while ((ch = getc(trfp)) != EOF && ch != '"') 
+    while ((ch = getc(trfp)) != EOF && BLANK(ch))
 	;
 	
+    if (ch != '"') {
+	ungetc(ch, trfp);
+	return;
+    }
+    
 again:
     while ((ch = getc(trfp)) != EOF && ch != '"') {
 	switch (ch) {
@@ -571,9 +584,11 @@ again:
 	}
     }
     
-    while ((ch = getc(trfp)) != EOF)
-	if (ch == '\"')
-	    goto again;
+    while ((ch = getc(trfp)) != EOF && BLANK(ch))
+	;
+	
+    if (ch == '"')
+	goto again;
 	    
     ungetc(ch, trfp);
     cmark_strbuf_putc(&repl, NUL);
@@ -602,11 +617,16 @@ void etagrepl(FILE *trfp)
     
     cmark_strbuf_init(&repl, 64);
     
-    while ((ch = getc(trfp)) != EOF && ch != '\\') 
+    while ((ch = getc(trfp)) != EOF && BLANK(ch)) 
 	;
 	
+    if (ch != '\"') {
+	ungetc(ch, trfp);
+	return;
+    }
+	
 again:
-    while ((ch = getc(trfp)) != EOF && ch != '\\') {
+    while ((ch = getc(trfp)) != EOF && ch != '"') {
 	switch (ch) {
 	case '\\':
 	    ch = getc(trfp);
@@ -628,9 +648,11 @@ again:
 	}
     }
     
-    while ((ch = getc(trfp)) != EOF)
-	if (ch == '\"')
-	    goto again;
+    while ((ch = getc(trfp)) != EOF && BLANK(ch))
+	;
+	
+    if (ch == '"')
+	goto again;
 	    
     ungetc(ch, trfp);
     cmark_strbuf_putc(&repl, NUL);
@@ -649,23 +671,16 @@ void setup(const char *trfile)
     
     cmark_strbuf_init(&textbuf, INIT_SIZE);
 
-    while ((ch = getc(trfp)) != EOF) {
-	if (ch != '<')
-	    continue;
-	ch = getc(trfp);
-	switch (ch) {
-	case '-':
+    while ((ch = getc(trfp)) != EOF)
+	if (ch == '<')
+    	    if ((ch = getc(trfp)) == '/')
+    		etagrepl(trfp);
+	    else {
+		ungetc(ch, trfp);
+    		stagrepl(trfp);
+	    }
+	else if (ch == '%')
 	    comment(trfp);
-	    break;
-	case '/':
-	    etagrepl(trfp);
-	    break;
-	default:
-	    stagrepl(trfp);
-	    break;
-	}
-    }
-    
 }
 
 int main(int argc, char *argv[]) {
