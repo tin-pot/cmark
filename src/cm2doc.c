@@ -7,12 +7,12 @@
 
 #include "config.h"
 #include "cmark.h"
-
 #include "cmark_ctype.h"
 #include "node.h"
 #include "buffer.h"
-#include "houdini.h"
-#include "scanners.h"
+
+/*#include "houdini.h"*/
+/*#include "scanners.h"*/
 
 
 /*
@@ -89,24 +89,36 @@ static const char* const nodename[NODE_MAX+1] = {
  
 #define NUL  0
 #define SOH  1
+
 #define HT   9 /* SEPCHAR */
 #define LF  10 /* RS */
 #define CR  13 /* RE */
 #define SP  32 /* SPACE */
 
-#define EOL        LF
-#define ATTR_SUBST SOH
+#define EOL          LF
+#define ATTR_SUBST   SOH
+
+#define RE           LF
+#define RS           CR
+#define SPACE        SP
+#define ISSEPCHAR(C) ((C) == HT)
 
 #define NTS (~0U)
 
 #define ISDIGIT(C)   ( '0' <= (C) && (C) <= '9' )
 #define ISHEX(C)     ( ISDIGIT(C) || \
                       ('A'<=(C) && (C)<='F') || ('a'<=(C) && (C)<='f') )
-#define ISSPACE(C)   ( (C) == SP || (C) == EOL || (C) == HT )
+#define ISSPACE(C)   ( (C) == RS || (C) == RE || (C) == SPACE || \
+                                                          ISSEPCHAR(C) )
 #define ISNMSTART(C) ( ISDIGIT(C) || ISUCNMSTRT(C) || ISLCNMSTRT(C) )
 #define ISNMCHAR(C)  ( ISNMSTART(C) || (C) == '-' || (C) == '.' )
 
 FILE *outfp;
+
+FILE *replfp         = NULL;
+const char *filename = "";
+unsigned lineno      = 0U;
+unsigned colno       = 0U;
 
 #if 0
 /*
@@ -583,18 +595,14 @@ size_t do_pandoc(char *buffer, size_t nbuf, struct meta_ *meta)
  * setup -- Parse the replacement definition file.
  */
  
-static const char *filename = "";
-static FILE *fp             = NULL;
-static unsigned lineno      = 0U;
-static unsigned colno       = 0U;
 
 #define COUNT_EOL() (++lineno, colno = 0U)
 
-#define GETC() (   ch = getc(fp), \
+#define GETC() (   ch = getc(replfp), \
                  ((ch == EOL) ? COUNT_EOL() : ++colno), \
                    ch )
                    
-#define UNGETC(ch) ungetc(ch, fp)
+#define UNGETC(ch) ungetc(ch, replfp)
 
 void syntax_error(const char *msg, ...)
 {
@@ -760,10 +768,11 @@ void setup(const char *repl_filename)
     int ch;
     
     filename = repl_filename;
-    fp = fopen(filename, "r");
+    replfp = fopen(filename, "r");
     
-    if (fp == NULL)
-	error("Can't open repl file \"%s\": %s.", strerror(errno));
+    if (replfp == NULL)
+	error("Can't open replacement file \"%s\": %s.",
+	                                               strerror(errno));
     
     COUNT_EOL();
     
@@ -778,7 +787,8 @@ void setup(const char *repl_filename)
     		if (ISNMSTART(ch))
     		    etag_repl(ch);
 		else
-		    syntax_error("\'%c\' after '</': Not a NMSTART.\n", ch);
+		    syntax_error("\'%c\' after '</': Not a NMSTART.\n",
+		                                                    ch);
 	    } else if (ISNMSTART(ch)) {
     		stag_repl(ch);
 	    } else
@@ -788,7 +798,8 @@ void setup(const char *repl_filename)
 	else
 	    syntax_error("Unexpected character \'%c\'.\n", ch);
 		
-    fclose(fp);
+    fclose(replfp);
+    replfp = NULL;
 }
 
 int main(int argc, char *argv[]) {
