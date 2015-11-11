@@ -593,8 +593,10 @@ static int S_render_node(cmark_node *node, cmark_event_type ev_type)
 
     case CMARK_NODE_LINK:
     case CMARK_NODE_IMAGE:
-      do_Attr("destination", node->as.link.url.data, node->as.link.url.len);
-      do_Attr("title", node->as.link.title.data, node->as.link.title.len);
+      do_Attr("destination",
+	                 node->as.link.url.data, node->as.link.url.len);
+      do_Attr("title", node->as.link.title.data,
+                                               node->as.link.title.len);
       do_Start(node->type);
       break;
 
@@ -740,13 +742,13 @@ size_t do_prolog(char *buffer, size_t nbuf)
 
 #define COUNT_EOL() (++lineno, colno = 0U)
 
-#define GETC()     ( ch = getc(replfp),			    \
-                     ((ch == EOL) ? COUNT_EOL() : ++colno), \
+#define GETC()     ( ch = getc(replfp),					\
+                     ((ch == EOL) ? COUNT_EOL() : ++colno),		\
                      ch )
                    
-#define UNGETC(ch) ( ungetc(ch, replfp),		    \
-                     assert(colno > 0U),		    \
-                     --colno,				    \
+#define UNGETC(ch) ( ungetc(ch, replfp),				\
+                     assert(colno > 0U),				\
+                     --colno,						\
                      ch )
 
 void syntax_error(const char *msg, ...)
@@ -858,7 +860,8 @@ char *get_repl(int ch)
 		cmark_strbuf_putc(&repl, ATTR_SUBST);
 		while ((ch = GETC()) != EOF && ch != ']') {
 		    if (ch == '"') {
-			syntax_error("Unclosed attribute reference (missing ']').\n");
+			syntax_error("Unclosed attribute reference "
+			                            "(missing ']').\n");
 			UNGETC(ch);
 			ch = ']';
 		    } else if (ISSPACE(ch))
@@ -990,7 +993,8 @@ int main(int argc, char *argv[])
 	strncpy(default_creator, username, sizeof default_creator -1U);
 	
     time(&now);
-    strftime(default_date, sizeof default_date, "%Y-%m-%d", gmtime(&now));
+    strftime(default_date, sizeof default_date, "%Y-%m-%d",
+                                                          gmtime(&now));
     setup(argv[1]);
     
     for (argi = 2; argi < argc && argv[argi][0] == '-'; ++argi) {
@@ -998,7 +1002,8 @@ int main(int argc, char *argv[])
 	    printf("cmark %s", CMARK_VERSION_STRING
 		" ( %s %s )\n",
 		cmark_repourl, cmark_gitident);
-	    printf(" - CommonMark converter\n(C) 2014, 2015 John MacFarlane\n");
+	    printf(" - CommonMark converter\n"
+	                            "(C) 2014, 2015 John MacFarlane\n");
 	    exit(EXIT_SUCCESS);
 	} else if ((strcmp(argv[argi], "--title") == 0) ||
 	    (strcmp(argv[argi], "-t") == 0)) {
@@ -1068,7 +1073,8 @@ int main(int argc, char *argv[])
 	    }
 
 	    if (hbytes < bytes)
-		cmark_parser_feed(parser, buffer + hbytes, bytes - hbytes);
+		cmark_parser_feed(parser, 
+		                       buffer + hbytes, bytes - hbytes);
 
 	    if (bytes < sizeof(buffer)) {
 		break;
