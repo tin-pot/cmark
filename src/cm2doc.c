@@ -32,8 +32,8 @@ static const char cmark_repourl[]  = "";
 #endif
 
 /*
- * For each CommonMark node type we use a GI conforming to the
- * ISO 8879 SGML Reference Concrete Syntax, which has 
+ * For each CommonMark node type we define a GI conforming to the
+ * ISO 8879 SGML Reference Concrete Syntax, which has:
  *
  *     NAMING LCNMSTRT ""
  *            UCNMSTRT ""
@@ -42,15 +42,14 @@ static const char cmark_repourl[]  = "";
  *            NAMECASE GENERAL YES
  *                     ENTITY  NO
  *
- * The Reference Quantity Set sets NAMELEN to 8, so these GIs are
+ * The Reference Quantity Set also sets NAMELEN to 8, so these GIs are
  * somewhat shorter than the ones in the CommonMark DTD -- which is
  * a good thing IMO.
  *
  * (All this is of course purely cosmetic and/or a nod to SGML, where
- * all this "structural mark-up" stuff came from -- You could define
+ * all this "structural mark-up" stuff came from. -- You could define
  * and use any GI and any NMSTART / NMCHAR character classes you want
- * for the names of CommonMark node types.)
- *
+ * for giving names to the CommonMark node types.)
  */
 #define NAMELEN 8
 #define ISUCNMSTRT(C) ( 'A' <= (C) && (C) <= 'Z' )
