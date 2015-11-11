@@ -1,23 +1,24 @@
+/* C90 header */
+#include <assert.h>
 #include <ctype.h> /* toupper() */
 #include <errno.h>
 #include <stdarg.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <time.h> /* strftime(), gmtime(), time() */
 
+/* CommonMark cmark header */
 #include "config.h"
 #include "cmark.h"
 #include "cmark_ctype.h"
 #include "node.h"
 #include "buffer.h"
 
-/*#include "houdini.h"*/
-/*#include "scanners.h"*/
-
-
 /*
- * Make available the Git commit ident and the repository URL.
- * (Use -DWITH_GITIDENT=0 to supress this.)
+ * Make the Git commit ident and the repository URL available.
+ * Use -DWITH_GITIDENT=0 to supress this, and use placeholder
+ * values instead.
  */
 #ifndef WITH_GITIDENT
 #define WITH_GITIDENT 1
@@ -27,9 +28,62 @@
 extern const char cmark_gitident[];
 extern const char cmark_repourl[];
 #else
-static const char cmark_gitident[] = "";
-static const char cmark_repourl[]  = "";
+static const char cmark_gitident[] = "n/a";
+static const char cmark_repourl[]  = "URL: n/a";
 #endif
+
+/*
+ * Predefined "pseudo-attribute" names, usable in the "replacement" text
+ * for #PROLOG (and for the document element), eg to set <META> ele-
+ * ments in an HTML <HEAD>.
+ *
+ * At compile time, these names are accessible through META_... macros.
+ *
+ * NOTE: We use a "pseudo-namespace" for "cm2doc" (and "cmark")
+ * specific "pseudo-attributes", to avoid any conflict with real
+ * attributes in a document type.
+ *
+ * The first three are from Dublin Core, and can be set in the first
+ * lines of the CommonMark input document by placing a PERCENT SIGN
+ * at the very beginning of the line:
+ *
+ *
+ *     % The Document Title
+ *     % A. U. Thor
+ *     % 2015-11-11T11:11:11+11
+ *
+ * In subsequent lines, you can set "user-defined" attributes for
+ * use in the prolog, like:
+ *
+ *     % foo-val: Foo value
+ *     % bar.val: Bar value
+ *
+ * *but* you can't use COLON ":" **in** the attribute name for obvious
+ * reasons. (Maybe ending the attribute name at (the first) COLON
+ * followed by SPACE would be a more reasonable approach ...).
+ */
+ 
+#define META_DC_TITLE   "DC.title"
+#define META_DC_CREATOR "DC.creator"
+#define META_DC_DATE    "DC.date"
+#define META_CSS        "cm2doc.css"
+
+/*
+ * Default values for the "pseudo-attributes".
+ *
+ * At compile time, they are accessible through DEFAULT_... macros.
+ */
+
+/* Data and creator will be re-initialized in main(). */
+static char default_date[11]    = "YYYY-MM-DD";
+static char default_creator[81] = "N.N.";
+
+#define DEFAULT_DC_CREATOR  default_creator
+#define DEFAULT_DC_DATE     default_date
+
+/* Hard-coded defaults for command-line options --title and --css. */
+#define DEFAULT_DC_TITLE    "Untitled Document"
+#define DEFAULT_CSS         "default.css"
 
 /*
  * For each CommonMark node type we define a GI conforming to the
@@ -42,6 +96,8 @@ static const char cmark_repourl[]  = "";
  *            NAMECASE GENERAL YES
  *                     ENTITY  NO
  *
+ * (This is replicated in the IS...() character class macros below.)
+ *
  * The Reference Quantity Set also sets NAMELEN to 8, so these GIs are
  * somewhat shorter than the ones in the CommonMark DTD -- which is
  * a good thing IMO.
@@ -51,26 +107,27 @@ static const char cmark_repourl[]  = "";
  * and use any GI and any NMSTART / NMCHAR character classes you want
  * for giving names to the CommonMark node types.)
  */
-#define NAMELEN    8
-#define ATTCNT    40
-#define ATTSPLEN 960
+#define NAMELEN      8 /* The Reference Core Syntax value. */
+#define ATTCNT      40 /* The Reference Quantity Set value. */
+#define ATTSPLEN   960 /* The Reference Quantity Set value. */
 
 #define ISUCNMSTRT(C) ( 'A' <= (C) && (C) <= 'Z' )
 #define ISLCNMSTRT(C) ( 'a' <= (C) && (C) <= 'z' )
 #define ISUCNMCHAR(C) ( ISUCNMSTRT(C) || (C) == '-' || (C) == '.' )
 #define ISLCNMCHAR(C) ( ISLCNMSTRT(C) || (C) == '-' || (C) == '.' )
 
-#define NODE_MAX       CMARK_NODE_LAST_INLINE
+/* How many node types there are, and what the name length limit is. */
+#define NODE_NUM       (CMARK_NODE_LAST_INLINE+1)
 #define NODENAME_LEN   NAMELEN
 
-static const char* const nodename[NODE_MAX+1] = {
-    "NONE", /* Should *never* occur! */
+static const char* const nodename[NODE_NUM] = {
+     NULL,	/* The "none" type (enum const 0) is invalid! */
     "DOC",
     "QUOTE-BL",
     "LIST",
     "ITEM",
     "CODE-BL",
-    "HTML-BL",
+    "FRAG-BL", /* Block HTML/SGML/XHTML/XML fragment: literal output. */
     "PARA",
     "HEADER",
     "HRULE",
@@ -78,12 +135,31 @@ static const char* const nodename[NODE_MAX+1] = {
     "SOFT-BR",
     "LINE-BR",
     "CODE",
-    "HTML",
+    "FRAG",   /* Inline HTML/SGML/XHTML/XML fragment: literal output. */
     "EMPH",
     "STRONG",
     "LINK",
     "IMAGE",
 };
+
+
+/*
+ * "Reserved Names" to bind special "replacement texts" to:
+ * The output document's prolog (and, if needed, epilog).
+ */
+enum rn_ {
+    RN_PROLOG,
+    RN_EPILOG,
+    RN_NUM,	/* Number of defined "reserved names". */
+};
+
+static const char *const rn_name[] = {
+    "PROLOG",
+    "EPILOG",
+    NULL
+};
+    
+static const char *rn_repl[RN_NUM]; /* Replacement texts for RNs. */
 
 /*
  * Character classification.
@@ -92,20 +168,25 @@ static const char* const nodename[NODE_MAX+1] = {
 #define NUL  0
 #define SOH  1
 
-#define HT   9 /* SEPCHAR */
-#define LF  10 /* RS */
-#define CR  13 /* RE */
-#define SP  32 /* SPACE */
+/*
+ * The C0 control characters allowed in SGML/XML; all other C0 are
+ * **not** usable in a document.
+ */
+#define HT   9	/* SGML SEPCHAR */
+#define LF  10	/* SGML RS */
+#define CR  13	/* SGML RE */
+#define SP  32	/* SGML SPACE */
 
-#define EOL          LF
-#define ATTR_SUBST   SOH
+#define EOL          LF	    /* Per ISO C90 text stream. */
+#define ATTR_SUBST   SOH    /* "Internal" C0 control (NONSGML). */
 
+/*
+ * SGML function roles.
+ */
 #define RE           LF
 #define RS           CR
 #define SPACE        SP
 #define ISSEPCHAR(C) ((C) == HT)
-
-#define NTS (~0U)
 
 #define ISDIGIT(C)   ( '0' <= (C) && (C) <= '9' )
 #define ISHEX(C)     ( ISDIGIT(C) || \
@@ -115,24 +196,31 @@ static const char* const nodename[NODE_MAX+1] = {
 #define ISNMSTART(C) ( ISDIGIT(C) || ISUCNMSTRT(C) || ISLCNMSTRT(C) )
 #define ISNMCHAR(C)  ( ISNMSTART(C) || (C) == '-' || (C) == '.' )
 
+/*
+ * The output stream (right now, this is always stdout).
+ */
 FILE *outfp;
 
-FILE *replfp         = NULL;
-const char *filename = "";
-unsigned lineno      = 0U;
-unsigned colno       = 0U;
-
-#if 0
 /*
- * Unicode
+ * During parsing of the "Replacement Definition" file we keep these
+ * globals around, mostly to simplify the job of keeping track of
+ * the position in the input text file (for diagnostic messages).
  */
+FILE *replfp         = NULL;
+const char *filename = "<no file>";
+unsigned lineno      = 0U;  /* Text input position: Line number. */
+unsigned colno       = 0U;  /* Text input position: Column number. */
 
-typedef long ucs_t;
-
-#define U(X)   ((0x ## X) & 0xFFFFFFL)
-#define UCS(c) ((ucs_t)((c) & 0xFF))
-#define UEOF   (-1L)
-#endif /* Not needed yet. */
+/*
+ * A convenience mechanism: In an API using arguments like
+ *
+ *     ..., char *data, size_t len, ...
+ *
+ * placing the value NTS in the actual parameter `len` indicates that
+ * `data` is a NUL-terminated (byte) string aka NTBS, so the *callee*
+ * can determine the correct value for `len` from `data`.
+ */
+#define NTS (~0U)
 
 void error(const char *msg, ...)
 {
@@ -144,65 +232,43 @@ void error(const char *msg, ...)
 }
 
 /*
- * Dublin Core and document meta.
- */
- 
-static const char DEFAULT_CSS[]   = "default.css";
-static const char DEFAULT_TITLE[] = "Untitled document";
-
-enum {
-  DC_TITLE,
-  DC_AUTHOR,
-  DC_DATE,
-  NUM_DCITEM
-};
-
-struct dcdata {
-  const char *item[NUM_DCITEM];
-};
-
-struct meta_ {
-  const char *css;
-  const char *title;
-  struct dcdata dc;
-};
-
-/*
- * Translation definition.
+ * Translation definitions for a node type are hold in a 
+ * `struct trans_`
  */
  
 #define STAG_REPL 001
 #define ETAG_REPL 002
-#define STAG_BOL  010
-#define ETAG_BOL  020
+#define STAG_BOL  010	    /* RFU. */
+#define ETAG_BOL  020	    /* RFU. */
 
-typedef size_t textidx_t; /* Index into textbuf */
-typedef size_t attridx_t; /* Index into attrbuf */
-static const textidx_t NULLIDX = 0U;
+/*typedef size_t textidx_t; /* Index into text_buf. */
+typedef size_t nameidx_t; /* Index into attr_buf. */
+typedef size_t validx_t;  /* Index into attr_buf. */
+
+static const size_t NULLIDX = 0U; /* Common NULL value for indices. */
 
 struct trans_ {
-  const char* stag_repl;
-  const char* etag_repl;
-  unsigned defined; /* STAG_REPL, ETAG_REPL, STAG_BOL, ETAG_BOL. */
+    const char *stag_repl;
+    const char *etag_repl;
+    unsigned    defined; /* STAG_REPL, ETAG_REPL, STAG_BOL, ETAG_BOL. */
 };
 
 /*
- * The translation definitions.
+ * Translation definitions: one array member per node type,
+ * plus the **unused** member at index 0 == CMARK_NODE_NONE.
  */
  
-#define INIT_SIZE  2048
-
-static struct trans_ trans[NODE_MAX];
+static struct trans_ trans[NODE_NUM];
 
 /*
  * Replacement texts.
  */
-static cmark_strbuf textbuf;
+static cmark_strbuf text_buf; /* NOT USED YET - RFU. */
 
 /*
  *Attribute names and values of current node.
  */
-static cmark_strbuf attrbuf;
+static cmark_strbuf attr_buf;
 
 /*
  * We "misuse" a `cmark_strbuf` here to store a growing array
@@ -210,132 +276,192 @@ static cmark_strbuf attrbuf;
  * as long as the array stays homogenuous, as the buffer is from
  * `malloc()`, and thus suitably aligned.
  *
- * These `attridx_t` array members are indices into the `attrbuf`
- * buffer and come in pairs:
- *
- *     elem[2*n+0]: Start index of attribute name.
- *     elem[2*n+1]: Start index of attribute value.
- *
  * An attribute name index of 0U marks the end of the attribute
  * list (of the currently active node).
  */
-static cmark_strbuf attsbuf;
-static size_t natts = 0U;
-/*
- * The elem[k] in the `attsbuf` array as an lvalue.
- */
-#define ATTS(K) ( *((attridx_t*)attsbuf.ptr+(K)) )
+static cmark_strbuf nameidx_buf;
+static cmark_strbuf validx_buf;
+#define NATTR ( nameidx_buf.size / sizeof NAMEIDX[0] )
 
 /*
- * Append one more `attridx_t` element to the `attsbuf` array.
+ * The name index and value index arrays as seen as `nameidx_t *`
+ * and `validx_t *` rvalues, ie as "regular C arrays".
  */
-#define PUT_ATTS(I) ( cmark_strbuf_put(&attsbuf, \
-                              (unsigned char*)&(I), sizeof(attridx_t)) )
+#define NAMEIDX ( (nameidx_t*)nameidx_buf.ptr )
+#define VALIDX  (  (validx_t*)validx_buf.ptr )
 
 /*
- * Remove pairs (ie "pop") from the end of the `attsbuf` array until 
- * (0U, 0U) pair is gone.
+ * Append one `nameidx_t` element to the `NAMEIDX` array, and 
+ * dito for `validx_t` and the `VALIDX` array.
  */
- 
-#define POP_ATTS() do while (natts > 1U) {   \
-	attridx_t i; --natts;		    \
-	i = ATTS(2*(natts));		    \
-	if (i == 0U) break;		    \
-    } while (0)
+#define PUT_NAMEIDX(I) ( cmark_strbuf_put(&nameidx_buf, \
+                              (unsigned char*)&(I), sizeof(nameidx_t)) )
+#define PUT_VALIDX(I)  ( cmark_strbuf_put(&validx_buf, \
+                              (unsigned char*)&(I), sizeof(validx_t)) )
 
 /*
- * Add a translation to the table.
+ * We use NULLIDX to delimit "activation records" for the currently
+ * open elements: the first invocation of `push_att()` after a 
+ * `lock_attr()` call will push a NULLIDX first, then the given
+ * attribute name and value into a "new" activation record, while
+ * "unlocking" the new activation record.
  */
-void set_trans(cmark_node_type nt,
-	   unsigned tag_bit, /* STAG_REPL or ETAG_REPL */
-           const char *repl)
-{
-    switch (tag_bit) {
-    case STAG_REPL: trans[nt].stag_repl = repl; break;
-    case ETAG_REPL: trans[nt].etag_repl = repl; break;
-    default:
-	error("Invalid tag_bit");
-    }
-    trans[nt].defined |= tag_bit;
-}
-
-
-void print_usage() {
-  printf("Usage:   cm2html spec [FILE*]\n");
-  printf("\nspec is the output specification.\n\n");
-  printf("Options:\n");
-  printf("  -t --title TITLE Set the document title\n");
-  printf("  -c --css CSS     Set the document style sheet to CSS\n");
-  printf("  --sourcepos      Include source position attribute\n");
-  printf("  --hardbreaks     Treat newlines as hard line breaks\n");
-  printf("  --safe           Suppress raw HTML and dangerous URLs\n");
-  printf("  --smart          Use smart punctuation\n");
-  printf("  --normalize      Consolidate adjacent text nodes\n");
-  printf("  --help, -h       Print usage information\n");
-  printf("  --version        Print version\n");
-}
-
-#define reset_atts() do {             \
-	natts = 0U;                   \
-	cmark_strbuf_clear(&attrbuf); \
-	cmark_strbuf_clear(&attsbuf); \
-    } while (0)
+#define close_atts()   ( PUT_NAMEIDX(NULLIDX), PUT_VALIDX(NULLIDX) )
+#define pop_atts()       POP_ATTS()
 
 void push_att(const char *name, const char *val, size_t len)
 {
-    attridx_t nameidx, validx;   
+    nameidx_t nameidx;
+    validx_t  validx;   
     
     if (len == NTS) len = strlen(val);
     
-    cmark_strbuf_putc(&attrbuf, NUL);
-    nameidx = attrbuf.size;
-    cmark_strbuf_puts(&attrbuf, name);
-    cmark_strbuf_putc(&attrbuf, NUL);
-    validx = attrbuf.size;
-    cmark_strbuf_put (&attrbuf, val, len);
-    cmark_strbuf_putc(&attrbuf, NUL);
+    nameidx = attr_buf.size;
+    cmark_strbuf_puts(&attr_buf, name);
+    cmark_strbuf_putc(&attr_buf, NUL);
     
-    PUT_ATTS(nameidx);
-    PUT_ATTS(validx);
-    ++natts;
+    validx = attr_buf.size;
+    cmark_strbuf_put (&attr_buf, val, len);
+    cmark_strbuf_putc(&attr_buf, NUL);
+    
+    PUT_NAMEIDX(nameidx);
+    PUT_VALIDX(validx);
 }
 
-#if 0
-void push_atts(const char **atts)
-{
-    size_t k;
-    
-    if (atts != NULL) for (k = 0; atts[2*k] != NULL; ++k)
-	push_att(atts[2*k+0], atts[2*k+1], NTS);
-	    
-}
+/*
+ * Remove the current activation record. 
+ */
+ 
+#define POP_ATTS()							\
+do {									\
+    size_t top = NATTR;							\
+    if (top > 0U) {							\
+	nameidx_t nameidx = NAMEIDX[--top];				\
+	assert(nameidx == NULLIDX);					\
+	do {								\
+	    nameidx_buf.size -= sizeof NAMEIDX[0];			\
+	    validx_buf.size  -= sizeof VALIDX[0];			\
+	    if (nameidx != NULLIDX) attr_buf.size = nameidx;		\
+	} while (top > 0U && (nameidx = NAMEIDX[--top]) != NULLIDX);	\
+    }									\
+    assert(top == NATTR);						\
+} while (0)
+
+#if 1
+#undef pop_atts
 #endif
+
+void pop_atts(void)
+{
+    nameidx_t nameidx = 0U;
+    
+    size_t top = NATTR;
+    if (top > 0U) {
+	nameidx           = NAMEIDX[--top];
+	assert(nameidx == NULLIDX);
+	do {
+	    nameidx_buf.size -= sizeof NAMEIDX[0];
+	    validx_buf.size  -= sizeof VALIDX[0];
+	    assert(top == NATTR);
+	    if (nameidx != NULLIDX) attr_buf.size = nameidx;
+	} while (top > 0U && (nameidx = NAMEIDX[--top]) != NULLIDX);
+    }
+}
+
 
 /*
  * Find attribute in active input element (ie in buf_atts),
  * return the value.
  */
-const char* attval(const char *name)
+ 
+const char* att_val(const char *name, unsigned depth)
 {
     size_t k;
     
-    for (k = natts-1U; k > 0U; --k) {
-	attridx_t iname = ATTS(2*k+0U), ival = ATTS(2*k+1U);
-	if (iname == 0U)
-	    break; /* List end for current element */
-	if (!strcmp(attrbuf.ptr+iname, name))
-	    return attrbuf.ptr+ival;
+    assert ((k = NATTR) > 0U);
+    assert (NAMEIDX[k-1U] == NULLIDX);
+    assert (depth > 0U);
+	
+    if (depth == 0U) return NULL;
+    
+    for (k = NATTR; k > 0U; --k) {
+	nameidx_t nameidx;
+	validx_t validx;
+	const size_t idx = k-1U;
+	
+	assert(nameidx_buf.size >= 0);
+	assert(nameidx_buf.size == 0 || nameidx_buf.ptr != NULL);
+	assert(idx*sizeof *NAMEIDX < (size_t)nameidx_buf.size);
+	
+	nameidx = NAMEIDX[idx];
+	
+	assert(attr_buf.size >= 0);
+	assert(attr_buf.size == 0 || attr_buf.ptr != NULL);
+	assert(nameidx < (size_t)attr_buf.size);
+	
+	if (nameidx == NULLIDX && depth-- == 0U)
+	    break;
+	    
+	assert(validx_buf.size >= 0);
+	assert(validx_buf.size == 0  || validx_buf.ptr != NULL);
+	assert(idx*sizeof *VALIDX < (size_t)validx_buf.size);
+	
+	validx = VALIDX[idx];
+	
+	assert(validx  < (size_t)attr_buf.size);
+	if (!strcmp(attr_buf.ptr+nameidx, name))
+	    return attr_buf.ptr+validx;
     }
 	    
     return NULL;
 }
 
-void putval(const char *name)
+
+/*
+ * Set the replacement text for a node type.
+ */
+void set_repl(cmark_node_type nt,
+	      unsigned tag_bit,
+              const char *repl)
 {
-    const char *val = attval(name);
-    if (val != NULL)
-	fputs(val, outfp);
+    assert(0 <= nt);
+    assert(nt < NODE_NUM);
+    
+    switch (tag_bit & (STAG_REPL|ETAG_REPL)) {
+    case STAG_REPL:
+	trans[nt].stag_repl = repl;
+	break;
+    case ETAG_REPL:
+	trans[nt].etag_repl = repl;
+	break;
+    default:
+	assert(!"Invalid tag_bit");
+    }
+    
+    trans[nt].defined |= tag_bit;
 }
+
+
+void usage()
+{
+    printf("Usage:   cm2html spec [FILE*]\n");
+    printf("\nspec is the output specification.\n\n");
+    printf("Options:\n");
+    printf("  -t --title TITLE Set the document title\n");
+    printf("  -c --css CSS     Set the document style sheet to CSS\n");
+    printf("  --sourcepos      Include source position attribute\n");
+    printf("  --hardbreaks     Treat newlines as hard line breaks\n");
+    printf("  --safe           Suppress raw HTML and dangerous URLs\n");
+    printf("  --smart          Use smart punctuation\n");
+    printf("  --normalize      Consolidate adjacent text nodes\n");
+    printf("  --help, -h       Print usage information\n");
+    printf("  --version        Print version\n");
+}
+
+
+
+
+
 
 void do_Attr(const char *name, const char *val, size_t len)
 {
@@ -352,8 +478,19 @@ void put_repl(const char *repl)
 	    putc(ch, outfp);
 	else {
 	    const char *name = p;
+	    const char *val;
+	    unsigned depth = 1U;
 	    p = name + strlen(name)+1U;
-	    putval(name);
+	    
+	    if (name[0] == '.')
+		depth = ~0U, ++name;
+	    else if (ISDIGIT(name[0]))
+		depth = name[0] - '0', ++name;
+		
+	    if ((val = att_val(name, depth)) != NULL)
+		fputs(val, outfp);
+	    else
+		val = "?";
 	}
     }
 }
@@ -362,19 +499,17 @@ void do_Start(cmark_node_type nt)
 {
     const struct trans_ *tr = &trans[nt];
     
+    close_atts();
+    
     if (tr->defined & STAG_REPL)
 	put_repl(tr->stag_repl);
-    
-    PUT_ATTS(NULLIDX); /* Must use a lvalue here. */
-    PUT_ATTS(NULLIDX);
-    ++natts;
 }
 
 void do_Empty(cmark_node_type nt)
 {
     do_Start(nt);
     
-    POP_ATTS();
+    pop_atts();
 }
 
 void do_Cdata(const char *cdata, size_t len)
@@ -390,10 +525,10 @@ void do_End(cmark_node_type nt)
 {
     const struct trans_ *tr = &trans[nt];
     
-    POP_ATTS();
-    
     if (tr->defined & ETAG_REPL) 
 	put_repl(tr->etag_repl);
+	
+    pop_atts();
 }
  
  
@@ -506,123 +641,95 @@ char *cmark_render_esis(cmark_node *root)
  * data into the writer.
  */
 static void gen_document(cmark_node *document,
-                         cmark_option_t options, 
-                         struct meta_ *meta
-                         ) {
-  /*unsigned iter;*/
-  static const char *dcitem[NUM_DCITEM] = {
-    "\"DC.title\"  ",
-    "\"DC.creator\"",
-    "\"DC.date\"   ",
-  };
+                         cmark_option_t options)
+{
+  
+    close_atts();
+    
+    if (rn_repl[RN_PROLOG] != NULL)
+	put_repl(rn_repl[RN_PROLOG]);
 
-#if 0
-  /* HTML prolog */
-  puts("<!DOCTYPE HTML PUBLIC \"ISO/IEC 15445:2000//DTD HTML//EN\">");
-  puts("<HTML>");
-  puts("<HEAD>");
-  puts("  <META http-equiv=\"Content-Type\" content=\"text/html; charset=UTF-8\">");
-printf("  <META name=\"GENERATOR\"\n"
-       "        content=\"cmark " CMARK_VERSION_STRING
-                                    " ( %s %s )\">\n",
-                                    cmark_repourl, cmark_gitident);
-       
-  for (iter = 0; iter < NUM_DCITEM; ++iter) {
-    if (iter == 0) {
-       puts("  <LINK rel=\"schema.DC\"   "
-                          "href=\"http://purl.org/dc/elements/1.1/\">");
-       puts("  <META name=\"DC.format\"  "
-                  "content=\"text/html\" scheme=\"DCTERMS.IMT\">");
-       puts("  <META name=\"DC.type\"    "
-                  "content=\"Text\"      scheme=\"DCTERMS.DCMIType\">");
-    }
-    if (pdc->item[iter] != NULL)
-     printf("  <META name=%s content=\"%s\">\n",
-                                         dcitem[iter], pdc->item[iter]);
-  }
-              
-  printf("  <LINK rel=\"stylesheet\"  type=\"text/css\" href=\"%s\">\n",
-                                                                   css);
-  printf("  <TITLE>%s</TITLE>\n", title);
-  puts("</HEAD>");
-  puts("<BODY>");
-#endif /* HTML prolog */
+    cmark_render_esis(document);
 
-  cmark_render_esis(document);
-#if 0 /* HTML epilog */
-  puts("</BODY>");
-  puts("</HTML>");
-#endif
+    if (rn_repl[RN_EPILOG] != NULL)
+	put_repl(rn_repl[RN_EPILOG]);
 }
 
-size_t do_pandoc(char *buffer, size_t nbuf, struct meta_ *meta)
-{
-    size_t nused, nalloc;
-    size_t ibol;
-    unsigned iter;
+void do_Attr(const char *name, const char *val, size_t len);
 
-    for (iter = 0; iter < NUM_DCITEM; ++iter)
-	meta->dc.item[iter] = NULL;
-    
+size_t do_prolog(char *buffer, size_t nbuf)
+{
+    size_t ibol, nused;
+    unsigned dc_count = 0U;
+    static const char *dc_name[] = {
+	META_DC_TITLE,
+	META_DC_CREATOR,
+	META_DC_DATE,
+	NULL,
+    };
+
     ibol = 0U;
     nused = 0U;
     
-    for (iter = 0; iter < 3; ++iter) {
+    do_Attr(META_DC_TITLE,   DEFAULT_DC_TITLE,   NTS);
+    do_Attr(META_DC_CREATOR, DEFAULT_DC_CREATOR, NTS);
+    do_Attr(META_DC_DATE,    DEFAULT_DC_DATE,    NTS);
+    
+    for (ibol = 0U; buffer[ibol] == '%'; ) {
+	size_t len;
         char *p;
         size_t ifield;
         
 	/*
 	 * Field starts after '%', ends before *p = LF.
 	 */
-        if (buffer[ibol] != '%')
-	    break;
         ifield = ibol + 1U;
         if (buffer[ifield] == ' ') ++ifield;
         if (ifield >= nbuf)
             break;
+            
         p = memchr(buffer+ifield, '\n', nbuf - ifield);
         if (p == NULL)
-            break;
+            break; /* No EOL ==> fragment buffer too short. */
             
-        ibol = (p - buffer) + 1U; /* One after '\n'. */
+        /*
+         * One after '\n'.
+         */
+        ibol = (p - buffer) + 1U;
         
         /*
          * We copy buffer[ifield .. ibol-2], ie the line content
          * from ifield to just before the '\n', and append a NUL 
          * terminator, of course.
          */
-        nalloc = ibol - ifield;
-        if (nalloc > 1U) {
-            char *pitem = malloc(nalloc);
-            if (pitem == NULL)
-    		break;
-            memcpy(pitem, buffer+ifield, nalloc-1U);
-            pitem[nalloc-1U] = '\0';
-            meta->dc.item[iter] = pitem;
+        len = ibol - ifield;
+        if (len > 1U) {
+	    
+	    if (dc_name[dc_count] != NULL)
+		do_Attr(dc_name[dc_count++], buffer+ifield, len);
+	    else {
+		const char *colon;
+		char name[NAMELEN+1], *val;
+		size_t nname, nval;
+		colon = strchr(buffer+ifield, ':');
+		if (colon != NULL) {
+		    nname   = (colon-buffer) - ifield;
+		    if (nname > NAMELEN) nname = NAMELEN;
+		    strncpy(name, buffer + ifield, nname);
+		    name[nname] = NUL;
+    		
+		    val     = name + nname + 1;
+		    nval    = len - nname - 1;
+		    
+		    do_Attr(name, val, len);
+		}
+	    }
+	    
         }
         
-        /*
-         * The next line, if any, starts after '\n', at 
-         * `buffer[ibol]`. We have used all what came before.
-         */
-        nused = ibol;
-        if (nused >= nbuf)
-            break;
+	
     }
     
-    /*
-     * Set up defaults for required, but missing values.
-     */
-    if (meta->css == NULL)
-	meta->css = DEFAULT_CSS;
-    if (meta->title == NULL && meta->dc.item[DC_TITLE] == NULL)
-	meta->title = meta->dc.item[DC_TITLE] = DEFAULT_TITLE;
-    else if (meta->title != NULL)
-	meta->dc.item[DC_TITLE] = meta->title;
-    else 
-	meta->title = meta->dc.item[DC_TITLE];
-	
-	
     return nused;
 }
 
@@ -638,6 +745,7 @@ size_t do_pandoc(char *buffer, size_t nbuf, struct meta_ *meta)
                      ch )
                    
 #define UNGETC(ch) ( ungetc(ch, replfp),		    \
+                     assert(colno > 0U),		    \
                      --colno,				    \
                      ch )
 
@@ -659,34 +767,55 @@ void comment(void)
 	    return;
 }
 
-void tag_repl(int ch, unsigned bits)
+char *get_repl(int);
+
+void rni_repl(void)
 {
-    char name[NODENAME_LEN+1];
-    char *p = name;
-    cmark_node_type nt;
-    cmark_strbuf repl;
+    char name[NAMELEN+1], *p = name;
+    int ch;
+    enum rn_ rn;
+    const char *repl;
+
+    ch = GETC();
+    if (ISNMSTART(ch))
+	*p++ = toupper(ch);
+    else
+	syntax_error("'%c': Not a NMSTART.\n", ch);
     
-    *p++ = toupper(ch);
-    
-    while ((ch = GETC()) != EOF && ch != '>')
+    while ((ch = GETC()) != EOF && !ISSPACE(ch))
 	if (ISNMCHAR(ch))
 	    *p++ = toupper(ch);
 	else
-	    syntax_error("'%c': Not a NMCHAR.\n", ch);    
-	    
+	    syntax_error("'%c': Not a NMCHAR.\n", ch);
     *p = NUL;
-    
+
+    if (!ISSPACE(ch)) {
+	syntax_error("'%c': Expected space.\n", ch);    
+	UNGETC(ch);
+    }
+	    
     /*
-     * Look up the "GI" for a CommonMark node type.
+     * Look up the "reserved name".
      */
-    for (nt = CMARK_NODE_FIRST_BLOCK; nt <= CMARK_NODE_LAST_INLINE; ++nt)
-	if (!strcmp(nodename[nt], name))
+    for (rn = 0; rn_name[rn] != NULL; ++rn)
+	if (!strcmp(rn_name[rn], name))
 	    break;
-    if (nt > CMARK_NODE_LAST_INLINE) {
-	syntax_error("\"%s\": Not a CommonMark node type.", name);
+    
+    if (rn_name[rn] == NULL) {
+	syntax_error("\"%s\": Unknown name.\n", name);
 	return;
     }
+	
+    repl = get_repl(ch);
+    if (repl != NULL) {
+	rn_repl[rn] = repl;
+    } 
+}
 
+char *get_repl(int ch)
+{
+    cmark_strbuf repl;
+    
     cmark_strbuf_init(&repl, 16);
     
     while (ch != EOF) {
@@ -701,13 +830,12 @@ void tag_repl(int ch, unsigned bits)
 		break;
 	    }
 	    
-	    if (ch != '<') {
-		syntax_error("'%c': Unexpected.\n", ch);
-		continue;
+	    if (ch == '<' || ch == '#') {
+    		UNGETC(ch);
+    		goto done;
 	    }
 	    
-	    UNGETC(ch);
-	    goto done;
+	    syntax_error("'%c': Unexpected.\n", ch);
 	}
     
 	while ((ch = GETC()) != EOF && ch != '"') {
@@ -751,10 +879,43 @@ void tag_repl(int ch, unsigned bits)
 done:
     if (repl.size > 0U) {
 	cmark_strbuf_putc(&repl, NUL);
-    
-	set_trans(nt, bits, repl.ptr);
+	return (char*)cmark_strbuf_detach(&repl);
     } else
-	set_trans(nt, bits, NULL);
+	return NULL;
+}
+
+void tag_repl(int ch, unsigned bits)
+{
+    char name[NODENAME_LEN+1];
+    char *p = name;
+    cmark_node_type nt;
+    const char *repl;
+    
+    *p++ = toupper(ch);
+    
+    while ((ch = GETC()) != EOF && ch != '>')
+	if (ISNMCHAR(ch))
+	    *p++ = toupper(ch);
+	else
+	    syntax_error("'%c': Not a NMCHAR.\n", ch);    
+    *p = NUL;
+    
+    if (ch != '>')
+	    syntax_error("'%c': Expected '>'.\n", ch);    
+
+    /*
+     * Look up the "GI" for a CommonMark node type.
+     */
+    for (nt = 1; nodename[nt] != NULL; ++nt)
+	if (!strcmp(nodename[nt], name))
+	    break;
+    if (nodename[nt] == NULL) {
+	syntax_error("\"%s\": Not a CommonMark node type.", name);
+	return;
+    }
+
+    repl = get_repl(ch);
+    set_repl(nt, bits, repl);
 }
 
 
@@ -766,18 +927,16 @@ void setup(const char *repl_filename)
     replfp = fopen(filename, "r");
     
     if (replfp == NULL)
-	error("Can't open replacement file \"%s\": %s.",
+	error("Can't open replacement file \"%s\": %s.", filename,
 	                                               strerror(errno));
     
     COUNT_EOL();
     
-    cmark_strbuf_init(&textbuf, INIT_SIZE);
-    cmark_strbuf_init(&attrbuf, ATTSPLEN);
-    cmark_strbuf_putc(&attrbuf, NUL); /* Ensure index = 0U is unsused.*/
-    cmark_strbuf_init(&attsbuf, ATTCNT * 2 * sizeof(attridx_t) + 2);
-    PUT_ATTS(NULLIDX);
-    PUT_ATTS(NULLIDX);
-    ++natts;
+    cmark_strbuf_init(&attr_buf, ATTSPLEN);
+    cmark_strbuf_putc(&attr_buf, NUL); /* Index = 0U is unsused.*/
+    
+    cmark_strbuf_init(&nameidx_buf, ATTCNT * sizeof(nameidx_t));
+    cmark_strbuf_init(&validx_buf,  ATTCNT * sizeof(validx_t));
 
     while ((ch = GETC()) != EOF) 
 	if (ISSPACE(ch))
@@ -796,125 +955,133 @@ void setup(const char *repl_filename)
 		syntax_error("\'%c\' after '<': Not a NMSTART.\n", ch);
 	} else if (ch == '%')
 	    comment();
-	else
+	else if (ch == '#') {
+	    rni_repl();
+	} else
 	    syntax_error("Unexpected character \'%c\'.\n", ch);
 		
     fclose(replfp);
     replfp = NULL;
 }
 
-int main(int argc, char *argv[]) {
-  FILE *fp;
-  bool in_header;
-  struct meta_ meta;
-  
-  int argi;
-  char buffer[4096];
-  size_t bytes;
-  
-  cmark_parser *parser;
-  cmark_node *document;
-  cmark_option_t options = CMARK_OPT_DEFAULT | CMARK_OPT_ISO;
-  
-  if (argc <= 2) {
-      print_usage();
-      exit(EXIT_FAILURE);
-  }
-  setup(argv[1]);
-  
-  meta.css = NULL;
-  meta.title = NULL;
-  
-  for (argi = 2; argi < argc; ++argi) {
-    if (strcmp(argv[argi], "--version") == 0) {
-      printf("cmark %s", CMARK_VERSION_STRING
-                                    " ( %s %s )\n",
-                                    cmark_repourl, cmark_gitident);
-      printf(" - CommonMark converter\n(C) 2014, 2015 John MacFarlane\n");
-      exit(EXIT_SUCCESS);
-    } else if ((strcmp(argv[argi], "--title") == 0) ||
-               (strcmp(argv[argi], "-t") == 0)) {
-      meta.title = argv[++argi];
-    } else if ((strcmp(argv[argi], "--css") == 0) ||
-               (strcmp(argv[argi], "-c") == 0)) {
-      meta.css = argv[++argi];
-    } else if (strcmp(argv[argi], "--sourcepos") == 0) {
-      options |= CMARK_OPT_SOURCEPOS;
-    } else if (strcmp(argv[argi], "--hardbreaks") == 0) {
-      options |= CMARK_OPT_HARDBREAKS;
-    } else if (strcmp(argv[argi], "--smart") == 0) {
-      options |= CMARK_OPT_SMART;
-    } else if (strcmp(argv[argi], "--safe") == 0) {
-      options |= CMARK_OPT_SAFE;
-    } else if (strcmp(argv[argi], "--normalize") == 0) {
-      options |= CMARK_OPT_NORMALIZE;
-    } else if (strcmp(argv[argi], "--validate-utf8") == 0) {
-      options |= CMARK_OPT_VALIDATE_UTF8;
-    } else if ((strcmp(argv[argi], "--help") == 0) ||
-               (strcmp(argv[argi], "-h") == 0)) {
-      print_usage();
-      exit(EXIT_SUCCESS);
-    } else if (*argv[argi] == '-') {
-      print_usage();
-      exit(EXIT_FAILURE);
-    } else {
-      break; /* Exit loop, treat remaining args as file names. */
-    }
-  }
+int main(int argc, char *argv[])
+{
+    FILE *fp;
+    bool in_header;
 
-  /*
-   * Set up the CommonMark parser.
-   */
-  parser = cmark_parser_new(options);
-  
-  /*
-   * Either feed stdin or each of the named input files to the parser.
-   */
-   
-  fp = stdin;
-  outfp = stdout;
-  
-  in_header = true;
-  
-  switch (argc - argi) do {
-  default:
-    fp = freopen(argv[argi], "r", stdin);
+    int argi;
+    char buffer[16*BUFSIZ];
+    size_t bytes;
+    time_t now;
+    const char *username;
+    const char *title_arg = NULL, *css_arg = NULL;
+
+    cmark_parser *parser;
+    cmark_node *document;
+    cmark_option_t options = CMARK_OPT_DEFAULT | CMARK_OPT_ISO;
+
+    if (argc <= 2) {
+	usage();
+	exit(EXIT_FAILURE);
+    }
+
+    if ( (username = getenv("LOGNAME"))   != NULL ||
+         (username = getenv("USERNAME"))  != NULL )
+	strncpy(default_creator, username, sizeof default_creator -1U);
+	
+    time(&now);
+    strftime(default_date, sizeof default_date, "%Y-%m-%d", gmtime(&now));
+    setup(argv[1]);
     
-    if (fp == NULL)
-      error("Can't open \"%s\": %s\n", argv[argi], strerror(errno));
-
-  case 0:
-    while ((bytes = fread(buffer, 1U, sizeof buffer, fp)) > 0) {
-      size_t hbytes = 0U;
-      
-      if (in_header)
-        hbytes = do_pandoc(buffer, sizeof buffer, &meta);
-      in_header = false;
-                         
-      if (hbytes < bytes)
-        cmark_parser_feed(parser, buffer + hbytes, bytes - hbytes);
-        
-      if (bytes < sizeof(buffer)) {
-        break;
-      }
+    for (argi = 2; argi < argc && argv[argi][0] == '-'; ++argi) {
+	if (strcmp(argv[argi], "--version") == 0) {
+	    printf("cmark %s", CMARK_VERSION_STRING
+		" ( %s %s )\n",
+		cmark_repourl, cmark_gitident);
+	    printf(" - CommonMark converter\n(C) 2014, 2015 John MacFarlane\n");
+	    exit(EXIT_SUCCESS);
+	} else if ((strcmp(argv[argi], "--title") == 0) ||
+	    (strcmp(argv[argi], "-t") == 0)) {
+		title_arg = argv[++argi];
+	} else if ((strcmp(argv[argi], "--css") == 0) ||
+	    (strcmp(argv[argi], "-c") == 0)) {
+		css_arg = argv[++argi];
+	} else if (strcmp(argv[argi], "--sourcepos") == 0) {
+	    options |= CMARK_OPT_SOURCEPOS;
+	} else if (strcmp(argv[argi], "--hardbreaks") == 0) {
+	    options |= CMARK_OPT_HARDBREAKS;
+	} else if (strcmp(argv[argi], "--smart") == 0) {
+	    options |= CMARK_OPT_SMART;
+	} else if (strcmp(argv[argi], "--safe") == 0) {
+	    options |= CMARK_OPT_SAFE;
+	} else if (strcmp(argv[argi], "--normalize") == 0) {
+	    options |= CMARK_OPT_NORMALIZE;
+	} else if (strcmp(argv[argi], "--validate-utf8") == 0) {
+	    options |= CMARK_OPT_VALIDATE_UTF8;
+	} else if ((strcmp(argv[argi], "--help") == 0) ||
+	    (strcmp(argv[argi], "-h") == 0)) {
+		usage();
+		exit(EXIT_SUCCESS);
+	} else if (argv[argi][1] == NUL) {
+	    ++argi;
+	    break;
+	} else {
+	    usage();
+	    error("\"%s\": Invalid option.\n", argv[argi]);
+	}
     }
-  } while (++argi < argc);
 
-  /*
-   * Let the parser built it's document tree, then discard it.
-   */
-  document = cmark_parser_finish(parser);
-  cmark_parser_free(parser);
+    parser = cmark_parser_new(options);
 
-  /*
-   * Walk the document tree, generating output.
-   */
-  gen_document(document, options, &meta);
+    fp        = stdin;
+    outfp     = stdout;
+    in_header = true;
 
-  /*
-   * Discard the document tree.
-   */
-  cmark_node_free(document);
+    switch (argc - argi) do {
+    default:
+	if ((fp = freopen(argv[argi], "r", stdin)) == NULL)
+	    error("Can't open \"%s\": %s\n", argv[argi],
+	                                               strerror(errno));
+	    
+    case 0:
+	while ((bytes = fread(buffer, 1U, sizeof buffer, fp)) > 0) {
+	    size_t hbytes = 0U;
 
-  return EXIT_SUCCESS;
+	    if (in_header) {
+		char version[1024];
+		
+		hbytes = do_prolog(buffer, sizeof buffer);
+		
+		if (title_arg != NULL)
+		    do_Attr(META_DC_TITLE, title_arg, NTS);
+		    
+		do_Attr(META_CSS, css_arg ? css_arg : DEFAULT_CSS, NTS);
+		
+		sprintf(version, "%s; built: %s; id: %s",
+			cmark_repourl,
+			__DATE__ ", " __TIME__,
+			cmark_gitident);
+		do_Attr("cm2doc.version", version, NTS);
+		do_Attr("cmark.version", CMARK_VERSION_STRING, NTS);
+		
+		in_header = false;
+	    }
+
+	    if (hbytes < bytes)
+		cmark_parser_feed(parser, buffer + hbytes, bytes - hbytes);
+
+	    if (bytes < sizeof(buffer)) {
+		break;
+	    }
+	}
+    } while (++argi < argc);
+
+    document = cmark_parser_finish(parser);
+    cmark_parser_free(parser);
+
+    gen_document(document, options);
+
+    cmark_node_free(document);
+
+    return EXIT_SUCCESS;
 }
