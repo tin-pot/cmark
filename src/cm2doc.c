@@ -62,6 +62,7 @@ static const char cmark_repourl[]  = "URL: n/a";
  * reasons. (Maybe ending the attribute name at (the first) COLON
  * followed by SPACE would be a more reasonable approach ...).
  */
+ /*TODO: Colon in meta attribute names `% bar:val: Bar value` */
  
 #define META_DC_TITLE   "DC.title"
 #define META_DC_CREATOR "DC.creator"
@@ -200,6 +201,13 @@ static const char *rn_repl[RN_NUM]; /* Replacement texts for RNs. */
  * The output stream (right now, this is always stdout).
  */
 FILE *outfp;
+int outbol = 1;
+
+#define PUTC(ch)							\
+do {									\
+    putc(ch, outfp);							\
+    outbol = (ch == EOL);						\
+} while (0)
 
 /*
  * During parsing of the "Replacement Definition" file we keep these
@@ -236,10 +244,12 @@ void error(const char *msg, ...)
  * `struct trans_`
  */
  
-#define STAG_REPL 001
-#define ETAG_REPL 002
-#define STAG_BOL  010	    /* RFU. */
-#define ETAG_BOL  020	    /* RFU. */
+#define STAG_REPL       001
+#define ETAG_REPL       002
+#define STAG_BOL_START  010
+#define STAG_BOL_END    020
+#define ETAG_BOL_START  040
+#define ETAG_BOL_END    100
 
 /*typedef size_t textidx_t; /* Index into text_buf. */
 typedef size_t nameidx_t; /* Index into attr_buf. */
@@ -458,24 +468,22 @@ void usage()
     printf("  --version        Print version\n");
 }
 
-
-
-
-
-
 void do_Attr(const char *name, const char *val, size_t len)
 {
     push_att(name, val, len);
 }
 
-void put_repl(const char *repl)
+void put_repl(const char *repl, int bol[2])
 {
     const char *p = repl;
     char ch;
     
+    if (bol[0] && !outbol)
+	PUTC(EOL);
+    
     while ((ch = *p++) != NUL) {
 	if (ch != ATTR_SUBST)
-	    putc(ch, outfp);
+	    PUTC(ch);
 	else {
 	    const char *name = p;
 	    const char *val;
@@ -487,12 +495,17 @@ void put_repl(const char *repl)
 	    else if (ISDIGIT(name[0]))
 		depth = name[0] - '0', ++name;
 		
-	    if ((val = att_val(name, depth)) != NULL)
-		fputs(val, outfp);
-	    else
+	    if ((val = att_val(name, depth)) != NULL) {
+		size_t k;
+		for (k = 0U; val[k] != NUL; ++k)
+		    PUTC(val[k]);
+	    } else
 		val = "?";
 	}
     }
+    
+    if (bol[1] && !outbol)
+	PUTC(EOL);
 }
 
 void do_Start(cmark_node_type nt)
@@ -501,8 +514,12 @@ void do_Start(cmark_node_type nt)
     
     close_atts();
     
-    if (tr->defined & STAG_REPL)
-	put_repl(tr->stag_repl);
+    if (tr->defined & STAG_REPL) {
+	int bol[2];
+	bol[0] = (tr->defined & STAG_BOL_START) != 0;
+	bol[1] = (tr->defined & STAG_BOL_END)   != 0;
+	put_repl(tr->stag_repl, bol);
+    }
 }
 
 void do_Empty(cmark_node_type nt)
@@ -518,15 +535,19 @@ void do_Cdata(const char *cdata, size_t len)
     
     if (len == NTS) len = strlen(cdata);
     for (k = 0U; k < len; ++k)
-	putc(cdata[k], outfp);
+	PUTC(cdata[k]);
 }
 
 void do_End(cmark_node_type nt)
 {
     const struct trans_ *tr = &trans[nt];
     
-    if (tr->defined & ETAG_REPL) 
-	put_repl(tr->etag_repl);
+    if (tr->defined & ETAG_REPL) {
+	int bol[2];
+	bol[0] = (tr->defined & STAG_BOL_START) != 0;
+	bol[1] = (tr->defined & STAG_BOL_END)   != 0;
+	put_repl(tr->etag_repl, bol);
+    }
 	
     pop_atts();
 }
@@ -645,16 +666,18 @@ char *cmark_render_esis(cmark_node *root)
 static void gen_document(cmark_node *document,
                          cmark_option_t options)
 {
-  
+    int bol[2];
+    
     close_atts();
+    bol[0] = bol[1] = 0;
     
     if (rn_repl[RN_PROLOG] != NULL)
-	put_repl(rn_repl[RN_PROLOG]);
+	put_repl(rn_repl[RN_PROLOG], bol);
 
     cmark_render_esis(document);
 
     if (rn_repl[RN_EPILOG] != NULL)
-	put_repl(rn_repl[RN_EPILOG]);
+	put_repl(rn_repl[RN_EPILOG], bol);
 }
 
 void do_Attr(const char *name, const char *val, size_t len);
@@ -769,7 +792,7 @@ void comment(void)
 	    return;
 }
 
-char *get_repl(int);
+char *get_repl(int, int[2]);
 
 void rni_repl(void)
 {
@@ -777,7 +800,8 @@ void rni_repl(void)
     int ch;
     enum rn_ rn;
     const char *repl;
-
+    int bol[2];
+    
     ch = GETC();
     if (ISNMSTART(ch))
 	*p++ = toupper(ch);
@@ -808,16 +832,18 @@ void rni_repl(void)
 	return;
     }
 	
-    repl = get_repl(ch);
+    repl = get_repl(ch, bol);
     if (repl != NULL) {
 	rn_repl[rn] = repl;
     } 
 }
 
-char *get_repl(int ch)
+char *get_repl(int ch, int bol[2])
 {
     cmark_strbuf repl;
+    unsigned nstrings = 0U;
     
+    bol[0] = bol[1] = 0;
     cmark_strbuf_init(&repl, 16);
     
     while (ch != EOF) {
@@ -827,6 +853,9 @@ char *get_repl(int ch)
 		continue;
 	    else if (ch == '%') {
 		comment();
+		continue;
+	    } else if (ch == '+') {
+		bol[nstrings > 0] = 1;
 		continue;
 	    } else if (ch == '"') {
 		break;
@@ -876,11 +905,11 @@ char *get_repl(int ch)
 		break;
 	    }
 	}
-	
+	++nstrings;
     }
     
 done:
-    if (repl.size > 0U) {
+    if (nstrings > 0U) {
 	cmark_strbuf_putc(&repl, NUL);
 	return (char*)cmark_strbuf_detach(&repl);
     } else
@@ -893,6 +922,7 @@ void tag_repl(int ch, unsigned bits)
     char *p = name;
     cmark_node_type nt;
     const char *repl;
+    int bol[2];
     
     *p++ = toupper(ch);
     
@@ -917,7 +947,19 @@ void tag_repl(int ch, unsigned bits)
 	return;
     }
 
-    repl = get_repl(ch);
+    repl = get_repl(ch, bol);
+    
+    switch (bits & (STAG_REPL|ETAG_REPL)) {
+    case STAG_REPL:
+	if (bol[0]) bits |= STAG_BOL_START;
+	if (bol[1]) bits |= STAG_BOL_END;
+	break;
+    case ETAG_REPL:
+	if (bol[0]) bits |= ETAG_BOL_START;
+	if (bol[1]) bits |= ETAG_BOL_END;
+	break;
+    }
+    
     set_repl(nt, bits, repl);
 }
 
