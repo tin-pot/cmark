@@ -225,6 +225,7 @@ void push_att(const char *name, const char *val, size_t len)
     
     atts[2*natts+0] = nameidx;
     atts[2*natts+1] = validx;
+    ++natts;
 }
 
 void push_atts(const char **atts)
@@ -274,14 +275,14 @@ void do_Start(cmark_node_type nt, const char *atts[])
     if ((tr->defined & STAG_BIT) == 0U) 
 	return;
 
-    repl = textbuf.ptr;
+    repl = tr->stag_repl;
 	
     for (p = repl; (ch = *p) != NUL; ++p) {
-	if (ch != SO)
+	if (ch != SOH)
 	    putc(ch, outfp);
 	else {
 	    const char *name = p + 1;
-	    p += strlen(name) + 1;
+	    p = name + strlen(name);
 	    putval(name);
 	}
     }
@@ -311,7 +312,7 @@ void do_End(cmark_node_type nt)
     if ((tr->defined & STAG_BIT) == 0U) 
 	return;
 
-    repl = textbuf.ptr;
+    repl = tr->etag_repl;
 	
     fputs(repl, outfp);
 }
@@ -864,5 +865,5 @@ int main(int argc, char *argv[]) {
    */
   cmark_node_free(document);
 
-  return 0;
+  return EXIT_SUCCESS;
 }
