@@ -41,22 +41,25 @@ static const char cmark_gitident[] = "";
 static const char cmark_repourl[]  = "";
 #endif
 
+/*
+ * Use GIs conforming to Reference Concrete Syntax.
+ */
 static const char* const nodename[] = {
     "",
-    "DOCUMENT",
-    "BLOCK_QUOTE",
+    "DOC",
+    "QUOTE-BL",
     "LIST",
     "ITEM",
-    "CODE_BLOCK",
-    "HTML",
-    "PARAGRAPH",
+    "CODE-BL",
+    "HTML-BL",
+    "PARA",
     "HEADER",
     "HRULE",
     "TEXT",
-    "SOFTBREAK",
-    "LINEBREAK",
+    "SOFT-BR",
+    "LINE-BR",
     "CODE",
-    "INLINE_HTML",
+    "HTML",
     "EMPH",
     "STRONG",
     "LINK",
@@ -64,15 +67,15 @@ static const char* const nodename[] = {
 };
 
 
-#define ISDIGIT(C)  ( '0' <= (C) && (C) <= '9' )
-#define ISALPHA(C)  ( 'A' <= (C) && (C) <= 'Z' || \
-                      'a' <= (C) && (C) <= 'z' )
-#define ISHEX(C)    ( ISDIGIT(C) || \
-                      ('A' <= (C) && (C) <= 'F') \
-                      ('a' <= (C) && (C) <= 'f') )
-#define ISSPACE(C)  ( (C) == SP || (C) == EOL || (C) == HT )
-
-#define ISNMCHAR(C) (ISDIGIT(C) || ISALPHA(C))
+#define ISDIGIT(C)   ( '0' <= (C) && (C) <= '9' )
+#define ISALPHA(C)   ( 'A' <= (C) && (C) <= 'Z' || \
+                       'a' <= (C) && (C) <= 'z' )
+#define ISHEX(C)     ( ISDIGIT(C) || \
+                       ('A' <= (C) && (C) <= 'F') \
+                       ('a' <= (C) && (C) <= 'f') )
+#define ISSPACE(C)   ( (C) == SP || (C) == EOL || (C) == HT )
+#define ISNMSTART(C) ( ISDIGIT(C) || ISALPHA(C) )
+#define ISNMCHAR(C)  ( ISNMSTART(C) || (C) == '-' || (C) == '.' )
 
 FILE *outfp;
 
@@ -582,19 +585,20 @@ void comment(void)
 	    return;
 }
 
-void stag_repl(void)
+void stag_repl(int ch)
 {
-    int ch;
     char name[NODENAME_MAX];
     char *p = name;
     cmark_node_type nt;
     cmark_strbuf repl;
     
+    *p++ = toupper(ch);
+    
     while ((ch = GETC()) != EOF && ch != '>')
 	if (ISNMCHAR(ch))
 	    *p++ = toupper(ch);
 	else
-	    syntax_error("Not a NMCHAR: '%c'.\n", ch);
+	    syntax_error("'%c': Not a NMCHAR.\n", ch);    
 	    
     *p = NUL;
     
@@ -602,7 +606,7 @@ void stag_repl(void)
 	if (!stricmp(nodename[nt], name))
 	    break;
     if (nt > CMARK_NODE_LAST_INLINE)
-	syntax_error("Not a node type: \"%s\"", name);
+	syntax_error("\"%s\": Not a node type.", name);
 
     cmark_strbuf_init(&repl, 64);
     
@@ -655,26 +659,27 @@ string:
     set_trans(nt, STAG_BIT, repl.ptr);
 }
 
-void etag_repl(void)
+void etag_repl(int ch)
 {
-    int ch;
     char name[NODENAME_MAX];
     char *p = name;
     cmark_node_type nt;
     cmark_strbuf repl;
     
+    *p++ = toupper(ch);
+    
     while ((ch = GETC()) != EOF && ch != '>')
 	if (ISNMCHAR(ch))
 	    *p++ = toupper(ch);
 	else
-	    syntax_error("Not a NMCHAR: '%c'.\n", ch);    
+	    syntax_error("'%c': Not a NMCHAR.\n", ch);    
     *p = NUL;
     
     for (nt = CMARK_NODE_FIRST_BLOCK; nt <= CMARK_NODE_LAST_INLINE; ++nt)
 	if (!strcmp(nodename[nt], name))
 	    break;
     if (nt > CMARK_NODE_LAST_INLINE)
-	syntax_error("Unknown node type: \"%s\".", name);
+	syntax_error("\"%s\": Not a node type.", name);
     
     cmark_strbuf_init(&repl, 64);
     
@@ -738,14 +743,18 @@ void setup(const char *repl_filename)
     while ((ch = GETC()) != EOF) 
 	if (ISSPACE(ch))
 	    continue;
-	else if (ch == '<')
-    	    if ((ch = GETC()) == '/')
-    		etag_repl();
-	    else {
-		UNGETC(ch);
-    		stag_repl();
-	    }
-	else if (ch == '%')
+	else if (ch == '<') {
+    	    if ((ch = GETC()) == '/') {
+    		ch = GETC();
+    		if (ISNMSTART(ch))
+    		    etag_repl(ch);
+		else
+		    syntax_error("\'%c\' after '</': Not a NMSTART.\n", ch);
+	    } else if (ISNMSTART(ch)) {
+    		stag_repl(ch);
+	    } else
+		syntax_error("\'%c\' after '<': Not a NMSTART.\n", ch);
+	} else if (ch == '%')
 	    comment();
 	else
 	    syntax_error("Unexpected character \'%c\'.\n", ch);
