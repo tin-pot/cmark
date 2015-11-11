@@ -1,7 +1,9 @@
-#include <stdlib.h>
-#include <stdio.h>
-#include <string.h>
+#include <ctype.h>
 #include <errno.h>
+#include <stdarg.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
 
 #include "config.h"
 #include "cmark.h"
@@ -12,8 +14,32 @@
 #include "houdini.h"
 #include "scanners.h"
 
+#define NUL  0
+#define SOH  1
+#define STX  2
+#define ETX  3
+#define HT   9
+#define LF  10
+#define CR  13
+#define SO  14
+#define SI  15
+#define SP  32
+
+#define EOL LF
+
+#define NTS (~0U)
+
+#ifndef WITH_GITIDENT
+#define WITH_GITIDENT 1
+#endif
+
+#if WITH_GITIDENT
 extern const char cmark_gitident[];
 extern const char cmark_repourl[];
+#else
+static const char cmark_gitident[] = "";
+static const char cmark_repourl[]  = "";
+#endif
 
 static const char* const nodename[] = {
     "",
@@ -37,21 +63,16 @@ static const char* const nodename[] = {
     "IMAGE",
 };
 
-#define NUL  0
-#define SOH  1
-#define STX  2
-#define ETX  3
-#define HT   9
-#define LF  10
-#define CR  13
-#define SO  14
-#define SI  15
-#define SP  32
-#define EOL LF
 
-#define NTS (~0U)
+#define ISDIGIT(C)  ( '0' <= (C) && (C) <= '9' )
+#define ISALPHA(C)  ( 'A' <= (C) && (C) <= 'Z' || \
+                      'a' <= (C) && (C) <= 'z' )
+#define ISHEX(C)    ( ISDIGIT(C) || \
+                      ('A' <= (C) && (C) <= 'F') \
+                      ('a' <= (C) && (C) <= 'f') )
+#define ISSPACE(C)  ( (C) == SP || (C) == EOL || (C) == HT )
 
-#define BLANK(C) ((C) == SP || (C) == EOL || (C) == HT)
+#define ISNMCHAR(C) (ISDIGIT(C) || ISALPHA(C))
 
 FILE *outfp;
 
@@ -67,9 +88,12 @@ typedef long ucs_t;
 #define UEOF   (-1L)
 #endif /* Not needed yet. */
 
-void error(const char *msg)
+void error(const char *msg, ...)
 {
-    fputs(msg, stderr);
+    va_list va;
+    va_start(va, msg);
+    vfprintf(stderr, msg, va);
+    va_end(va);
     exit(EXIT_FAILURE);
 }
 
@@ -522,11 +546,42 @@ size_t do_pandoc(char *buffer, size_t nbuf, struct meta_ *meta)
     return nused;
 }
 
-void comment(FILE *trfp)
+/*
+ * setup -- Parse the replacement definition file.
+ */
+ 
+static const char *filename = "";
+static FILE *fp             = NULL;
+static unsigned lineno      = 0U;
+static unsigned colno       = 0U;
+
+#define COUNT_EOL() (++lineno, colno = 0U)
+
+#define GETC() (   ch = getc(fp), \
+                 ((ch == EOL) ? COUNT_EOL() : ++colno), \
+                   ch )
+                   
+#define UNGETC(ch) ungetc(ch, fp)
+
+void syntax_error(const char *msg, ...)
 {
+    va_list va;
+    va_start(va, msg);
+    fprintf(stderr, "%s(%u:%u): error: ", filename, lineno, colno);
+    vfprintf(stderr, msg, va);
+    va_end(va);
 }
 
-void stagrepl(FILE *trfp)
+void comment(void)
+{
+    int ch;
+
+    while ((ch = GETC()) != EOF)
+	if (ch == EOL)
+	    return;
+}
+
+void stag_repl(void)
 {
     int ch;
     char name[NODENAME_MAX];
@@ -534,32 +589,35 @@ void stagrepl(FILE *trfp)
     cmark_node_type nt;
     cmark_strbuf repl;
     
-    while ((ch = getc(trfp)) != EOF && ch != '>')
-	*p++ = ch;
+    while ((ch = GETC()) != EOF && ch != '>')
+	if (ISNMCHAR(ch))
+	    *p++ = toupper(ch);
+	else
+	    syntax_error("Not a NMCHAR: '%c'.\n", ch);
+	    
     *p = NUL;
     
     for (nt = CMARK_NODE_FIRST_BLOCK; nt <= CMARK_NODE_LAST_INLINE; ++nt)
-	if (!strcmp(nodename[nt], name))
+	if (!stricmp(nodename[nt], name))
 	    break;
-    if (nt > CMARK_NODE_LAST_INLINE) {
-	error("Not a node type!");
-    }
-    
+    if (nt > CMARK_NODE_LAST_INLINE)
+	syntax_error("Not a node type: \"%s\"", name);
+
     cmark_strbuf_init(&repl, 64);
     
-    while ((ch = getc(trfp)) != EOF && BLANK(ch))
+    while ((ch = GETC()) != EOF && ISSPACE(ch))
 	;
 	
     if (ch != '"') {
-	ungetc(ch, trfp);
+	UNGETC(ch);
 	return;
     }
     
-again:
-    while ((ch = getc(trfp)) != EOF && ch != '"') {
+string:
+    while ((ch = GETC()) != EOF && ch != '"') {
 	switch (ch) {
 	case '\\':
-	    ch = getc(trfp);
+	    ch = GETC();
 	    switch (ch) {
 	    case '\\': cmark_strbuf_putc(&repl, '\\');
 	    case 'n': cmark_strbuf_putc(&repl, '\n');
@@ -574,7 +632,7 @@ again:
             break;
 	case '[':
 	    cmark_strbuf_putc(&repl, SOH);
-	    while ((ch = getc(trfp)) != EOF && ch != ']')
+	    while ((ch = GETC()) != EOF && ch != ']')
 		cmark_strbuf_putc(&repl, ch);
 	    cmark_strbuf_putc(&repl, NUL);
 	    break;
@@ -584,19 +642,19 @@ again:
 	}
     }
     
-    while ((ch = getc(trfp)) != EOF && BLANK(ch))
+    while ((ch = GETC()) != EOF && ISSPACE(ch))
 	;
 	
     if (ch == '"')
-	goto again;
+	goto string;
 	    
-    ungetc(ch, trfp);
+    UNGETC(ch);
     cmark_strbuf_putc(&repl, NUL);
     
     set_trans(nt, STAG_BIT, repl.ptr);
 }
 
-void etagrepl(FILE *trfp)
+void etag_repl(void)
 {
     int ch;
     char name[NODENAME_MAX];
@@ -604,32 +662,34 @@ void etagrepl(FILE *trfp)
     cmark_node_type nt;
     cmark_strbuf repl;
     
-    while ((ch = getc(trfp)) != EOF && ch != '>')
-	*p++ = ch;
+    while ((ch = GETC()) != EOF && ch != '>')
+	if (ISNMCHAR(ch))
+	    *p++ = toupper(ch);
+	else
+	    syntax_error("Not a NMCHAR: '%c'.\n", ch);    
     *p = NUL;
     
     for (nt = CMARK_NODE_FIRST_BLOCK; nt <= CMARK_NODE_LAST_INLINE; ++nt)
 	if (!strcmp(nodename[nt], name))
 	    break;
-    if (nt > CMARK_NODE_LAST_INLINE) {
-	error("Not a node type!");
-    }
+    if (nt > CMARK_NODE_LAST_INLINE)
+	syntax_error("Unknown node type: \"%s\".", name);
     
     cmark_strbuf_init(&repl, 64);
     
-    while ((ch = getc(trfp)) != EOF && BLANK(ch)) 
+    while ((ch = GETC()) != EOF && ISSPACE(ch)) 
 	;
 	
     if (ch != '\"') {
-	ungetc(ch, trfp);
+	UNGETC(ch);
 	return;
     }
 	
-again:
-    while ((ch = getc(trfp)) != EOF && ch != '"') {
+string:
+    while ((ch = GETC()) != EOF && ch != '"') {
 	switch (ch) {
 	case '\\':
-	    ch = getc(trfp);
+	    ch = GETC();
 	    switch (ch) {
 	    case '\\': cmark_strbuf_putc(&repl, '\\');
 	    case 'n':  cmark_strbuf_putc(&repl, '\n');
@@ -648,39 +708,48 @@ again:
 	}
     }
     
-    while ((ch = getc(trfp)) != EOF && BLANK(ch))
+    while ((ch = GETC()) != EOF && ISSPACE(ch))
 	;
 	
     if (ch == '"')
-	goto again;
+	goto string;
 	    
-    ungetc(ch, trfp);
+    UNGETC(ch);
     cmark_strbuf_putc(&repl, NUL);
     
     set_trans(nt, ETAG_BIT, repl.ptr);
 }
 
-void setup(const char *trfile)
+void setup(const char *repl_filename)
 {
-    FILE *trfp = fopen(trfile, "r");
     int ch;
     
-    if (trfp == NULL) {
-	error("Can't open translation file.");
-    }
+    filename = repl_filename;
+    fp = fopen(filename, "r");
+    
+    if (fp == NULL)
+	error("Can't open repl file \"%s\": %s.", strerror(errno));
+    
+    COUNT_EOL();
     
     cmark_strbuf_init(&textbuf, INIT_SIZE);
 
-    while ((ch = getc(trfp)) != EOF)
-	if (ch == '<')
-    	    if ((ch = getc(trfp)) == '/')
-    		etagrepl(trfp);
+    while ((ch = GETC()) != EOF) 
+	if (ISSPACE(ch))
+	    continue;
+	else if (ch == '<')
+    	    if ((ch = GETC()) == '/')
+    		etag_repl();
 	    else {
-		ungetc(ch, trfp);
-    		stagrepl(trfp);
+		UNGETC(ch);
+    		stag_repl();
 	    }
 	else if (ch == '%')
-	    comment(trfp);
+	    comment();
+	else
+	    syntax_error("Unexpected character \'%c\'.\n", ch);
+		
+    fclose(fp);
 }
 
 int main(int argc, char *argv[]) {
@@ -696,18 +765,22 @@ int main(int argc, char *argv[]) {
   cmark_node *document;
   cmark_option_t options = CMARK_OPT_DEFAULT | CMARK_OPT_ISO;
   
-  setup("dummy.tr"); /* Get things going */
+  if (argc <= 2) {
+      print_usage();
+      exit(EXIT_FAILURE);
+  }
+  setup(argv[1]);
   
   meta.css = NULL;
   meta.title = NULL;
   
-  for (argi = 1; argi < argc; ++argi) {
+  for (argi = 2; argi < argc; ++argi) {
     if (strcmp(argv[argi], "--version") == 0) {
       printf("cmark %s", CMARK_VERSION_STRING
                                     " ( %s %s )\n",
                                     cmark_repourl, cmark_gitident);
       printf(" - CommonMark converter\n(C) 2014, 2015 John MacFarlane\n");
-      exit(0);
+      exit(EXIT_SUCCESS);
     } else if ((strcmp(argv[argi], "--title") == 0) ||
                (strcmp(argv[argi], "-t") == 0)) {
       meta.title = argv[++argi];
@@ -729,10 +802,10 @@ int main(int argc, char *argv[]) {
     } else if ((strcmp(argv[argi], "--help") == 0) ||
                (strcmp(argv[argi], "-h") == 0)) {
       print_usage();
-      exit(0);
+      exit(EXIT_SUCCESS);
     } else if (*argv[argi] == '-') {
       print_usage();
-      exit(1);
+      exit(EXIT_FAILURE);
     } else {
       break; /* Exit loop, treat remaining args as file names. */
     }
@@ -754,11 +827,8 @@ int main(int argc, char *argv[]) {
   default:
     fp = freopen(argv[argi], "r", stdin);
     
-    if (fp == NULL) {
-      fprintf(stderr, "Error opening file %s: %s\n", argv[argi],
-              strerror(errno));
-      exit(1);
-    }
+    if (fp == NULL)
+      error("Can't open \"%s\": %s\n", argv[argi], strerror(errno));
 
   case 0:
     while ((bytes = fread(buffer, 1, sizeof(buffer), fp)) > 0) {
