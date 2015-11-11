@@ -1,4 +1,4 @@
-#include <ctype.h>
+#include <ctype.h> /* toupper() */
 #include <errno.h>
 #include <stdarg.h>
 #include <stdio.h>
@@ -29,6 +29,10 @@
 
 #define NTS (~0U)
 
+/*
+ * Make available the Git commit ident and the repository URL.
+ * (Use -DWITH_GITIDENT=0 to supress this.)
+ */
 #ifndef WITH_GITIDENT
 #define WITH_GITIDENT 1
 #endif
@@ -42,10 +46,37 @@ static const char cmark_repourl[]  = "";
 #endif
 
 /*
- * Use GIs conforming to Reference Concrete Syntax.
+ * For each CommonMark node type we use a GI conforming to the
+ * ISO 8879 SGML Reference Concrete Syntax, which has 
+ *
+ *     NAMING LCNMSTRT ""
+ *            UCNMSTRT ""
+ *            LCNMCHAR "-."
+ *            UCNMCHAR "-."
+ *            NAMECASE GENERAL YES
+ *                     ENTITY  NO
+ *
+ * The Reference Quantity Set sets NAMELEN to 8, so these GIs are
+ * somewhat shorter than the ones in the CommonMark DTD -- which is
+ * a good thing IMO.
+ *
+ * (All this is of course purely cosmetic and/or a nod to SGML, where
+ * all this "structural mark-up" stuff came from -- You could define
+ * and use any GI and any NMSTART / NMCHAR character classes you want
+ * for the names of CommonMark node types.)
+ *
  */
-static const char* const nodename[] = {
-    "",
+#define NAMELEN 8
+#define ISUCNMSTRT(C) ( 'A' <= (C) && (C) <= 'Z' )
+#define ISLCNMSTRT(C) ( 'a' <= (C) && (C) <= 'z' )
+#define ISUCNMCHAR(C) ( ISUCNMSTRT(C) || (C) == '-' || (C) == '.' )
+#define ISLCNMCHAR(C) ( ISLCNMSTRT(C) || (C) == '-' || (C) == '.' )
+
+#define NODE_MAX       CMARK_NODE_LAST_INLINE
+#define NODENAME_LEN   NAMELEN
+
+static const char* const nodename[NODE_MAX+1] = {
+    "NONE", /* Should *never* occur! */
     "DOC",
     "QUOTE-BL",
     "LIST",
@@ -66,15 +97,15 @@ static const char* const nodename[] = {
     "IMAGE",
 };
 
+/*
+ * Character classification.
+ */
 
 #define ISDIGIT(C)   ( '0' <= (C) && (C) <= '9' )
-#define ISALPHA(C)   ( 'A' <= (C) && (C) <= 'Z' || \
-                       'a' <= (C) && (C) <= 'z' )
 #define ISHEX(C)     ( ISDIGIT(C) || \
-                       ('A' <= (C) && (C) <= 'F') \
-                       ('a' <= (C) && (C) <= 'f') )
+                      ('A'<=(C) && (C)<='F') || ('a'<=(C) && (C)<='f') )
 #define ISSPACE(C)   ( (C) == SP || (C) == EOL || (C) == HT )
-#define ISNMSTART(C) ( ISDIGIT(C) || ISALPHA(C) )
+#define ISNMSTART(C) ( ISDIGIT(C) || ISUCNMSTRT(C) || ISLCNMSTRT(C) )
 #define ISNMCHAR(C)  ( ISNMSTART(C) || (C) == '-' || (C) == '.' )
 
 FILE *outfp;
@@ -144,8 +175,6 @@ struct trans_ {
  * The translation definitions.
  */
  
-#define NODE_MAX (CMARK_NODE_LAST_INLINE + 1)
-#define NODENAME_MAX 32
 #define INIT_SIZE  2048
 
 static struct trans_ trans[NODE_MAX];
@@ -587,7 +616,7 @@ void comment(void)
 
 void stag_repl(int ch)
 {
-    char name[NODENAME_MAX];
+    char name[NODENAME_LEN+1];
     char *p = name;
     cmark_node_type nt;
     cmark_strbuf repl;
@@ -661,7 +690,7 @@ string:
 
 void etag_repl(int ch)
 {
-    char name[NODENAME_MAX];
+    char name[NODENAME_LEN+1];
     char *p = name;
     cmark_node_type nt;
     cmark_strbuf repl;
