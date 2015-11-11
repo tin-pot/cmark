@@ -51,7 +51,10 @@ static const char cmark_repourl[]  = "";
  * and use any GI and any NMSTART / NMCHAR character classes you want
  * for giving names to the CommonMark node types.)
  */
-#define NAMELEN 8
+#define NAMELEN    8
+#define ATTCNT    40
+#define ATTSPLEN 960
+
 #define ISUCNMSTRT(C) ( 'A' <= (C) && (C) <= 'Z' )
 #define ISLCNMSTRT(C) ( 'a' <= (C) && (C) <= 'z' )
 #define ISUCNMCHAR(C) ( ISUCNMSTRT(C) || (C) == '-' || (C) == '.' )
@@ -168,13 +171,14 @@ struct meta_ {
  * Translation definition.
  */
  
-#define STAG_REPL 1
-#define ETAG_REPL 2
-#define STAG_BOL  4
-#define ETAG_BOL  8
+#define STAG_REPL 001
+#define ETAG_REPL 002
+#define STAG_BOL  010
+#define ETAG_BOL  020
 
 typedef size_t textidx_t; /* Index into textbuf */
 typedef size_t attridx_t; /* Index into attrbuf */
+static const textidx_t NULLIDX = 0U;
 
 struct trans_ {
   const char* stag_repl;
@@ -201,20 +205,43 @@ static cmark_strbuf textbuf;
 static cmark_strbuf attrbuf;
 
 /*
- * Attribute name/value list.
+ * We "misuse" a `cmark_strbuf` here to store a growing array
+ * of `attridx_t` (not `char`) elements. There are no alignment issues
+ * as long as the array stays homogenuous, as the buffer is from
+ * `malloc()`, and thus suitably aligned.
  *
- * ATTCNT is the 
- * 
- * > Number of attribute names and name tokens in an element's
- * > attribute definitions.
+ * These `attridx_t` array members are indices into the `attrbuf`
+ * buffer and come in pairs:
  *
- * Reference Quantity Set: 40.
+ *     elem[2*n+0]: Start index of attribute name.
+ *     elem[2*n+1]: Start index of attribute value.
+ *
+ * An attribute name index of 0U marks the end of the attribute
+ * list (of the currently active node).
  */
-#define ATTCNT 255
-
-static attridx_t atts[2*ATTCNT+1];
+static cmark_strbuf attsbuf;
 static size_t natts = 0U;
+/*
+ * The elem[k] in the `attsbuf` array as an lvalue.
+ */
+#define ATTS(K) ( *((attridx_t*)attsbuf.ptr+(K)) )
 
+/*
+ * Append one more `attridx_t` element to the `attsbuf` array.
+ */
+#define PUT_ATTS(I) ( cmark_strbuf_put(&attsbuf, \
+                              (unsigned char*)&(I), sizeof(attridx_t)) )
+
+/*
+ * Remove pairs (ie "pop") from the end of the `attsbuf` array until 
+ * (0U, 0U) pair is gone.
+ */
+ 
+#define POP_ATTS() do while (natts > 1U) {   \
+	attridx_t i; --natts;		    \
+	i = ATTS(2*(natts));		    \
+	if (i == 0U) break;		    \
+    } while (0)
 
 /*
  * Add a translation to the table.
@@ -248,8 +275,10 @@ void print_usage() {
   printf("  --version        Print version\n");
 }
 
-#define reset_atts() do { \
-	natts = 0U; cmark_strbuf_clear(&attrbuf); \
+#define reset_atts() do {             \
+	natts = 0U;                   \
+	cmark_strbuf_clear(&attrbuf); \
+	cmark_strbuf_clear(&attsbuf); \
     } while (0)
 
 void push_att(const char *name, const char *val, size_t len)
@@ -266,11 +295,12 @@ void push_att(const char *name, const char *val, size_t len)
     cmark_strbuf_put (&attrbuf, val, len);
     cmark_strbuf_putc(&attrbuf, NUL);
     
-    atts[2*natts+0] = nameidx;
-    atts[2*natts+1] = validx;
+    PUT_ATTS(nameidx);
+    PUT_ATTS(validx);
     ++natts;
 }
 
+#if 0
 void push_atts(const char **atts)
 {
     size_t k;
@@ -279,6 +309,7 @@ void push_atts(const char **atts)
 	push_att(atts[2*k+0], atts[2*k+1], NTS);
 	    
 }
+#endif
 
 /*
  * Find attribute in active input element (ie in buf_atts),
@@ -288,9 +319,13 @@ const char* attval(const char *name)
 {
     size_t k;
     
-    for (k = 0; k < natts; ++k)
-	if (!strcmp(attrbuf.ptr+atts[2*k+0], name))
-	    return attrbuf.ptr+atts[2*k+1];
+    for (k = natts-1U; k > 0U; --k) {
+	attridx_t iname = ATTS(2*k+0U), ival = ATTS(2*k+1U);
+	if (iname == 0U)
+	    break; /* List end for current element */
+	if (!strcmp(attrbuf.ptr+iname, name))
+	    return attrbuf.ptr+ival;
+    }
 	    
     return NULL;
 }
@@ -307,35 +342,39 @@ void do_Attr(const char *name, const char *val, size_t len)
     push_att(name, val, len);
 }
 
-
-void do_Start(cmark_node_type nt, const char *atts[])
+void put_repl(const char *repl)
 {
-    const struct trans_ *tr = &trans[nt];
-    const char *repl;
-    const char *p;
+    const char *p = repl;
     char ch;
     
-    if ((tr->defined & STAG_REPL) == 0U) 
-	return;
-
-    repl = tr->stag_repl;
-	
-    for (p = repl; (ch = *p) != NUL; ++p) {
+    while ((ch = *p++) != NUL) {
 	if (ch != ATTR_SUBST)
 	    putc(ch, outfp);
 	else {
-	    const char *name = p + 1;
-	    p = name + strlen(name);
+	    const char *name = p;
+	    p = name + strlen(name)+1U;
 	    putval(name);
 	}
     }
-    
-    reset_atts();
 }
 
-void do_Empty(cmark_node_type nt, const char *atts[])
+void do_Start(cmark_node_type nt)
 {
-    do_Start(nt, atts);
+    const struct trans_ *tr = &trans[nt];
+    
+    if (tr->defined & STAG_REPL)
+	put_repl(tr->stag_repl);
+    
+    PUT_ATTS(NULLIDX); /* Must use a lvalue here. */
+    PUT_ATTS(NULLIDX);
+    ++natts;
+}
+
+void do_Empty(cmark_node_type nt)
+{
+    do_Start(nt);
+    
+    POP_ATTS();
 }
 
 void do_Cdata(const char *cdata, size_t len)
@@ -350,14 +389,11 @@ void do_Cdata(const char *cdata, size_t len)
 void do_End(cmark_node_type nt)
 {
     const struct trans_ *tr = &trans[nt];
-    const char *repl;
     
-    if ((tr->defined & STAG_REPL) == 0U) 
-	return;
-
-    repl = tr->etag_repl;
-	
-    fputs(repl, outfp);
+    POP_ATTS();
+    
+    if (tr->defined & ETAG_REPL) 
+	put_repl(tr->etag_repl);
 }
  
  
@@ -378,7 +414,7 @@ static int S_render_node(cmark_node *node, cmark_event_type ev_type)
     case CMARK_NODE_CODE:
     case CMARK_NODE_HTML:
     case CMARK_NODE_INLINE_HTML:
-      do_Start(node->type, NULL);
+      do_Start(node->type);
       do_Cdata(node->as.literal.data, node->as.literal.len);
       do_End(node->type);
       break;
@@ -401,20 +437,20 @@ static int S_render_node(cmark_node *node, cmark_event_type ev_type)
       }
       do_Attr("tight", cmark_node_get_list_tight(node) ?
                                             "true" : "false", NTS);
-      do_Start(node->type, NULL);
+      do_Start(node->type);
       break;
 
     case CMARK_NODE_HEADER:
       sprintf(buffer, "%d", node->as.header.level);
       do_Attr("level", buffer, NTS);
-      do_Start(node->type, NULL);
+      do_Start(node->type);
       break;
 
     case CMARK_NODE_CODE_BLOCK:
-      if (node->as.code.info.len > 0)
+      if (node->as.code.info.len > 0U)
         do_Attr("info", 
 		       node->as.code.info.data, node->as.code.info.len);
-      do_Start(node->type, NULL);
+      do_Start(node->type);
       do_Cdata(
 	         node->as.code.literal.data, node->as.code.literal.len);
       do_End(node->type);
@@ -424,18 +460,18 @@ static int S_render_node(cmark_node *node, cmark_event_type ev_type)
     case CMARK_NODE_IMAGE:
       do_Attr("destination", node->as.link.url.data, node->as.link.url.len);
       do_Attr("title", node->as.link.title.data, node->as.link.title.len);
-      do_Start(node->type, NULL);
+      do_Start(node->type);
       break;
 
     case CMARK_NODE_HRULE:
     case CMARK_NODE_SOFTBREAK:
     case CMARK_NODE_LINEBREAK:
-      do_Empty(node->type, NULL);
+      do_Empty(node->type);
       break;
 
     case CMARK_NODE_DOCUMENT:
     default:
-      do_Start(node->type, NULL);
+      do_Start(node->type);
       break;
     } /* entering switch */
   } else if (node->first_child) { /* NOT entering */
@@ -548,7 +584,7 @@ size_t do_pandoc(char *buffer, size_t nbuf, struct meta_ *meta)
         if (p == NULL)
             break;
             
-        ibol = p - buffer + 1; /* One after '\n'. */
+        ibol = (p - buffer) + 1U; /* One after '\n'. */
         
         /*
          * We copy buffer[ifield .. ibol-2], ie the line content
@@ -556,12 +592,12 @@ size_t do_pandoc(char *buffer, size_t nbuf, struct meta_ *meta)
          * terminator, of course.
          */
         nalloc = ibol - ifield;
-        if (nalloc > 1) {
+        if (nalloc > 1U) {
             char *pitem = malloc(nalloc);
             if (pitem == NULL)
     		break;
-            memcpy(pitem, buffer+ifield, nalloc-1);
-            pitem[nalloc-1] = '\0';
+            memcpy(pitem, buffer+ifield, nalloc-1U);
+            pitem[nalloc-1U] = '\0';
             meta->dc.item[iter] = pitem;
         }
         
@@ -597,11 +633,13 @@ size_t do_pandoc(char *buffer, size_t nbuf, struct meta_ *meta)
 
 #define COUNT_EOL() (++lineno, colno = 0U)
 
-#define GETC() (   ch = getc(replfp), \
-                 ((ch == EOL) ? COUNT_EOL() : ++colno), \
-                   ch )
+#define GETC()     ( ch = getc(replfp),			    \
+                     ((ch == EOL) ? COUNT_EOL() : ++colno), \
+                     ch )
                    
-#define UNGETC(ch) ungetc(ch, replfp)
+#define UNGETC(ch) ( ungetc(ch, replfp),		    \
+                     --colno,				    \
+                     ch )
 
 void syntax_error(const char *msg, ...)
 {
@@ -621,7 +659,7 @@ void comment(void)
 	    return;
 }
 
-void stag_repl(int ch)
+void tag_repl(int ch, unsigned bits)
 {
     char name[NODENAME_LEN+1];
     char *p = name;
@@ -638,129 +676,87 @@ void stag_repl(int ch)
 	    
     *p = NUL;
     
-    for (nt = CMARK_NODE_FIRST_BLOCK; nt <= CMARK_NODE_LAST_INLINE; ++nt)
-	if (!stricmp(nodename[nt], name))
-	    break;
-    if (nt > CMARK_NODE_LAST_INLINE)
-	syntax_error("\"%s\": Not a node type.", name);
-
-    cmark_strbuf_init(&repl, 64);
-    
-    while ((ch = GETC()) != EOF && ISSPACE(ch))
-	;
-	
-    if (ch != '"') {
-	UNGETC(ch);
-	return;
-    }
-    
-string:
-    while ((ch = GETC()) != EOF && ch != '"') {
-	switch (ch) {
-	case '\\':
-	    ch = GETC();
-	    switch (ch) {
-	    case '\\': cmark_strbuf_putc(&repl, '\\');
-	    case 'n': cmark_strbuf_putc(&repl, '\n');
-	    case 'r': cmark_strbuf_putc(&repl, '\r');
-	    case 's': cmark_strbuf_putc(&repl,  SP );
-	    case 't': cmark_strbuf_putc(&repl, '\t');
-	    case '[': cmark_strbuf_putc(&repl, '[' );
-	    case '"': cmark_strbuf_putc(&repl, '"' );
-	    default:  cmark_strbuf_putc(&repl, '\\');
-	              cmark_strbuf_putc(&repl,  ch );
-            }
-            break;
-	case '[':
-	    cmark_strbuf_putc(&repl, ATTR_SUBST);
-	    while ((ch = GETC()) != EOF && ch != ']')
-		cmark_strbuf_putc(&repl, ch);
-	    cmark_strbuf_putc(&repl, NUL);
-	    break;
-	default:
-	    cmark_strbuf_putc(&repl, ch);
-	    break;
-	}
-    }
-    
-    while ((ch = GETC()) != EOF && ISSPACE(ch))
-	;
-	
-    if (ch == '"')
-	goto string;
-	    
-    UNGETC(ch);
-    cmark_strbuf_putc(&repl, NUL);
-    
-    set_trans(nt, STAG_REPL, repl.ptr);
-}
-
-void etag_repl(int ch)
-{
-    char name[NODENAME_LEN+1];
-    char *p = name;
-    cmark_node_type nt;
-    cmark_strbuf repl;
-    
-    *p++ = toupper(ch);
-    
-    while ((ch = GETC()) != EOF && ch != '>')
-	if (ISNMCHAR(ch))
-	    *p++ = toupper(ch);
-	else
-	    syntax_error("'%c': Not a NMCHAR.\n", ch);    
-    *p = NUL;
-    
+    /*
+     * Look up the "GI" for a CommonMark node type.
+     */
     for (nt = CMARK_NODE_FIRST_BLOCK; nt <= CMARK_NODE_LAST_INLINE; ++nt)
 	if (!strcmp(nodename[nt], name))
 	    break;
-    if (nt > CMARK_NODE_LAST_INLINE)
-	syntax_error("\"%s\": Not a node type.", name);
-    
-    cmark_strbuf_init(&repl, 64);
-    
-    while ((ch = GETC()) != EOF && ISSPACE(ch)) 
-	;
-	
-    if (ch != '\"') {
-	UNGETC(ch);
+    if (nt > CMARK_NODE_LAST_INLINE) {
+	syntax_error("\"%s\": Not a CommonMark node type.", name);
 	return;
     }
-	
-string:
-    while ((ch = GETC()) != EOF && ch != '"') {
-	switch (ch) {
-	case '\\':
-	    ch = GETC();
-	    switch (ch) {
-	    case '\\': cmark_strbuf_putc(&repl, '\\');
-	    case 'n':  cmark_strbuf_putc(&repl, '\n');
-	    case 'r':  cmark_strbuf_putc(&repl, '\r');
-	    case 's':  cmark_strbuf_putc(&repl,  SP );
-	    case 't':  cmark_strbuf_putc(&repl, '\t');
-	    case '[':  cmark_strbuf_putc(&repl, '[' );
-	    case '"':  cmark_strbuf_putc(&repl, '"' );
-	    default:   cmark_strbuf_putc(&repl, '\\');
-	               cmark_strbuf_putc(&repl,  ch );
-            }
-            break;
-	default:
-	    cmark_strbuf_putc(&repl, ch);
-	    break;
+
+    cmark_strbuf_init(&repl, 16);
+    
+    while (ch != EOF) {
+
+	while ((ch = GETC()) != EOF) {
+	    if (ISSPACE(ch))
+		continue;
+	    else if (ch == '%') {
+		comment();
+		continue;
+	    } else if (ch == '"') {
+		break;
+	    }
+	    
+	    if (ch != '<') {
+		syntax_error("'%c': Unexpected.\n", ch);
+		continue;
+	    }
+	    
+	    UNGETC(ch);
+	    goto done;
 	}
+    
+	while ((ch = GETC()) != EOF && ch != '"') {
+	    switch (ch) {
+	    case '\\':
+		ch = GETC();
+		switch (ch) {
+		case '\\': ch = '\\'; break;
+		case  'n': ch = '\n'; break;
+		case  'r': ch = '\r'; break;
+		case  's': ch =  SP ; break;
+		case  't': ch = '\t'; break;
+		case  '[': ch = '[' ; break;
+		case  '"': ch = '"' ; break;
+		default:   cmark_strbuf_putc(&repl, '\\');
+		}
+		cmark_strbuf_putc(&repl, ch);
+		break;
+	    case '[':
+		cmark_strbuf_putc(&repl, ATTR_SUBST);
+		while ((ch = GETC()) != EOF && ch != ']') {
+		    if (ch == '"') {
+			syntax_error("Unclosed attribute reference (missing ']').\n");
+			UNGETC(ch);
+			ch = ']';
+		    } else if (ISSPACE(ch))
+			syntax_error("Space in attribute name.\n");
+		    else
+			cmark_strbuf_putc(&repl, ch);
+		}
+		cmark_strbuf_putc(&repl, NUL);
+		break;
+	    default:
+		cmark_strbuf_putc(&repl, ch);
+		break;
+	    }
+	}
+	
     }
     
-    while ((ch = GETC()) != EOF && ISSPACE(ch))
-	;
-	
-    if (ch == '"')
-	goto string;
-	    
-    UNGETC(ch);
-    cmark_strbuf_putc(&repl, NUL);
+done:
+    if (repl.size > 0U) {
+	cmark_strbuf_putc(&repl, NUL);
     
-    set_trans(nt, ETAG_REPL, repl.ptr);
+	set_trans(nt, bits, repl.ptr);
+    } else
+	set_trans(nt, bits, NULL);
 }
+
 
 void setup(const char *repl_filename)
 {
@@ -776,6 +772,12 @@ void setup(const char *repl_filename)
     COUNT_EOL();
     
     cmark_strbuf_init(&textbuf, INIT_SIZE);
+    cmark_strbuf_init(&attrbuf, ATTSPLEN);
+    cmark_strbuf_putc(&attrbuf, NUL); /* Ensure index = 0U is unsused.*/
+    cmark_strbuf_init(&attsbuf, ATTCNT * 2 * sizeof(attridx_t) + 2);
+    PUT_ATTS(NULLIDX);
+    PUT_ATTS(NULLIDX);
+    ++natts;
 
     while ((ch = GETC()) != EOF) 
 	if (ISSPACE(ch))
@@ -784,12 +786,12 @@ void setup(const char *repl_filename)
     	    if ((ch = GETC()) == '/') {
     		ch = GETC();
     		if (ISNMSTART(ch))
-    		    etag_repl(ch);
+    		    tag_repl(ch, ETAG_REPL);
 		else
 		    syntax_error("\'%c\' after '</': Not a NMSTART.\n",
 		                                                    ch);
 	    } else if (ISNMSTART(ch)) {
-    		stag_repl(ch);
+    		tag_repl(ch, STAG_REPL);
 	    } else
 		syntax_error("\'%c\' after '<': Not a NMSTART.\n", ch);
 	} else if (ch == '%')
@@ -870,6 +872,8 @@ int main(int argc, char *argv[]) {
    */
    
   fp = stdin;
+  outfp = stdout;
+  
   in_header = true;
   
   switch (argc - argi) do {
@@ -880,7 +884,7 @@ int main(int argc, char *argv[]) {
       error("Can't open \"%s\": %s\n", argv[argi], strerror(errno));
 
   case 0:
-    while ((bytes = fread(buffer, 1, sizeof(buffer), fp)) > 0) {
+    while ((bytes = fread(buffer, 1U, sizeof buffer, fp)) > 0) {
       size_t hbytes = 0U;
       
       if (in_header)
@@ -905,7 +909,6 @@ int main(int argc, char *argv[]) {
   /*
    * Walk the document tree, generating output.
    */
-  outfp = stdout;
   gen_document(document, options, &meta);
 
   /*
