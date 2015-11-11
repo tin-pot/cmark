@@ -14,20 +14,6 @@
 #include "houdini.h"
 #include "scanners.h"
 
-#define NUL  0
-#define SOH  1
-#define STX  2
-#define ETX  3
-#define HT   9
-#define LF  10
-#define CR  13
-#define SO  14
-#define SI  15
-#define SP  32
-
-#define EOL LF
-
-#define NTS (~0U)
 
 /*
  * Make available the Git commit ident and the repository URL.
@@ -100,6 +86,18 @@ static const char* const nodename[NODE_MAX+1] = {
 /*
  * Character classification.
  */
+ 
+#define NUL  0
+#define SOH  1
+#define HT   9 /* SEPCHAR */
+#define LF  10 /* RS */
+#define CR  13 /* RE */
+#define SP  32 /* SPACE */
+
+#define EOL        LF
+#define ATTR_SUBST SOH
+
+#define NTS (~0U)
 
 #define ISDIGIT(C)   ( '0' <= (C) && (C) <= '9' )
 #define ISHEX(C)     ( ISDIGIT(C) || \
@@ -159,8 +157,10 @@ struct meta_ {
  * Translation definition.
  */
  
-#define STAG_BIT 1
-#define ETAG_BIT 2
+#define STAG_REPL 1
+#define ETAG_REPL 2
+#define STAG_BOL  4
+#define ETAG_BOL  8
 
 typedef size_t textidx_t; /* Index into textbuf */
 typedef size_t attridx_t; /* Index into attrbuf */
@@ -168,7 +168,7 @@ typedef size_t attridx_t; /* Index into attrbuf */
 struct trans_ {
   const char* stag_repl;
   const char* etag_repl;
-  unsigned defined; /* STAG_BIT, ETAG_BIT */
+  unsigned defined; /* STAG_REPL, ETAG_REPL, STAG_BOL, ETAG_BOL. */
 };
 
 /*
@@ -209,12 +209,12 @@ static size_t natts = 0U;
  * Add a translation to the table.
  */
 void set_trans(cmark_node_type nt,
-	   unsigned tag_bit, /* STAG_BIT or ETAG_BIT */
+	   unsigned tag_bit, /* STAG_REPL or ETAG_REPL */
            const char *repl)
 {
     switch (tag_bit) {
-    case STAG_BIT: trans[nt].stag_repl = repl; break;
-    case ETAG_BIT: trans[nt].etag_repl = repl; break;
+    case STAG_REPL: trans[nt].stag_repl = repl; break;
+    case ETAG_REPL: trans[nt].etag_repl = repl; break;
     default:
 	error("Invalid tag_bit");
     }
@@ -304,13 +304,13 @@ void do_Start(cmark_node_type nt, const char *atts[])
     const char *p;
     char ch;
     
-    if ((tr->defined & STAG_BIT) == 0U) 
+    if ((tr->defined & STAG_REPL) == 0U) 
 	return;
 
     repl = tr->stag_repl;
 	
     for (p = repl; (ch = *p) != NUL; ++p) {
-	if (ch != SOH)
+	if (ch != ATTR_SUBST)
 	    putc(ch, outfp);
 	else {
 	    const char *name = p + 1;
@@ -341,7 +341,7 @@ void do_End(cmark_node_type nt)
     const struct trans_ *tr = &trans[nt];
     const char *repl;
     
-    if ((tr->defined & STAG_BIT) == 0U) 
+    if ((tr->defined & STAG_REPL) == 0U) 
 	return;
 
     repl = tr->etag_repl;
@@ -665,7 +665,7 @@ string:
             }
             break;
 	case '[':
-	    cmark_strbuf_putc(&repl, SOH);
+	    cmark_strbuf_putc(&repl, ATTR_SUBST);
 	    while ((ch = GETC()) != EOF && ch != ']')
 		cmark_strbuf_putc(&repl, ch);
 	    cmark_strbuf_putc(&repl, NUL);
@@ -685,7 +685,7 @@ string:
     UNGETC(ch);
     cmark_strbuf_putc(&repl, NUL);
     
-    set_trans(nt, STAG_BIT, repl.ptr);
+    set_trans(nt, STAG_REPL, repl.ptr);
 }
 
 void etag_repl(int ch)
@@ -752,7 +752,7 @@ string:
     UNGETC(ch);
     cmark_strbuf_putc(&repl, NUL);
     
-    set_trans(nt, ETAG_BIT, repl.ptr);
+    set_trans(nt, ETAG_REPL, repl.ptr);
 }
 
 void setup(const char *repl_filename)
