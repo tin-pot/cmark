@@ -168,6 +168,9 @@ static const char *rn_repl[RN_NUM]; /* Replacement texts for RNs. */
  
 #define NUL  0
 #define SOH  1
+#define STX  2
+#define ETX  3
+#define EOT  4
 
 /*
  * The C0 control characters allowed in SGML/XML; all other C0 are
@@ -179,8 +182,8 @@ static const char *rn_repl[RN_NUM]; /* Replacement texts for RNs. */
 #define SP  32	/* SGML SPACE */
 
 #define EOL          LF	    /* Per ISO C90 text stream. */
-#define ATTR_SUBST   SOH    /* "Internal" C0 control (NONSGML). */
 
+ 
 /*
  * SGML function roles.
  */
@@ -488,6 +491,63 @@ void do_Attr(const char *name, const char *val, size_t len)
     push_att(name, val, len);
 }
 
+const char *put_subst(const char *p, int output);
+
+const char *put_text(const char *p, int output)
+{
+    int ch;
+    
+    assert(p[-1] == STX);
+    while ((ch = *p++) != ETX) {
+	if (ch == SOH)
+	    put_subst(p, output);
+	else if (output)
+	    PUTC(ch);
+    }
+    return p;
+}
+
+const char *put_subst(const char *p, int output)
+{
+    const char *name = p;
+    const char *val = NULL;
+    const char *cmpval = NULL;
+    int pred;
+    unsigned depth = 1U;
+    
+    assert(p[-1] == SOH);
+    
+    p = name + strlen(name)+1U;
+
+    if (name[0] == '.')
+	depth = ~0U, ++name;
+    else if (ISDIGIT(name[0]))
+	depth = name[0] - '0', ++name;
+
+    if (output)
+	val = att_val(name, depth);
+    
+    if (p[0] != STX && p[0] != EOT) {
+	cmpval = p;
+	p = cmpval + strlen(cmpval)+1U;
+    }
+    pred = (val != NULL && cmpval != NULL) ? strcmp(val, cmpval) == 0 :
+           (val != NULL);
+    if (p[0] == STX) {
+	p = put_text(p+1, output && pred);
+	if (p[0] == STX) 
+	    p = put_text(p+1, output && !pred);
+    } else if (output) {
+	if (val != NULL) {
+	    size_t k;
+	    for (k = 0U; val[k] != NUL; ++k)
+		PUTC(val[k]);
+	}
+    } 
+    assert(p[0] == EOT);
+    return ++p;
+}
+
 void put_repl(const char *repl, int bol[2])
 {
     const char *p = repl;
@@ -497,26 +557,10 @@ void put_repl(const char *repl, int bol[2])
 	PUTC(EOL);
     
     while ((ch = *p++) != NUL) {
-	if (ch != ATTR_SUBST)
+	if (ch != SOH)
 	    PUTC(ch);
-	else {
-	    const char *name = p;
-	    const char *val;
-	    unsigned depth = 1U;
-	    p = name + strlen(name)+1U;
-	    
-	    if (name[0] == '.')
-		depth = ~0U, ++name;
-	    else if (ISDIGIT(name[0]))
-		depth = name[0] - '0', ++name;
-		
-	    if ((val = att_val(name, depth)) != NULL) {
-		size_t k;
-		for (k = 0U; val[k] != NUL; ++k)
-		    PUTC(val[k]);
-	    } else
-		val = "?";
-	}
+	else 
+	    p = put_subst(p, 1);
     }
     
     if (bol[1] && !outbol)
@@ -809,9 +853,9 @@ do {									\
  *
  * Uses `char ch`.
  */
-#define DELIM(STR) delim(&ch, STR)
+#define DELIM(STR) delim_(&ch, STR)
 
-int delim(int *pch, const char STR[2])
+int delim_(int *pch, const char STR[2])
 {
     int ch = *pch;
     int ch0 = ch;
@@ -896,6 +940,85 @@ int rni_repl(int ch)
     return GETC();
 }
 
+/*
+ * subst = "[" , name , [ "?" , { elem } , [ ":"  , { elem } ] ] , "]" ;
+ *
+ *         SOH , str , NUL , [ STX , subst ,  [ ETB  , subst ] ] , EOT
+ *
+ * elem = restricted char | escape sequence | subst ;
+ * restricted char = char - ( LIT | ":" | "]" ) ;
+ */
+int substitution(cmark_strbuf *pbuf, int ch, const char lit[2])
+{
+    enum { IN_ATTR_NAME , IN_CMP_VAL, IN_TEXT_1 , IN_TEXT_2 } state;
+    
+    cmark_strbuf_putc(pbuf, SOH);
+    
+    state = IN_ATTR_NAME;
+    while (ch != EOF && !DELIM(DSC)) {
+	if (DELIM(lit)) {
+	    syntax_error("Unclosed attribute reference "
+		"(missing '" DSC "').\n");
+	    if (state == IN_ATTR_NAME)
+		cmark_strbuf_putc(pbuf, NUL);
+	    else
+		cmark_strbuf_putc(pbuf, ETX);
+	    break;
+	}
+	
+	switch (state) {
+	case IN_ATTR_NAME:
+	    if (ISSPACE(ch))
+		syntax_error("Space in attribute name.\n");
+	    else if (ch == '=') { 
+		cmark_strbuf_putc(pbuf, NUL);
+		state = IN_CMP_VAL;
+	    } else if (ch == '?') {
+		cmark_strbuf_putc(pbuf, NUL);
+		cmark_strbuf_putc(pbuf, STX);
+		state = IN_TEXT_1;
+	    } else
+		cmark_strbuf_putc(pbuf, ch);
+	    ch = GETC();
+	    break;
+	case IN_CMP_VAL:
+	    if (ch == '?') {
+		cmark_strbuf_putc(pbuf, NUL);
+		cmark_strbuf_putc(pbuf, STX);
+		state = IN_TEXT_1;
+	    } else 
+		cmark_strbuf_putc(pbuf, ch);
+	    ch = GETC();
+	    break;
+	case IN_TEXT_1:
+	case IN_TEXT_2:
+	    if (ch == ':') {
+		if (state == IN_TEXT_1) {
+		    cmark_strbuf_putc(pbuf, ETX);
+		    cmark_strbuf_putc(pbuf, STX);
+		    state = IN_TEXT_2;
+		} else {
+		    syntax_error("Already had ':'\n");
+		}
+		ch = GETC();
+	    } else if (DELIM(DSO)) {
+		ch = substitution(pbuf, ch, lit);
+	    } else {
+		cmark_strbuf_putc(pbuf, ch);
+		ch = GETC();
+	    }
+	}
+    }
+    
+    if (state == IN_ATTR_NAME)
+	cmark_strbuf_putc(pbuf, NUL);
+    else
+	cmark_strbuf_putc(pbuf, ETX);
+    cmark_strbuf_putc(pbuf, EOT);
+    
+    return ch;
+}
+
 int get_string(cmark_strbuf *pbuf, int ch, const char lit[2])
 {
     while (!DELIM(lit)) {
@@ -918,20 +1041,7 @@ int get_string(cmark_strbuf *pbuf, int ch, const char lit[2])
 	    
 	} else if (DELIM(DSO)) {
 	
-	    cmark_strbuf_putc(pbuf, ATTR_SUBST);
-	    while (ch != EOF && !DELIM(DSC)) {
-		if (DELIM(lit)) {
-		    syntax_error("Unclosed attribute reference "
-					      "(missing '" DSC "').\n");
-		    break;
-		}
-		if (ISSPACE(ch))
-		    syntax_error("Space in attribute name.\n");
-		else
-		    cmark_strbuf_putc(pbuf, ch);
-		ch = GETC();
-	    }
-	    cmark_strbuf_putc(pbuf, NUL);
+	    ch = substitution(pbuf, ch, lit);
 	    
 	} else {
 	    cmark_strbuf_putc(pbuf, ch);
@@ -1176,7 +1286,7 @@ int main(int argc, char *argv[])
 		    
 		do_Attr(META_CSS, css_arg ? css_arg : DEFAULT_CSS, NTS);
 		
-		sprintf(version, "\n\t\t%s;\n\t\tbuilt: %s;\n\t\tid: %s\n\t",
+		sprintf(version, "\n\t\t%s;\n\t\tdate: %s;\n\t\tid: %s\n\t",
 			cmark_repourl,
 			__DATE__ ", " __TIME__,
 			cmark_gitident);
