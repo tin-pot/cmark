@@ -1,93 +1,99 @@
-<html><head><title></title></head><body><h2>
+<!DOCTYPE html>
+<html><head><title>The Backend</title></head><body>
+<blockquote>
+    http://web.cs.wpi.edu/~kal/elecdoc/sgml/replacedesc.html
+</blockquote>
+<h2>
 The Backend
-</h2><br>
-The backend of the Amsterdam SGML Parser
-is simple, but powerful enough to create typeset documents
-from SGML documents.
-The user can specify a mapping from each starttag with its attributes
-to a replacement text,
-and a mapping from each endtag to a replacement text.
+</h2>
+<p>The backend of the Amsterdam SGML Parser is simple, but powerful
+enough to create typeset documents from SGML documents. The user
+can specify a mapping from each starttag with its attributes to a
+replacement text, and a mapping from each endtag to a replacement text.
 For example the mapping:
-<pre>&lt;!usemap ex-doc>
-[title>    ".TL"
-[head>     ".NH &lt;![CDATA[[level]]]>"
+<pre>
+&lt;title&gt;    ".TL"
+&lt;head&gt;     ".NH [level]"
 </pre>
-denotes that the starttag of the element `title' is to be
-replaced by the string `.TL', which is the Troff ms-macro
+<p>denotes that the starttag of the element 'title' is to be
+replaced by the string '.TL', which is the Troff ms-macro
 troff ms macro
 for a title.
-The starttag of `head' is to be replaced by the string `.NH'
-followed by the value of the attribute `level'.
-Of course `level' must be a valid attribute of `head', otherwise
+<p>The starttag of 'head' is to be replaced by the string '.NH'
+followed by the value of the attribute 'level'.
+Of course 'level' must be a valid attribute of 'head', otherwise
 an error message is given.
-The replacement text stands between double quotes `"' and an attribute
+<p>The replacement text stands between double quotes '"' and an attribute
 value is referred to by placing the attribute name between square
-brackets `[' and `]'.
-The <tt></tt> can be called with a user specified replacement file,
+brackets '[' and ']'.
+<p>The <tt></tt> can be called with a user specified replacement file,
 which contains the mapping for the tags in the DTD.
 If a replacement file is specified, the tags in the output
 are replaced according to the mappings in the replacement file.
-Otherwise the `complete' document will be output.
-For example, if the replacement file looks like:
-<pre>&lt;!usemap ex-doc>
-[memo>         ".MS"
-[sender>       "From: "
-]forename>    " "
-[receivers>    "To: "
-[contents>     ".PP"
-]memo>        ".ME"
+Otherwise the 'complete' document will be output.
+<p>For example, if the replacement file looks like:
+<pre>
+&lt;memo&gt;         ".MS"
+&lt;sender&gt;       "From: "
+&lt;forename&gt;     " "
+&lt;receivers&gt;    "To: "
+&lt;contents&gt;     ".PP"
+&lt;/memo&gt;        ".ME"
 </pre>
-The SGML document in figure 1 will be converted
+<p>The SGML document in figure 1 will be converted
 to the Troff document in figure 2.
-Tags that are not mentioned in the replacement file are
+<p>Tags that are not mentioned in the replacement file are
 mapped to the empty string and they do not appear in the output.
-<pre>&lt;!usemap ex-doc>
-[memo>[sender>
-[forename>Jos[surname>Warmer
-[receivers>
-[forename>Sylvia[surname>van Egmond
-[contents>The meeting of tomorrow will be postponed.
-[/memo>
-&lt;label>Figure 1: SGML input document
+<pre>
+&lt;memo&gt;&lt;sender&gt;
+&lt;forename&gt;Jos&lt;surname&gt;Warmer
+&lt;receivers&gt;
+&lt;forename&gt;Sylvia&lt;surname&gt;van Egmond
+&lt;contents&gt;The meeting of tomorrow will be postponed.
+&lt;/memo&gt;
 </pre>
-<pre>&lt;!usemap ex-doc>&lt;ex-body>
+<center>Figure 1: SGML input document</center>
+
+<pre>
  .MS
  From: Jos Warmer
  To: Sylvia van Egmond
  .PP
  The meeting of tomorrow will be postponed.
  .ME
-&lt;label>Figure 2: SGML output document, with replacement
 </pre>
-It is possible to specify that the replacement text must appear on
+<center>Figure 2: SGML output document, with replacement</center>
+
+<p>It is possible to specify that the replacement text must appear on
 a separate line.
-This is needed by Troff, since each Troff command must start with a `.'
+<p>This is needed by Troff, since each Troff command must start with a '.'
 at the start of a line.
-Provisions are made to make it possible to put any
+<p>Provisions are made to make it possible to put any
 (including non-printable) character in the replacement text.
 This is done by an escape mechanism similar to that of
 the C programming language.
-<br>
-Our experience is that it is easy to convert an SGML document
+<p>Our experience is that it is easy to convert an SGML document
 to Troff or \*T, or some other similar looking code, to produce a typeset
 document on paper.
 <h2>
 The replacement file
 </h2><br>
-When a document parser is called, a replacement file may be specified.
+<p>When a document parser is called, a replacement file may be specified.
 The replacement file contains the mapping between starttags and their
 attributes and endtags to some replacement text.
-The syntax of the file is given in figure 3.
+<p>The syntax of the file is given in figure 3.
 We use the formalism of LLgen to describe the syntax.
 Each identifier in uppercase is a token.
-Text between `&lt;' and `>' contains an informal description.
+Text between '&lt;' and '&gt;' contains an informal description.
 <pre>
 %token COMMENT, PLUS, STRING_OPEN, STRING_CLOSE, ATT_OPEN, ATT_CLOSE,
        CHARACTER, EOLN, STAGO, ETAGO, TAGC;
 
 %start file, file;
 </pre>
+
 <center>Figure 3: syntax of replacement file</center>
+
 <pre>
 file        : [repl | comment]* ;
 comment     : COMMENT chars EOLN ;
@@ -100,10 +106,10 @@ rep_text    : [string s*]* ;
 string      : STRINGOPEN [chars | attref]* STRINGCLOSE ;
 chars       : CHARACTER* ;
 attref      : ATTOPEN name ATTCLOSE ;
-name        : &lt; SGML name> ;
-s           : &lt; layout characters: space, tab, newline, return>
+name        : &lt; SGML name &gt; ;
+s           : &lt; layout characters: space, tab, newline, return &gt; ;
 </pre>
-<p>
+
 <center>
 <table border=5>
 <caption>Figure 4: Definition of the tokens
@@ -114,84 +120,81 @@ s           : &lt; layout characters: space, tab, newline, return>
 <tr><td>STRING_CLOSE<td>"<td>string
 <tr><td>ATT_OPEN<td>[<td>string
 <tr><td>ATT_CLOSE<td>]<td>attref
-<tr><td>CHARACTER<td>&lt;any character><td>always
-<tr><td>EOLN<td>&lt;the newline character><td>comment
+<tr><td>CHARACTER<td>&lt;any character&gt;<td>always
+<tr><td>EOLN<td>&lt;the newline character&gt;<td>comment
 <tr><td>STAGO<td>&lt;<td>repl
 <tr><td>ETAGO<td>&lt;/<td>repl
-<tr><td>TAGC<td>><td>starttag, endtag
+<tr><td>TAGC<td>&gt;<td>starttag, endtag
 </table>
 </center>
 <p>
 A <tt>comment</tt> is ignored.
 A <tt>start_repl</tt> (<tt>end_rep</tt>) defines the mapping for the named starttag
 (<tt>endtag</tt>).
-<br>
-If the first PLUS in a <tt>repl</tt> is present, then the replacement text must
+<p>If the first PLUS in a <tt>repl</tt> is present, then the replacement text must
 start at the beginning of a line.
-If the second PLUS in a <tt>repl</tt> is present, then the replacement text must
+<p>If the second PLUS in a <tt>repl</tt> is present, then the replacement text must
 be directly followed by a newline in the output.
 When both PLUS's are present, the effect is that he replacement text
 is on a separate line, apart from its surrounding text, with no empty
 lines inserted.
-<br>
+<p>
 <tt>rep_text</tt> is the replacement text itself, which consists of any number
 of <tt>strings</tt>.
-All specified <tt>strings</tt> are concatenated to form the replacement text.
+<p>All specified <tt>strings</tt> are concatenated to form the replacement text.
 Putting replacement text in several <tt>strings</tt> is only useful to
 get a neat layout in the replacement file.
 So
 <pre>
-&stago;table>  ".[keep]\en" ".TS"
+&lt;table&gt;  ".[keep]\en" ".TS"
 </pre>
 is identical to
 <pre>
-&#60;table>  ".[keep]\en"
+&lt;table&gt;  ".[keep]\en"
          ".TS"
 </pre>
-<br>
+<p>
 The tokens are recognised only within the rule specified in the
 third column of the definition of the tokens in figure 4.
 There is one exception for the ATT_OPEN token:
 ATT_OPEN is never recognised inside the replacement text of an <tt>end_repl</tt>,
 because there are no attributes associated with an endtag.
-<br>
+<p>
 Within a <tt>string</tt>, characters can be escaped to ensure that they
 are recognised as CHARACTER's.
-For instance, this can be used to put a `"' in a <tt>string</tt>.
+For instance, this can be used to put a '"' in a <tt>string</tt>.
 Escape sequences can also be used to denote unprintable characters.
 The escape mechanism is similar to that of the C programming language.
 The recognised escape-sequences are shown in figure 5.
-<br>
+</p>
 <center>
 <table border=5>
 <caption>Figure 5: Recognised escape-sequences
 <tr><th>sequence<th>name
-<tr><td>\en<td>newline
-<tr><td>\et<td>tab
-<tr><td>\er<td>return
-<tr><td>\es<td>space
-<tr><td>\ef<td>formfeed
-<tr><td>\e\e<td>\e
-<tr><td>\e[<td>[
-<tr><td>\e"<td>"
-<tr><td>\e@lt;number><td>where @lt;number> is an octal number character with octal value &lt;number>
+<tr><td>\n<td>newline
+<tr><td>\t<td>tab
+<tr><td>\r<td>return
+<tr><td>\s<td>space
+<tr><td>\f<td>formfeed
+<tr><td>\\<td>\
+<tr><td>\[<td>[
+<tr><td>\"<td>"
+<tr><td>\&lt;number&gt;<td>where &lt;number&gt; is an octal number character with octal value &lt;number&gt;
 </table>
 </center>
-<br>
-The escape character is defined as '\e'.
+<p>The escape character is defined as '\'.
 An escape character followed by a character that is not mentioned
 in figure 5, denotes itself.
 For example, if the replacement file contains:
-<pre>&lt;!usemap 	 ex-doc >
-[report>   "line 1\en\e"line 2\e"\e12line 3"
+<pre>
+&lt;report&gt;   "line 1\n\"line 2\"\12line 3"
 </pre>
-then &lt;report> is replaced by:
+then &lt;report&gt; is replaced by:
 <pre>
 line 1
 "line 2"
 line 3
 </pre>
-<br>
-See the file `article.rep' in the distributed sources
+<p>See the file 'article.rep' in the distributed sources
 for a more complete example of a replacement file.
 
