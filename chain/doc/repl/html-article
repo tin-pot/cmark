@@ -52,13 +52,13 @@
 
 % CommonMark node types:
 %
-% DOC		QUOTE-BL	LIST		ITEM		CODE-BL
-% HTML-B	PARA		HEADER		HRULE		TEXT
-% SOFT-BR	LINE-BR		CODE		HTML		EMPH
-% STRONG	LINK		IMAGE
+% CM.DOC	CM.QUO-B	CM.LIST		CM.LI		CM.COD-B
+% CM.FRG-B	CM.PAR		CM.HDR		CM.HR		CM.TXT
+% CM.SF-BR	CM.LN-BR	CM.COD		CM.FRG		CM.EMPH
+% CM.STRN	CM.LNK		CM.IMG
 
-% DOC - Maps to HTML <BODY>
-<DOC>
+% CM.DOC - Maps to HTML <BODY>
+<CM.DOC>
 	+ "<BODY>"
 	"<H1>[.DC.title]</H1>\n"
 	'<DIV class="abstract">\n'
@@ -66,78 +66,78 @@
 	"[.DC.date]</P>\n"
 	"</DIV>" +
 
-<QUOTE-BL>
+<CM.QUO-B>
 	+ "<BLOCKQUOTE>" +
-</QUOTE-BL>
+</CM.QUO-B>
 	+ "</BLOCKQUOTE>" +
 
-% LIST - Maps to <OL> or <UL>.
-<LIST>
+% CM.LIST - Maps to <OL> or <UL>.
+<CM.LIST>
 	+ "<[type=ordered?OL:UL]>"
-</LIST>
+</CM.LIST>
 	"</[type=ordered?OL:UL]>" +
 
- % ITEM - Maps to <LI>, but </LI> can be omitted.
-<ITEM>
+ % CM.LI - Maps to <LI>, but </LI> can be omitted.
+<CM.LI>
 	"<LI>"
 
-<CODE-BL>
+<CM.COD-B>
 	+ "<PRE><CODE>" +
-</CODE-BL>
+</CM.COD-B>
 	+ "</CODE></PRE>" +
 
-% LIT-BL ("HTML Block") - Omit start and end tag.
+% CM.FRG-B ("HTML Block") - Omit start and end tag.
 
-<PARA>
+<CM.PAR>
 	+ "<P>"
-</PARA>
+</CM.PAR>
 	"</P>" +
 
-% HEADER - Maps to <H1> .. <H6>
-<HEADER>
+% CM.HDR - Maps to <H1> .. <H6>
+<CM.HDR>
 	+ "<H[level]>"
 
-</HEADER>
+</CM.HDR>
 	"</H[level]>\n"
 
-% HRULE - Maps to <HR>, which is EMPTY.
-<HRULE>
+% CM.HR - Maps to <HR>, which is EMPTY.
+<CM.HR>
 	"<HR>"
 
-% TEXT - Omit start and end tag.
+% CM.TXT - Omit start and end tag.
 
-% SOFT-BR - Just a line break in the output text.
-<SOFT-BR>
+% CM.SF-BR - Just a line break in the output text.
+<CM.SF-BR>
 	"\n"
 
-% LINE-BR - Maps to HTML <BR>, which is EMPTY.
-<LINE-BR>
+% CM.LN-BR - Maps to HTML <BR>, which is EMPTY.
+<CM.LN-BR>
 	"<BR>"
 
-<CODE>
+<CM.COD>
 	"<CODE>"
-</CODE>
+</CM.COD>
 	"</CODE>"
 
-% LIT-BL ("Inline HTML") - Omit start and end tag.
+% CM.FRG ("Inline HTML") - Omit start and end tag.
 
-<EMPH>
+<CM.EMPH>
 	"<EM>"
-</EMPH>
+</CM.EMPH>
 	"</EM>"
 
-<STRONG>
+<CM.STRN>
 	"<STRONG>"
-</STRONG>
+</CM.STRN>
 	"</STRONG>"
 
-% LINK - Maps to <A> element with 'href' attribute for destination.
-<LINK>
+% CM.LNK - Maps to <A> element with 'href' attribute for destination.
+<CM.LNK>
 	"<A href=\"[destination]\" title=\"[title]\">"
-</LINK>
+</CM.LNK>
 	"</A>"
 
- % IMAGE - Maps to <IMG> element with 'src' for URL; EMPTY.
-<IMAGE>
+ % CM.IMG - Maps to <IMG> element with 'src' for URL; EMPTY.
+<CM.IMG>
 	"<IMG src=\"[url]\" title=\"[title]\">"
 

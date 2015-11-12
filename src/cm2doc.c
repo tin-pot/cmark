@@ -606,14 +606,14 @@ static const char* const nodename[NODE_NUM] = {
     "CM.DOC",
     "CM.QUO-B",
     "CM.LIST",
-    "CM.LITM",
+    "CM.LI",
     "CM.COD-B",
     "CM.FRG-B", /* Block HTML/SGML/XHTML/XML fragment: literal output. */
     "CM.PAR",
     "CM.HDR",
-    "CM.HRULE",
+    "CM.HR",
     "CM.TXT",
-    "CM.SO-BR",
+    "CM.SF-BR",
     "CM.LN-BR",
     "CM.COD",
     "CM.FRG",   /* Inline HTML/SGML/XHTML/XML fragment: literal output. */
