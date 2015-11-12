@@ -814,6 +814,7 @@ size_t do_prolog(char *buffer, size_t nbuf)
 	
     }
     
+    nused = ibol;
     return nused;
 }
 
