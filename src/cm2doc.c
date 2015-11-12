@@ -615,8 +615,8 @@ void do_End(cmark_node_type nt)
     
     if (tr->defined & ETAG_REPL) {
 	int bol[2];
-	bol[0] = (tr->defined & STAG_BOL_START) != 0;
-	bol[1] = (tr->defined & STAG_BOL_END)   != 0;
+	bol[0] = (tr->defined & ETAG_BOL_START) != 0;
+	bol[1] = (tr->defined & ETAG_BOL_END)   != 0;
 	put_repl(tr->etag_repl, bol);
     }
 	
@@ -1215,8 +1215,7 @@ void setup(const char *repl_filename)
      * Otherwise, try a *relative* pathname with the REPL_DIR_VAR
      * environment variable.
      */
-    if (replfp == NULL && repl_dir != NULL && 
-                                        repl_filename != repl_default) {
+    if (replfp == NULL && repl_dir != NULL) {
 	size_t fnlen, rdlen;
 	int trailsep;
 	char *pathname;
@@ -1384,7 +1383,10 @@ int main(int argc, char *argv[])
 		    
 		do_Attr(META_CSS, css_arg ? css_arg : DEFAULT_CSS, NTS);
 		
-		sprintf(version, "\n\t\t%s;\n\t\tdate: %s;\n\t\tid: %s\n\t",
+		sprintf(version, "            %s;\n"
+		                 "            date: %s;\n"
+		                 "            id: %s\n"
+		                 "        ",
 			cmark_repourl,
 			__DATE__ ", " __TIME__,
 			cmark_gitident);
