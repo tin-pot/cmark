@@ -16,6 +16,14 @@
 #include "buffer.h"
 
 /*
+ * Names of environment variables used to 
+ *  1. Point to a directory used in the search path.
+ *  2. Point to a default replacement file if none given otherwise.
+ */
+#define REPL_DIR_VAR     "REPL_DIR"
+#define REPL_DEFAULT_VAR "REPL_DEFAULT"
+
+/*
  * Make the Git commit ident and the repository URL available.
  * Use -DWITH_GITIDENT=0 to supress this, and use placeholder
  * values instead.
@@ -1157,16 +1165,84 @@ int name_repl(int ch, unsigned bits)
 }
 
 
+static unsigned    repl_filecount = 0U;
+static const char *repl_dir = NULL;
+static const char *repl_default = NULL;
+    
+#ifdef _WIN32
+#define DIRSEP "\\"
+#else
+#define DIRSEP "/"
+#endif
+static const char dirsep[] = DIRSEP;
+
+int is_relpath(const char *pathname)
+{
+    if (pathname[0] == dirsep[0])
+	return 0;
+#ifdef _WIN32
+    if ( (('A' <= pathname[0] && pathname[0] <= 'Z') || 
+          ('a' <= pathname[0] && pathname[0] <= 'z')) && 
+         pathname[1] == ':' )
+	return 0;
+#endif
+    return 1;
+}
+
 void setup(const char *repl_filename)
 {
     int ch;
     
+    if (repl_dir == NULL)     repl_dir = getenv(REPL_DIR_VAR);
+    if (repl_default == NULL) repl_default = getenv(REPL_DEFAULT_VAR);
+    
+    /*
+     * Passing in NULL means: use the default replacement definition.
+     */
+    if (repl_filename == NULL) {
+	repl_filename = repl_default;
+	if (repl_filename == NULL)
+	    return;
+    }
+	
+    /*
+     * First try the given filename literally.
+     */
     filename = repl_filename;
     replfp = fopen(filename, "r");
     
-    if (replfp == NULL)
+    /*
+     * Otherwise, try a *relative* pathname with the REPL_DIR_VAR
+     * environment variable.
+     */
+    if (replfp == NULL && repl_dir != NULL && 
+                                        repl_filename != repl_default) {
+	size_t fnlen, rdlen;
+	int trailsep;
+	char *pathname;
+
+	if (is_relpath(filename)) {
+	    fnlen = strlen(filename);
+	    rdlen = strlen(repl_dir);
+	    trailsep = rdlen > 0U && (repl_dir[rdlen-1U] == dirsep[0]);
+	    pathname = malloc(rdlen + !trailsep + fnlen + 16);
+	    sprintf(pathname, "%s%s%s",
+		repl_dir, dirsep+trailsep, filename);
+	    replfp = fopen(pathname, "r");
+	    if (replfp != NULL) filename = pathname;
+	    else free(pathname);
+	}
+    }
+    
+    /*
+     * If we **still** have no replacement definition file, it is
+     * time to give up.
+     */
+    if (replfp == NULL) {
 	error("Can't open replacement file \"%s\": %s.", filename,
 	                                               strerror(errno));
+    } else
+	++repl_filecount;
     
     COUNT_EOL();
     
@@ -1223,11 +1299,6 @@ int main(int argc, char *argv[])
     cmark_node *document;
     cmark_option_t options = CMARK_OPT_DEFAULT | CMARK_OPT_ISO;
 
-    if (argc <= 2) {
-	usage();
-	exit(EXIT_FAILURE);
-    }
-
     if ( (username = getenv("LOGNAME"))   != NULL ||
          (username = getenv("USERNAME"))  != NULL )
 	strncpy(default_creator, username, sizeof default_creator -1U);
@@ -1278,6 +1349,14 @@ int main(int argc, char *argv[])
 	    error("\"%s\": Invalid option.\n", argv[argi]);
 	}
     }
+    
+    /*
+     * If no replacement file was mentioned (and processed),
+     * try using the default replacement file given in the
+     * environment.
+     */
+    if (repl_filecount == 0U)
+	setup(NULL);
 
     parser = cmark_parser_new(options);
 
