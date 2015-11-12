@@ -457,9 +457,13 @@ void set_repl(cmark_node_type nt,
     
     switch (tag_bit & (STAG_REPL|ETAG_REPL)) {
     case STAG_REPL:
+	if (trans[nt].defined & STAG_REPL)
+	    free((void*)trans[nt].stag_repl);
 	trans[nt].stag_repl = repl;
 	break;
     case ETAG_REPL:
+	if (trans[nt].defined & ETAG_REPL)
+	    free((void*)trans[nt].stag_repl);
 	trans[nt].etag_repl = repl;
 	break;
     default:
@@ -730,13 +734,15 @@ static void gen_document(cmark_node *document,
     close_atts();
     bol[0] = bol[1] = 0;
     
-    if (rn_repl[RN_PROLOG] != NULL)
+    if (rn_repl[RN_PROLOG] != NULL) {
 	put_repl(rn_repl[RN_PROLOG], bol);
+    }
 
     cmark_render_esis(document);
 
-    if (rn_repl[RN_EPILOG] != NULL)
+    if (rn_repl[RN_EPILOG] != NULL) {
 	put_repl(rn_repl[RN_EPILOG], bol);
+    }
 }
 
 void do_Attr(const char *name, const char *val, size_t len);
@@ -944,6 +950,7 @@ int rni_repl(int ch)
     repl = get_repl(ch, bol);
     
     if (repl != NULL) {
+	free((void*)rn_repl[rn]);
 	rn_repl[rn] = repl;
     } 
     return GETC();
@@ -1228,9 +1235,8 @@ int main(int argc, char *argv[])
     time(&now);
     strftime(default_date, sizeof default_date, "%Y-%m-%d",
                                                           gmtime(&now));
-    setup(argv[1]);
     
-    for (argi = 2; argi < argc && argv[argi][0] == '-'; ++argi) {
+    for (argi = 1; argi < argc && argv[argi][0] == '-'; ++argi) {
 	if (strcmp(argv[argi], "--version") == 0) {
 	    printf("cmark %s", CMARK_VERSION_STRING
 		" ( %s %s )\n",
@@ -1238,6 +1244,10 @@ int main(int argc, char *argv[])
 	    printf(" - CommonMark converter\n"
 	                            "(C) 2014, 2015 John MacFarlane\n");
 	    exit(EXIT_SUCCESS);
+	} else if ((strcmp(argv[argi], "--repl") == 0) ||
+	    (strcmp(argv[argi], "-r") == 0)) {
+	    const char *filename = argv[++argi];
+	    setup(filename);
 	} else if ((strcmp(argv[argi], "--title") == 0) ||
 	    (strcmp(argv[argi], "-t") == 0)) {
 		title_arg = argv[++argi];
