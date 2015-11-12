@@ -1,3 +1,8 @@
+/*== cm2doc.c ========================================================*/
+
+
+/*====================================================================*/
+
 /* C90 header */
 #include <assert.h>
 #include <ctype.h> /* toupper() */
@@ -14,6 +19,8 @@
 #include "cmark_ctype.h"
 #include "node.h"
 #include "buffer.h"
+
+/*== ESIS API ========================================================*/
 
 /*
  * Callback function types for document traversal.
@@ -39,9 +46,10 @@ typedef struct ESIS_API_ {
 
 #define NUL  0
 
-void error(const char *msg, ...);
 
 /*== Unicode UTF-8 handling ==========================================*/
+
+void error(const char *msg, ...);
 
 typedef long ucs_t;
 
@@ -56,7 +64,8 @@ typedef long ucs_t;
 
 /*-- UCS code points -------------------------------------------------*/
 
-#define UEOF -1L
+#define UEOF                    -1L
+#define UCS_NUL                  0UL
 
 #define UCS_SURR_FIRST          U(D800)
 #define UCS_HI_FIRST            U(D800)
@@ -65,20 +74,45 @@ typedef long ucs_t;
 #define UCS_LO_LAST             U(DFFF)
 #define UCS_SURR_LAST           U(DFFF)
 
-#define UCS_NONCH_FIRST         U(FDD0)
-#define UCS_NONCH_LAST          U(FDEF)
+#define UCS_NONCH_FIRST         U(FDD0) /* Not assigned, but allowed */
+#define UCS_NONCH_LAST          U(FDEF) /* in XML. */
 
 #define UCS_BOM                 U(FEFF)
 #define UCS_NONCH_HIGH          U(FFFF)
 
 #define UCS_REPLACEMENT         U(FFFD)
 
-#define UCS_NUL                 0UL
-
 #define UCS_MAX                 U(10FFFF)
 
+/*
+ * UCS_ISXML() - Check XML code point
+ *
+ * The XML "Character Range" is defined in W3C XML 1.0 5th Edition
+ * as:
+ *
+ *     Char ::= #x9 | #xA | #xD
+ *            | [#x20-#xD7FF] | [#xE000-#xFFFD] | [#x10000-#x10FFFF]
+ *
+ * The SGML declaration for XML in ISO 8879:1986/Cor.2:1999 (in the
+ * the informative "Annex L: Added Requirements for XML" does also
+ * exclude 
+ * 
+ *  1. the U+007F DELETE character (which has the Unicode General
+ *     Category Cc [Other, Control], but is *not* a control character
+ *     by ISO 646:1991), and
+ *
+ *  2. all the C1 control characters (range U+0080 .. U+009F).
+ *
+ * We go with W3C XML here.
+ */
+ 
+#define UCS_ISXML(CP) (							\
+( (CP) >= 32 || (CP) == 9 || (CP) == 10 || (CP) == 13 ) &&		\
+  ( (CP) < U(D800) || U(DFFF) < (CP) ) &&				\
+  (CP) != U(FFFE) && (CP) != U(FFFF) &&					\
+  (CP) <= UCS_MAX )
 
-/*== UTF-8 lengths ===================================================*/
+/*-- UTF-8 lengths ---------------------------------------------------*/
 
 /*
  * The first byte determines how many "contiunuation" bytes follow.
@@ -145,7 +179,7 @@ int utf8len(const char buf[4], size_t len)
     }
 }
 
-/*== UTF-8 decoding ==================================================*/
+/*-- UTF-8 decoding --------------------------------------------------*/
 
 ucs_t utf8_decode2(const char buf[2])
 {
@@ -227,7 +261,7 @@ ucs_t utf8decode(const char buf[4], size_t len)
 }
 
 
-/*== UTF-8 encoding ==================================================*/
+/*-- UTF-8 encoding --------------------------------------------------*/
 
 /*
  * utf8encode - Convert UCS to UTF-8, storing up to 4 octets 
@@ -294,8 +328,15 @@ size_t utf8encode(char buf[5], ucs_t codepoint)
     return 0;
 }
 
-/*====================================================================*/
 
+/*--------------------------------------------------------------------*/
+
+/*
+ * Reading and writing UCS characters from/to text streams.
+ *
+ *             **UNTESTED, NOT YET IN USE**
+ */
+ 
 ucs_t getuc(FILE *);
 long putuc(ucs_t, FILE *);
 long ungetuc(ucs_t, FILE *);
@@ -371,21 +412,23 @@ long ungetuc(ucs_t ucs, FILE *fp)
 #define REPL_DEFAULT_VAR "REPL_DEFAULT"
 
 /*
- * Make the Git commit ident and the repository URL available.
- * Use -DWITH_GITIDENT=0 to supress this, and use placeholder
- * values instead.
+ * Optionally make the Git commit ident and the repository URL 
+ * available as character strings.
+ *
+ * Use -DWITH_GITIDENT=1 to switch this on (and have the strings
+ * ready for the linker to find them!); or do nothing and use the
+ * placeholder values given below. 
  */
-#ifndef WITH_GITIDENT
-#define WITH_GITIDENT 1
-#endif
-
+ 
 #if WITH_GITIDENT
 extern const char cmark_gitident[];
 extern const char cmark_repourl[];
 #else
 static const char cmark_gitident[] = "n/a";
-static const char cmark_repourl[]  = "URL: n/a";
+static const char cmark_repourl[]  = "https://github.com/tin-pot/cmark";
 #endif
+
+/*--------------------------------------------------------------------*/
 
 /*
  * Predefined "pseudo-attribute" names, usable in the "replacement" text
@@ -422,7 +465,7 @@ static const char cmark_repourl[]  = "URL: n/a";
 #define META_DC_TITLE   "DC.title"
 #define META_DC_CREATOR "DC.creator"
 #define META_DC_DATE    "DC.date"
-#define META_CSS        "cm2doc.css"
+#define META_CSS        "CM.css"
 
 /*
  * Default values for the "pseudo-attributes".
@@ -440,6 +483,8 @@ static char default_creator[81] = "N.N.";
 /* Hard-coded defaults for command-line options --title and --css. */
 #define DEFAULT_DC_TITLE    "Untitled Document"
 #define DEFAULT_CSS         "default.css"
+
+/*--------------------------------------------------------------------*/
 
 /*
  * For each CommonMark node type we define a GI conforming to the
@@ -472,32 +517,37 @@ static char default_creator[81] = "N.N.";
 #define ISUCNMCHAR(C) ( ISUCNMSTRT(C) || (C) == '-' || (C) == '.' )
 #define ISLCNMCHAR(C) ( ISLCNMSTRT(C) || (C) == '-' || (C) == '.' )
 
+/*====================================================================*/
+
 /* How many node types there are, and what the name length limit is. */
 #define NODE_NUM       (CMARK_NODE_LAST_INLINE+1)
 #define NODENAME_LEN   NAMELEN
 
 static const char* const nodename[NODE_NUM] = {
      NULL,	/* The "none" type (enum const 0) is invalid! */
-    "DOC",
-    "QUOTE-BL",
-    "LIST",
-    "ITEM",
-    "CODE-BL",
-    "FRAG-BL", /* Block HTML/SGML/XHTML/XML fragment: literal output. */
-    "PARA",
-    "HEADER",
-    "HRULE",
-    "TEXT",
-    "SOFT-BR",
-    "LINE-BR",
-    "CODE",
-    "FRAG",   /* Inline HTML/SGML/XHTML/XML fragment: literal output. */
-    "EMPH",
-    "STRONG",
-    "LINK",
-    "IMAGE",
+   /*12345678*/
+    "CM.DOC",
+    "CM.QUO-B",
+    "CM.LIST",
+    "CM.LITM",
+    "CM.COD-B",
+    "CM.FRG-B", /* Block HTML/SGML/XHTML/XML fragment: literal output. */
+    "CM.PAR",
+    "CM.HDR",
+    "CM.HRULE",
+    "CM.TXT",
+    "CM.SO-BR",
+    "CM.LN-BR",
+    "CM.COD",
+    "CM.FRG",   /* Inline HTML/SGML/XHTML/XML fragment: literal output. */
+    "CM.EMPH",
+    "CM.STRN",
+    "CM.LNK",
+    "CM.IMG",
 };
 
+
+/*--------------------------------------------------------------------*/
 
 /*
  * "Reserved Names" to bind special "replacement texts" to:
@@ -516,6 +566,8 @@ static const char *const rn_name[] = {
 };
     
 static const char *rn_repl[RN_NUM]; /* Replacement texts for RNs. */
+
+/*--------------------------------------------------------------------*/
 
 /*
  * Character classification.
@@ -538,6 +590,8 @@ static const char *rn_repl[RN_NUM]; /* Replacement texts for RNs. */
 #define EOL          LF	    /* Per ISO C90 text stream. */
 
  
+/*--------------------------------------------------------------------*/
+
 /*
  * SGML function roles.
  */
@@ -568,6 +622,8 @@ static const char *rn_repl[RN_NUM]; /* Replacement texts for RNs. */
                                                           ISSEPCHAR(C) )
 #define ISNMSTART(C) ( ISDIGIT(C) || ISUCNMSTRT(C) || ISLCNMSTRT(C) )
 #define ISNMCHAR(C)  ( ISNMSTART(C) || (C) == '-' || (C) == '.' )
+
+/*--------------------------------------------------------------------*/
 
 /*
  * The output stream (right now, this is always stdout).
@@ -602,6 +658,8 @@ unsigned colno       = 0U;  /* Text input position: Column number. */
  */
 #define NTS (~0U)
 
+/*--------------------------------------------------------------------*/
+
 void error(const char *msg, ...)
 {
     va_list va;
@@ -610,6 +668,8 @@ void error(const char *msg, ...)
     va_end(va);
     exit(EXIT_FAILURE);
 }
+
+/*====================================================================*/
 
 /*
  * Translation definitions for a node type are hold in a 
@@ -623,12 +683,6 @@ void error(const char *msg, ...)
 #define ETAG_BOL_START  040
 #define ETAG_BOL_END    100
 
-/*typedef size_t textidx_t; /* Index into text_buf. */
-typedef size_t nameidx_t; /* Index into attr_buf. */
-typedef size_t validx_t;  /* Index into attr_buf. */
-
-static const size_t NULLIDX = 0U; /* Common NULL value for indices. */
-
 struct trans_ {
     const char *stag_repl;
     const char *etag_repl;
@@ -637,18 +691,20 @@ struct trans_ {
 
 /*
  * Translation definitions: one array member per node type,
- * plus the **unused** member at index 0 == CMARK_NODE_NONE.
+ * plus the (currently unused) member at index 0 == CMARK_NODE_NONE.
  */
  
 static struct trans_ trans[NODE_NUM];
 
-/*
- * Replacement texts.
- */
-static cmark_strbuf text_buf; /* NOT USED YET - RFU. */
+/*--------------------------------------------------------------------*/
+
+typedef size_t nameidx_t; /* Index into attr_buf. */
+typedef size_t validx_t;  /* Index into attr_buf. */
+
+static const size_t NULLIDX = 0U; /* Common NULL value for indices. */
 
 /*
- *Attribute names and values of current node.
+ * Attribute names and values of current node(s).
  */
 static cmark_strbuf attr_buf;
 
@@ -799,6 +855,8 @@ const char* att_val(const char *name, unsigned depth)
 }
 
 
+/*--------------------------------------------------------------------*/
+
 /*
  * Set the replacement text for a node type.
  */
@@ -827,24 +885,11 @@ void set_repl(cmark_node_type nt,
     trans[nt].defined |= tag_bit;
 }
 
+/*--------------------------------------------------------------------*/
 
-void usage()
-{
-    printf("Usage:   cm2html spec [FILE*]\n");
-    printf("\nspec is the output specification.\n\n");
-    printf("Options:\n");
-    printf("  -t --title TITLE Set the document title\n");
-    printf("  -c --css CSS     Set the document style sheet to CSS\n");
-    printf("  --sourcepos      Include source position attribute\n");
-    printf("  --hardbreaks     Treat newlines as hard line breaks\n");
-    printf("  --safe           Suppress raw HTML and dangerous URLs\n");
-    printf("  --smart          Use smart punctuation\n");
-    printf("  --normalize      Consolidate adjacent text nodes\n");
-    printf("  --help, -h       Print usage information\n");
-    printf("  --version        Print version\n");
-}
 
-void repl_Attr(ESIS_UserData ud, const char *name, const char *val, size_t len)
+void repl_Attr(ESIS_UserData ud,
+                          const char *name, const char *val, size_t len)
 {
     push_att(name, val, len);
 }
@@ -977,6 +1022,8 @@ static const struct ESIS_API_ repl_API = {
     repl_End
 };
  
+/*====================================================================*/
+
 /*
  * RAST
  *
@@ -1123,6 +1170,8 @@ const struct ESIS_API_ rast_API = {
     &rast_param
 };
 
+/*====================================================================*/
+
 /*
  * Rendering into the translator.
  */
@@ -1261,6 +1310,8 @@ static void gen_document(cmark_node *document,
     }
 }
 
+/*====================================================================*/
+
 size_t do_prolog(char *buffer, size_t nbuf, const ESIS_API *api)
 {
     size_t ibol, nused;
@@ -1308,7 +1359,6 @@ size_t do_prolog(char *buffer, size_t nbuf, const ESIS_API *api)
          */
         len = ibol - ifield - 1U;
         if (len > 1U) {
-	    
 	    if (dc_name[dc_count] != NULL)
 		do_Attr(dc_name[dc_count++], buffer+ifield, len);
 	    else {
@@ -1316,7 +1366,8 @@ size_t do_prolog(char *buffer, size_t nbuf, const ESIS_API *api)
 		char name[NAMELEN+1];
 		size_t nname, nval;
 		colon = strstr(buffer+ifield, ": ");
-		if (colon != NULL && (nname = colon - (buffer+ifield)) < len) {
+		if (colon != NULL && 
+		              (nname = colon - (buffer+ifield)) < len) {
 		    if (nname > NAMELEN) nname = NAMELEN;
 		    strncpy(name, buffer + ifield, nname);
 		    name[nname] = NUL;
@@ -1332,9 +1383,8 @@ size_t do_prolog(char *buffer, size_t nbuf, const ESIS_API *api)
 		    do_Attr(name, val, nval);
 		} else
 		    fprintf(stderr, "Meta line \"%% %.*s\" ignored: "
-		                  "No ': ' delimiter found.\n",
-		                  (int)len, buffer+ifield);
-		    
+		                           "No ': ' delimiter found.\n",
+		                               (int)len, buffer+ifield);
 	    }
 	    
         }
@@ -1345,6 +1395,8 @@ size_t do_prolog(char *buffer, size_t nbuf, const ESIS_API *api)
     nused = ibol;
     return nused;
 }
+
+/*====================================================================*/
 
 /*
  * setup -- Parse the replacement definition file.
@@ -1788,6 +1840,25 @@ void setup(const char *repl_filename)
     replfp = NULL;
 }
 
+/*====================================================================*/
+
+void usage()
+{
+    printf("Usage:   cm2html spec [FILE*]\n");
+    printf("\nspec is the output specification.\n\n");
+    printf("Options:\n");
+    printf("  -t --title TITLE Set the document title\n");
+    printf("  -c --css CSS     Set the document style sheet to CSS\n");
+    printf("  --sourcepos      Include source position attribute\n");
+    printf("  --hardbreaks     Treat newlines as hard line breaks\n");
+    printf("  --safe           Suppress raw HTML and dangerous URLs\n");
+    printf("  --smart          Use smart punctuation\n");
+    printf("  --normalize      Consolidate adjacent text nodes\n");
+    printf("  --help, -h       Print usage information\n");
+    printf("  --version        Print version\n");
+}
+
+
 int main(int argc, char *argv[])
 {
     FILE *fp;
@@ -1935,3 +2006,5 @@ int main(int argc, char *argv[])
 
     return EXIT_SUCCESS;
 }
+
+/*== EOF =============================================================*/
