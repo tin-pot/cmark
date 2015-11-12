@@ -189,6 +189,21 @@ static const char *rn_repl[RN_NUM]; /* Replacement texts for RNs. */
 #define SPACE        SP
 #define ISSEPCHAR(C) ((C) == HT)
 
+#define MSSCHAR      '\\'   /* Suppresses recognition of next char. */
+
+#define LIT          "\""
+#define LITA         "\'"
+
+#define STAGO        "<"
+#define ETAGO        "</"
+#define TAGC         ">"
+#define PLUS         "+"
+#define COM          "--"
+#define RNI          "#"
+#define VI           "="        
+#define DSO          "["
+#define DSC          "]"
+
 #define ISDIGIT(C)   ( '0' <= (C) && (C) <= '9' )
 #define ISHEX(C)     ( ISDIGIT(C) || \
                       ('A'<=(C) && (C)<='F') || ('a'<=(C) && (C)<='f') )
@@ -774,6 +789,52 @@ size_t do_prolog(char *buffer, size_t nbuf)
                      --colno,						\
                      ch )
 
+/*
+ * S = SPACE | SEPCHAR | RS | RE
+ *
+ * accept ( { S } )
+ *
+ * Uses char ch.
+ */
+#define S()								\
+do {									\
+    while (ISSPACE(ch))							\
+	ch = GETC();							\
+} while (0)
+
+/*
+ * Where DELIM = ( CHAR , [ CHAR ] )
+ *
+ * accept? ( DELIM )
+ *
+ * Uses `char ch`.
+ */
+#define DELIM(STR) delim(&ch, STR)
+
+int delim(int *pch, const char STR[2])
+{
+    int ch = *pch;
+    int ch0 = ch;
+    
+    if (ch == STR[0]) {
+	if (STR[1] == NUL) {
+	    *pch = GETC();
+	    return 1;
+	} else {
+	    ch = GETC();
+	    if (ch == STR[1]) {
+	        *pch = GETC();
+		return 1;
+	    } else {
+		UNGETC(ch);
+		*pch = ch0;
+		return 0;
+	    }
+	}
+    } else
+	return 0;
+}
+
 void syntax_error(const char *msg, ...)
 {
     va_list va;
@@ -783,43 +844,38 @@ void syntax_error(const char *msg, ...)
     va_end(va);
 }
 
-void comment(void)
+int comment(const char lit[2])
 {
     int ch;
 
     while ((ch = GETC()) != EOF)
-	if (ch == EOL)
-	    return;
+	if (DELIM(lit))
+	    return ch;
+	    
+    return ch;
 }
 
 char *get_repl(int, int[2]);
 
-void rni_repl(void)
+int rni_repl(int ch)
 {
     char name[NAMELEN+1], *p = name;
-    int ch;
     enum rn_ rn;
     const char *repl;
     int bol[2];
     
-    ch = GETC();
     if (ISNMSTART(ch))
 	*p++ = toupper(ch);
     else
 	syntax_error("'%c': Not a NMSTART.\n", ch);
     
-    while ((ch = GETC()) != EOF && !ISSPACE(ch))
+    while ((ch = GETC()) != EOF)
 	if (ISNMCHAR(ch))
 	    *p++ = toupper(ch);
 	else
-	    syntax_error("'%c': Not a NMCHAR.\n", ch);
+	    break;
     *p = NUL;
 
-    if (!ISSPACE(ch)) {
-	syntax_error("'%c': Expected space.\n", ch);    
-	UNGETC(ch);
-    }
-	    
     /*
      * Look up the "reserved name".
      */
@@ -829,13 +885,60 @@ void rni_repl(void)
     
     if (rn_name[rn] == NULL) {
 	syntax_error("\"%s\": Unknown name.\n", name);
-	return;
+	return ch;
     }
 	
     repl = get_repl(ch, bol);
+    
     if (repl != NULL) {
 	rn_repl[rn] = repl;
     } 
+    return GETC();
+}
+
+int get_string(cmark_strbuf *pbuf, int ch, const char lit[2])
+{
+    while (!DELIM(lit)) {
+	if (ch == MSSCHAR) {
+	
+	    switch (ch = GETC()) {
+	    case MSSCHAR: ch = MSSCHAR; break;
+	    case  'n': ch = '\n';  break;
+	    case  'r': ch = '\r';  break;
+	    case  's': ch =  SP ;  break;
+	    case  't': ch = '\t';  break;
+	    case  '[': ch = '[' ;  break;
+	    case '\"': ch = '\"' ; break;
+	    case '\'': ch = '\'' ; break;
+	    default:   cmark_strbuf_putc(pbuf, MSSCHAR);
+	    }
+	    if (ch != EOF)
+		cmark_strbuf_putc(pbuf, ch);
+	    ch = GETC();
+	    
+	} else if (DELIM(DSO)) {
+	
+	    cmark_strbuf_putc(pbuf, ATTR_SUBST);
+	    while (ch != EOF && !DELIM(DSC)) {
+		if (DELIM(lit)) {
+		    syntax_error("Unclosed attribute reference "
+					      "(missing '" DSC "').\n");
+		    break;
+		}
+		if (ISSPACE(ch))
+		    syntax_error("Space in attribute name.\n");
+		else
+		    cmark_strbuf_putc(pbuf, ch);
+		ch = GETC();
+	    }
+	    cmark_strbuf_putc(pbuf, NUL);
+	    
+	} else {
+	    cmark_strbuf_putc(pbuf, ch);
+	    ch = GETC();
+	}
+    }    
+    return ch;
 }
 
 char *get_repl(int ch, int bol[2])
@@ -846,69 +949,31 @@ char *get_repl(int ch, int bol[2])
     bol[0] = bol[1] = 0;
     cmark_strbuf_init(&repl, 16);
     
+    S();
+    
+    if (DELIM(PLUS)) 
+	bol[0] = 1;
+    
     while (ch != EOF) {
 
-	while ((ch = GETC()) != EOF) {
-	    if (ISSPACE(ch))
-		continue;
-	    else if (ch == '%') {
-		comment();
-		continue;
-	    } else if (ch == '+') {
-		bol[nstrings > 0] = 1;
-		continue;
-	    } else if (ch == '"') {
-		break;
-	    }
-	    
-	    if (ch == '<' || ch == '#') {
-    		UNGETC(ch);
-    		goto done;
-	    }
-	    
-	    syntax_error("'%c': Unexpected.\n", ch);
-	}
-    
-	while ((ch = GETC()) != EOF && ch != '"') {
-	    switch (ch) {
-	    case '\\':
-		ch = GETC();
-		switch (ch) {
-		case '\\': ch = '\\'; break;
-		case  'n': ch = '\n'; break;
-		case  'r': ch = '\r'; break;
-		case  's': ch =  SP ; break;
-		case  't': ch = '\t'; break;
-		case  '[': ch = '[' ; break;
-		case  '"': ch = '"' ; break;
-		default:   cmark_strbuf_putc(&repl, '\\');
-		}
-		cmark_strbuf_putc(&repl, ch);
-		break;
-	    case '[':
-		cmark_strbuf_putc(&repl, ATTR_SUBST);
-		while ((ch = GETC()) != EOF && ch != ']') {
-		    if (ch == '"') {
-			syntax_error("Unclosed attribute reference "
-			                            "(missing ']').\n");
-			UNGETC(ch);
-			ch = ']';
-		    } else if (ISSPACE(ch))
-			syntax_error("Space in attribute name.\n");
-		    else
-			cmark_strbuf_putc(&repl, ch);
-		}
-		cmark_strbuf_putc(&repl, NUL);
-		break;
-	    default:
-		cmark_strbuf_putc(&repl, ch);
-		break;
-	    }
-	}
+	S();
+	
+	if (DELIM(LIT))
+	    ch = get_string(&repl, ch, LIT);
+	else if (DELIM(LITA))
+	    ch = get_string(&repl, ch, LITA);
+	else
+	    break;
 	++nstrings;
     }
     
-done:
+    S();
+    
+    if (DELIM(PLUS)) 
+	bol[1] = 1;
+    else
+	UNGETC(ch);
+    
     if (nstrings > 0U) {
 	cmark_strbuf_putc(&repl, NUL);
 	return (char*)cmark_strbuf_detach(&repl);
@@ -916,7 +981,8 @@ done:
 	return NULL;
 }
 
-void tag_repl(int ch, unsigned bits)
+
+int name_repl(int ch, unsigned bits)
 {
     char name[NODENAME_LEN+1];
     char *p = name;
@@ -926,15 +992,15 @@ void tag_repl(int ch, unsigned bits)
     
     *p++ = toupper(ch);
     
-    while ((ch = GETC()) != EOF && ch != '>')
+    while ((ch = GETC()) != EOF) {
 	if (ISNMCHAR(ch))
 	    *p++ = toupper(ch);
+	else if (DELIM(TAGC))
+	    break;
 	else
 	    syntax_error("'%c': Not a NMCHAR.\n", ch);    
+    }
     *p = NUL;
-    
-    if (ch != '>')
-	    syntax_error("'%c': Expected '>'.\n", ch);    
 
     /*
      * Look up the "GI" for a CommonMark node type.
@@ -944,7 +1010,7 @@ void tag_repl(int ch, unsigned bits)
 	    break;
     if (nodename[nt] == NULL) {
 	syntax_error("\"%s\": Not a CommonMark node type.", name);
-	return;
+	return ch;
     }
 
     repl = get_repl(ch, bol);
@@ -961,6 +1027,7 @@ void tag_repl(int ch, unsigned bits)
     }
     
     set_repl(nt, bits, repl);
+    return GETC();
 }
 
 
@@ -983,27 +1050,32 @@ void setup(const char *repl_filename)
     cmark_strbuf_init(&nameidx_buf, ATTCNT * sizeof(nameidx_t));
     cmark_strbuf_init(&validx_buf,  ATTCNT * sizeof(validx_t));
 
-    while ((ch = GETC()) != EOF) 
-	if (ISSPACE(ch))
-	    continue;
-	else if (ch == '<') {
-    	    if ((ch = GETC()) == '/') {
-    		ch = GETC();
-    		if (ISNMSTART(ch))
-    		    tag_repl(ch, ETAG_REPL);
-		else
-		    syntax_error("\'%c\' after '</': Not a NMSTART.\n",
-		                                                    ch);
-	    } else if (ISNMSTART(ch)) {
-    		tag_repl(ch, STAG_REPL);
-	    } else
-		syntax_error("\'%c\' after '<': Not a NMSTART.\n", ch);
-	} else if (ch == '%')
-	    comment();
-	else if (ch == '#') {
-	    rni_repl();
-	} else
+    ch = GETC();
+    while (ch != EOF) {
+	S();
+	
+	if (ch == EOF)
+	    break;
+
+	if (DELIM(ETAGO)) {
+	    if (ISNMSTART(ch))
+		ch = name_repl(ch, ETAG_REPL);
+	    else
+		syntax_error("\'%c\' after '" ETAGO "'", ch);
+	} else if (DELIM(STAGO)) {
+	    if (ISNMSTART(ch))
+    		ch = name_repl(ch, STAG_REPL);
+	    else
+		syntax_error("\'%c\' after '" STAGO "': Not a NMSTART.\n", ch);
+	} else if (DELIM(RNI))
+	    ch = rni_repl(ch);
+	else if (DELIM("%"))
+	    ch = comment("\n");
+	else if (DELIM(COM))
+	    ch = comment(COM);
+	else
 	    syntax_error("Unexpected character \'%c\'.\n", ch);
+    }
 		
     fclose(replfp);
     replfp = NULL;
@@ -1104,7 +1176,7 @@ int main(int argc, char *argv[])
 		    
 		do_Attr(META_CSS, css_arg ? css_arg : DEFAULT_CSS, NTS);
 		
-		sprintf(version, "%s; built: %s; id: %s",
+		sprintf(version, "\n\t\t%s;\n\t\tbuilt: %s;\n\t\tid: %s\n\t",
 			cmark_repourl,
 			__DATE__ ", " __TIME__,
 			cmark_gitident);
