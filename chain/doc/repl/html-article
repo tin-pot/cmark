@@ -1,26 +1,49 @@
- -- html.repl - ISO/IEC 15445:2000//DTD HTML --
+ -- 
+    html-article: Article template with Dublin Core metadata.
+
+    DOCTYPE HTML PUBLIC "ISO/IEC 15445:2000//DTD HTML//EN"            --
 
 #PROLOG 
 	"<!DOCTYPE HTML PUBLIC \"ISO/IEC 15445:2000//DTD HTML//EN\">\n"
 	"<HTML>\n"
-	"<HEAD>\n"
+	"<HEAD profile=\"http://dublincore.org/documents/2008/08/04/"
+	                                                 "dc-html/\">\n"
 	"  <META http-equiv=\"Content-Type\" content=\"text/html; "
 	                                            "charset=UTF-8\">\n"
-	"  <META name=\"GENERATOR\"\n"
-	"        content=\"cm2doc ([cm2doc.version]) using "
-	                               "cmark (ver: [cmark.version])\">\n"
-	"  <LINK rel=\"schema.DC\"   "
+        "\n"
+	"  <LINK rel=\"schema.DC\"      "
 	                  "href=\"http://purl.org/dc/elements/1.1/\">\n"
-	"  <META name=\"DC.format\"  content=\"text/html\" "
+	"  <LINK rel=\"schema.DCTERMS\" "
+	                  "href=\"http://purl.org/dc/terms/\">\n"
+        "\n"
+        "  <META name=\"DC.format\"  content=\"text/html\" "
 	                                     "scheme=\"DCTERMS.IMT\">\n"
-	"  <META name=\"DC.type\"    content=\"Text\""
+	"  <META name=\"DC.type\"    content=\"Text\" "
 	                                "scheme=\"DCTERMS.DCMIType\">\n"
-	"  <META name=\"DC.title\"   content=\"[DC.title]\">\n"
-	"  <META name=\"DC.creator\" content=\"[DC.creator]\">\n"
-	"  <META name=\"DC.date\"    content=\"[DC.date]\">\n"
-	"  <LINK rel=\"stylesheet\"  type=\"text/css\"\n"
+	"  <META name=\"DC.title\"   lang=\"[lang=de?de:en]\" "
+	                                     "content=\"\n\n"
+        "        [DC.title]\n\n"
+	"        \">\n"
+	"  <META name=\"DC.creator\"      content=\"[DC.creator]\">\n"
+	"  <META name=\"DC.date\"         content=\"[DC.date]\">\n"
+	"  <META name=\"DC.language\"     content=\"[lang=de?de:en]\">\n"
+	"  <META name=\"DCTERMS.rights\"  content=\"\n\n"
+	"        © Martin Hofmann <mh@tin-pot.net>. "
+                                              "All rights reserved.\n\n"
+	"        \">\n"
+	"  <META name=\"DCTERMS.license\" content=\"\n\n"
+	"              Creative Commons Attribution-ShareAlike 4.0\n"
+	"                    International Public License\n"
+	"                    (CC BY-SA 4.0 International)\n\n"
+	"        \">\n"
+        "\n"
+	"  <LINK rel=\"stylesheet\"       type=\"text/css\"\n"
 	"        href=\"[cm2doc.css]\">\n"
-	"  <TITLE>[DC.title]</TITLE>\n" % </HEAD> OMIT
+	"  <META name=\"GENERATOR\"       content=\"\n"
+	"        cm2doc (\n[cm2doc.version])\n"
+	"        \">\n"
+        "\n\n"
+	"  <TITLE>[DC.title]</TITLE>\n\n"
 
 % HTML epilog: </HTML> is required.
 
@@ -72,9 +95,10 @@
 
 % HEADER - Maps to <H1> .. <H6>
 <HEADER>
-	"<H[level]>"
+	+ "<H[level]>"
+
 </HEADER>
-	"</H[level]>"
+	"</H[level]>\n"
 
 % HRULE - Maps to <HR>, which is EMPTY.
 <HRULE>
@@ -113,7 +137,7 @@
 </LINK>
 	"</A>"
 
- % IMGAGE - Maps to <IMG> element with 'src' for URL; EMPTY.
+ % IMAGE - Maps to <IMG> element with 'src' for URL; EMPTY.
 <IMAGE>
 	"<IMG src=\"[url]\" title=\"[title]\">"
 
