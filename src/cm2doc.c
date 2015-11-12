@@ -786,27 +786,35 @@ size_t do_prolog(char *buffer, size_t nbuf)
          * from ifield to just before the '\n', and append a NUL 
          * terminator, of course.
          */
-        len = ibol - ifield;
+        len = ibol - ifield - 1U;
         if (len > 1U) {
 	    
 	    if (dc_name[dc_count] != NULL)
 		do_Attr(dc_name[dc_count++], buffer+ifield, len);
 	    else {
-		const char *colon;
-		char name[NAMELEN+1], *val;
+		const char *colon, *val;
+		char name[NAMELEN+1];
 		size_t nname, nval;
-		colon = strchr(buffer+ifield, ':');
-		if (colon != NULL) {
-		    nname   = (colon-buffer) - ifield;
+		colon = strstr(buffer+ifield, ": ");
+		if (colon != NULL && (nname = colon - (buffer+ifield)) < len) {
 		    if (nname > NAMELEN) nname = NAMELEN;
 		    strncpy(name, buffer + ifield, nname);
 		    name[nname] = NUL;
     		
-		    val     = name + nname + 1;
-		    nval    = len - nname - 1;
+		    val     = colon + 2;
+		    while (val[0] != EOL && ISSPACE(val[0]) &&
+		                                          val[1] != EOL)
+			++val;
+		    nval = 0U;
+		    while (val[nval] != EOL)
+			++nval;
 		    
-		    do_Attr(name, val, len);
-		}
+		    do_Attr(name, val, nval);
+		} else
+		    fprintf(stderr, "Meta line \"%% %.*s\" ignored: "
+		                  "No ': ' delimiter found.\n",
+		                  (int)len, buffer+ifield);
+		    
 	    }
 	    
         }
