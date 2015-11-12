@@ -16,6 +16,353 @@
 #include "buffer.h"
 
 /*
+ * Callback function types for document traversal.
+ */
+
+typedef void *ESIS_UserData;
+
+typedef void (ESIS_Attr)(ESIS_UserData,
+                             const char *name, const char *val, size_t);
+typedef void (ESIS_Start)(ESIS_UserData,               cmark_node_type);
+typedef void (ESIS_Empty)(ESIS_UserData,               cmark_node_type);
+typedef void (ESIS_Cdata)(ESIS_UserData,          const char *, size_t);
+typedef void (ESIS_End)(ESIS_UserData,                 cmark_node_type);
+
+typedef struct ESIS_API_ {
+    ESIS_Attr	 *attr;
+    ESIS_Start	 *start;
+    ESIS_Empty	 *empty;
+    ESIS_Cdata	 *cdata;
+    ESIS_End	 *end;
+    ESIS_UserData ud;
+} ESIS_API;
+
+#define NUL  0
+
+void error(const char *msg, ...);
+
+/*== Unicode UTF-8 handling ==========================================*/
+
+typedef long ucs_t;
+
+#define U(X)                    ((ucs_t)(0x ## X ##L))
+#define UCS(CH)                 ((ucs_t)((CH)&0xFFU))
+
+#define IS_BYTE(c)              (!((c) & ~0xFF))
+#define BYTE(c)                 ((c) & 0xFF)
+#define HIGH(w)                 (BYTE((w) >> 8))
+#define LOW(w)                  (BYTE(w))
+#define POINT(hi,lo)            ((BYTE(hi) << 8) | BYTE(lo))
+
+/*-- UCS code points -------------------------------------------------*/
+
+#define UEOF -1L
+
+#define UCS_SURR_FIRST          U(D800)
+#define UCS_HI_FIRST            U(D800)
+#define UCS_HI_LAST             U(DBFF)
+#define UCS_LO_FIRST            U(DC00)
+#define UCS_LO_LAST             U(DFFF)
+#define UCS_SURR_LAST           U(DFFF)
+
+#define UCS_NONCH_FIRST         U(FDD0)
+#define UCS_NONCH_LAST          U(FDEF)
+
+#define UCS_BOM                 U(FEFF)
+#define UCS_NONCH_HIGH          U(FFFF)
+
+#define UCS_REPLACEMENT         U(FFFD)
+
+#define UCS_NUL                 0UL
+
+#define UCS_MAX                 U(10FFFF)
+
+
+/*== UTF-8 lengths ===================================================*/
+
+/*
+ * The first byte determines how many "contiunuation" bytes follow.
+ */
+
+#define UTF_START2_MASK 0x1F   /* Mask payload bits in start 2 byte   */
+#define UTF_START3_MASK 0x0F   /* Mask payload bits in start 3 byte   */
+#define UTF_START4_MASK 0x07   /* Mask payload bits in start 3 byte   */
+#define UTF_CONTIN_MASK 0x3F   /* Mask payload bits in contin byte    */
+#define UTF_CONTIN_BITS 6      /* There are 6 payload bits in that    */
+
+/*
+ * We only want to process well-formed sequences.
+ *
+ * See Table 3-7 "Well formed UTF-8 byte sequences" in
+ * <http://www.unicode.org/versions/Unicode6.0.0/ch03.pdf>
+ * for details.
+ */
+
+#define UTF_IS_START2(c) ('\xC2' <= (c) && (c) <= '\xDF')   /* C2..DF */
+#define UTF_IS_START3(c) (((c) & '\xF0') == '\xE0')         /* E0..EF */
+#define UTF_IS_START4(c) (((c) & '\xF8') == '\xF0')         /* F0..F7 */
+
+#define UTF_IS_CONTIN(c) (((c) & '\xC0') == '\x80')         /* 80..BF */
+
+/*
+ * utf8len -
+ *	Determine length and check validity of a supposed 
+ *	UTF-8 sequence.
+ *
+ * Return:
+ * 
+ *   m > 0 : A valid m-byte long seqence is in buf[0..m-1].
+ *
+ *   m < 0 : Either the (-m)-byte long sequence is invalid,
+ *           or the size allowed by parameter len is too low.
+ */
+ 
+int utf8tab[32] = {
+    1, 1, 1, 1, 1, 1, 1, 1,   1, 1, 1, 1, 1, 1, 1, 1,
+    0, 0, 0, 0, 0, 0, 0, 0,   2, 2, 2, 2, 3, 3, 4, 5,
+};
+
+int utf8len(const char buf[4], size_t len)
+{
+    unsigned byte = buf[0] & 0xFFU;
+    unsigned idx = (byte >> 3) & 0x1FU;
+    int u8len = utf8tab[idx];
+    
+    switch (u8len) {
+    case 0: return 0; /* UTF-8 trailing octet */
+    case 1: return ( u8len <= (int)len ) ? u8len : -u8len;
+    case 2: return ( u8len <= (int)len && UTF_IS_CONTIN(buf[1]) ) ?
+                                                         u8len : -u8len;
+    case 3: return ( u8len <= (int)len && UTF_IS_CONTIN(buf[1])
+                                       && UTF_IS_CONTIN(buf[2]) ) ?
+                                                         u8len : -u8len;
+    case 4: return ( u8len <= (int)len && UTF_IS_CONTIN(buf[1])
+                                       && UTF_IS_CONTIN(buf[2])
+                                       && UTF_IS_CONTIN(buf[3]) ) ?
+                                                         u8len : -u8len;
+    default:
+	    return -u8len;
+    }
+}
+
+/*== UTF-8 decoding ==================================================*/
+
+ucs_t utf8_decode2(const char buf[2])
+{
+    ucs_t val;
+
+    val  = (buf[0] & UTF_START2_MASK);               /* Upper 5 bits  */
+
+    if (!UTF_IS_CONTIN(buf[1]))
+	return UCS_REPLACEMENT;
+    val <<= UTF_CONTIN_BITS;
+    val |= (buf[1] & UTF_CONTIN_MASK);               /* Lower 6 bits  */
+
+    return val;
+}
+
+ucs_t utf8_decode3(const char buf[3])
+{
+    ucs_t val;
+
+    val  = (buf[0] & UTF_START3_MASK);               /* Upper 4 bits  */
+
+    if (!UTF_IS_CONTIN(buf[1]))
+	return UCS_REPLACEMENT;
+    val <<= UTF_CONTIN_BITS;
+    val |= (buf[1] & UTF_CONTIN_MASK) ;              /* Middle 6 bits */
+
+    if (!UTF_IS_CONTIN(buf[2]))
+	return UCS_REPLACEMENT;
+    val <<= UTF_CONTIN_BITS;
+    val |= (buf[2] & UTF_CONTIN_MASK) ;              /* Lower 6 bits  */
+
+    return val;
+}
+
+ucs_t utf8_decode4(const char buf[4])
+{
+    ucs_t val;
+
+    val  = (buf[0] & UTF_START4_MASK);               /* Upper 3 bits  */
+
+    if (!UTF_IS_CONTIN(buf[1]))
+	return UCS_REPLACEMENT;
+    val <<= UTF_CONTIN_BITS;
+    val |= (buf[1] & UTF_CONTIN_MASK) ;              /* Upper 6 bits  */
+
+    if (!UTF_IS_CONTIN(buf[2]))
+	return UCS_REPLACEMENT;
+    val <<= UTF_CONTIN_BITS;
+    val |= (buf[2] & UTF_CONTIN_MASK) ;              /* Middle 6 bits */
+
+    if (!UTF_IS_CONTIN(buf[3]))
+	return UCS_REPLACEMENT;
+    val <<= UTF_CONTIN_BITS;
+    val |= (buf[3] & UTF_CONTIN_MASK) ;              /* Lower 6 bits  */
+
+    return val;
+}
+
+/*
+ * utf8decode -- Convert UTF-8 to UCS
+ *
+ * Return UCS_REPLACEMENT if 
+ *
+ *   - buf[] is not a valid UTF-8 sequence, or
+ *
+ *   - len is too short.
+ */
+ucs_t utf8decode(const char buf[4], size_t len)
+{
+    int n = utf8len(buf, len);
+    
+    if (n > 0) switch (n) {
+	case 1: return UCS(buf[0]);
+	case 2: return utf8_decode2(buf);
+	case 3: return utf8_decode3(buf);
+	case 4: return utf8_decode4(buf);
+    }
+    return UCS_REPLACEMENT;
+}
+
+
+/*== UTF-8 encoding ==================================================*/
+
+/*
+ * utf8encode - Convert UCS to UTF-8, storing up to 4 octets 
+ *              and a terminating NUL character in buf[].
+ *
+ * Return: Number of UTF-8 octets generated (not including the NUL).
+ */
+size_t utf8encode(char buf[5], ucs_t codepoint)
+{
+    buf[0] = NUL;
+    
+    if (UCS_MAX < codepoint) {
+        error("Invalid UCS output code point discarded", codepoint);
+        return 0;
+    } else if (UCS_SURR_FIRST <= codepoint && 
+                                           codepoint <= UCS_SURR_LAST) {
+        error("Invalid UCS output surrogate discarded", codepoint);
+	return 0;
+    }
+           
+    if (codepoint <= U(007F)) {
+	buf[0] = (char)codepoint;
+	buf[1] = NUL;
+	return 1;
+    } else if (codepoint <= U(07FF)) {
+        unsigned const bits = (unsigned)codepoint;
+        unsigned first, second;
+        
+        first  = ((bits >>  6) & 0x1FU) | 0xC0U,
+	second = ((bits      ) & 0x3FU) | 0x80U;
+
+	buf[0] = (char)first;
+	buf[1] = (char)second;
+	buf[2] = NUL;
+	return 2;
+    } else if (codepoint <= U(FFFF)) {
+        unsigned const bits = (unsigned)codepoint;
+        unsigned first, second, third;
+        first  = ((bits >> 12) & 0x0FU) | 0xE0U,
+	second = ((bits >>  6) & 0x3FU) | 0x80U,
+	third  = ((bits      ) & 0x3FU) | 0x80U;
+
+	buf[0] = (char)first;
+	buf[1] = (char)second;
+	buf[2] = (char)third;
+	buf[3] = NUL;
+	return 3;
+    } else /* codepoint <= U(10FFFF) */ {
+        unsigned first, second, third, fourth;
+
+        first  = (unsigned)((codepoint >> 18) & 0x07L) | 0xF0U;
+        second = (unsigned)((codepoint >> 12) & 0x3FL) | 0x80U;
+        third  = (unsigned)((codepoint >>  6) & 0x3FL) | 0x80U;
+        fourth = (unsigned)((codepoint      ) & 0x3FL) | 0x80U;
+        
+	buf[0] = (char)first;
+	buf[1] = (char)second;
+	buf[2] = (char)third;
+	buf[3] = (char)fourth;
+	buf[4] = NUL;
+	return 4;
+    }
+    
+    return 0;
+}
+
+/*====================================================================*/
+
+ucs_t getuc(FILE *);
+long putuc(ucs_t, FILE *);
+long ungetuc(ucs_t, FILE *);
+#define UNGETUC_MAX 4
+
+char       uc_buf[5];
+ucs_t      uc_ungot[UNGETUC_MAX];
+unsigned   uc_nungot = 0U;
+
+ucs_t getuc(FILE *fp)
+{
+    int ch;
+    int len, i;
+    ucs_t ucs;
+    
+    if (uc_nungot > 0U)
+	return uc_ungot[--uc_nungot];
+
+    if ((ch = getc(fp)) == EOF)
+	return UEOF;
+
+    i = 1;
+    uc_buf[0] = ch;
+    uc_buf[i] = NUL;
+    len = utf8len(uc_buf, 5U);
+    if (len < -1)
+	while (++len < 0) {
+	    if ((ch = getc(fp)) == EOF) return UEOF;
+	    uc_buf[i++] = ch;
+	}
+    else if (len > 1)
+	while (--len > 0) {
+	    if ((ch = getc(fp)) == EOF) return UEOF;
+	    uc_buf[i++] = ch;
+	}
+    ucs = utf8decode(uc_buf, 5U);
+    return ucs;
+}
+
+long putuc(ucs_t ucs, FILE *fp)
+{
+    char buf[5];
+    int len, i;
+    int st;
+    
+    len = utf8encode(buf, ucs);
+    if (len > 0) {
+	for (i = 0; i < len; ++i)
+	    if ((st = putc(buf[i], fp)) == EOF)
+		return UEOF;
+	return ucs;
+    } else {
+	return UEOF;
+    }
+}
+
+long ungetuc(ucs_t ucs, FILE *fp)
+{
+    if (uc_nungot + 1 < UNGETUC_MAX)
+	return uc_ungot[uc_nungot++] = ucs;
+    else
+	return UEOF;
+}
+
+/*====================================================================*/
+
+/*
  * Names of environment variables used to 
  *  1. Point to a directory used in the search path.
  *  2. Point to a default replacement file if none given otherwise.
@@ -174,7 +521,6 @@ static const char *rn_repl[RN_NUM]; /* Replacement texts for RNs. */
  * Character classification.
  */
  
-#define NUL  0
 #define SOH  1
 #define STX  2
 #define ETX  3
@@ -498,7 +844,7 @@ void usage()
     printf("  --version        Print version\n");
 }
 
-void do_Attr(const char *name, const char *val, size_t len)
+void repl_Attr(ESIS_UserData ud, const char *name, const char *val, size_t len)
 {
     push_att(name, val, len);
 }
@@ -579,7 +925,7 @@ void put_repl(const char *repl, int bol[2])
 	PUTC(EOL);
 }
 
-void do_Start(cmark_node_type nt)
+void repl_Start(ESIS_UserData ud, cmark_node_type nt)
 {
     const struct trans_ *tr = &trans[nt];
     
@@ -593,14 +939,14 @@ void do_Start(cmark_node_type nt)
     }
 }
 
-void do_Empty(cmark_node_type nt)
+void repl_Empty(ESIS_UserData ud, cmark_node_type nt)
 {
-    do_Start(nt);
+    repl_Start(ud, nt);
     
     pop_atts();
 }
 
-void do_Cdata(const char *cdata, size_t len)
+void repl_Cdata(ESIS_UserData ud, const char *cdata, size_t len)
 {
     size_t k;
     
@@ -609,7 +955,7 @@ void do_Cdata(const char *cdata, size_t len)
 	PUTC(cdata[k]);
 }
 
-void do_End(cmark_node_type nt)
+void repl_End(ESIS_UserData ud, cmark_node_type nt)
 {
     const struct trans_ *tr = &trans[nt];
     
@@ -623,12 +969,173 @@ void do_End(cmark_node_type nt)
     pop_atts();
 }
  
+static const struct ESIS_API_ repl_API = {
+    repl_Attr,
+    repl_Start,
+    repl_Empty,
+    repl_Cdata,
+    repl_End
+};
  
+/*
+ * RAST
+ *
+ */
+ 
+struct RAST_Param_ {
+    FILE *outfp;
+} rast_param;
+
+void rast_data(FILE *fp, const char *data, size_t len, char delim)
+{
+    size_t k;
+    int in_special = 1;
+    int at_bol = 1;
+    
+    for (k = 0U; k < len; ++k) {
+	int ch = data[k] & 0xFF;
+	if (32 <= ch && ch < 128) {
+	    if (in_special) {
+		if (!at_bol) {
+		    fputc(EOL, fp);
+		}
+		fputc(delim, fp);
+		in_special = 0;
+		at_bol = 0;
+	    }
+	    fputc(ch, fp);
+	} else {
+	    if (!in_special) {
+		if (!at_bol) {
+		    fputc(delim, fp);
+		    fputc('\n', fp);
+		}
+		in_special = 1;
+		at_bol = 1;
+	    }
+	    if (128 < ch) {
+		size_t n = len - k;
+		int i = utf8len(&data[k], n);
+		if (i > 0) {
+		    ucs_t ucs = utf8decode(&data[k], n);
+		    fprintf(fp, "#%lu\n", ucs);
+		    k += i-1;
+		} else {
+		    unsigned m;
+		    n = (unsigned)(-i);
+		    if (n == 0) n = 1;
+		    
+		    for (m = 0; m < n; ++m) {
+			fprintf(fp, "#X%02X\n", 0xFFU & data[k+m]);
+		    }
+		    k = k + m - 1;
+		    fprintf(stderr, "Invalid UTF-8 sequence in data line!\n");
+		}
+	    } else {
+		switch (ch) {
+		case RS:  fputs("#RS\n", fp);	    break;
+		case RE:  fputs("#RE\n", fp);	    break;
+		case HT:  fputs("#TAB\n", fp);	    break;
+		default:  fprintf(fp, "#%u\n", ch); break;
+		}
+	    }
+	    
+	    at_bol = 1;
+	}
+    }
+    if (!in_special) { fputc(delim, fp); at_bol = 0; }
+    if (!at_bol) fputc(EOL, fp);
+}
+
+
+void discard_atts(void)
+{
+    cmark_strbuf_clear(&attr_buf);
+    cmark_strbuf_putc(&attr_buf, NUL); /* Index = 0U is unsused.*/
+    
+    cmark_strbuf_clear(&nameidx_buf);
+    cmark_strbuf_clear(&validx_buf);
+}
+
+void rast_Attr(ESIS_UserData ud, const char *name, const char *val, size_t len)
+{
+    FILE *fp = ((struct RAST_Param_*)ud)->outfp;
+    
+    if (len == NTS) len = strlen(val);
+    
+    push_att(name, val, len);
+    return;
+}
+
+void rast_Start(ESIS_UserData ud, cmark_node_type nt)
+{
+    FILE *fp = ((struct RAST_Param_*)ud)->outfp;
+    size_t nattr = NATTR;
+    
+    if (nattr > 0U) {
+	size_t k;
+
+	fprintf(fp, "[%s\n", nodename[nt]);
+	for (k = nattr; k > 0U; --k) {
+	    nameidx_t nameidx = NAMEIDX[k-1];
+	    nameidx_t validx  = VALIDX[k-1];
+	    const char *name = attr_buf.ptr + nameidx;
+	    const char *val  = attr_buf.ptr + validx;
+	    fprintf(fp, "%s=\n", name);
+	    rast_data(fp, val, strlen(val), '!');
+	}
+	fprintf(fp, "]\n");
+    } else
+	fprintf(fp, "[%s]\n", nodename[nt]);
+	
+    discard_atts();
+    return;
+}
+
+void rast_Empty(ESIS_UserData ud, cmark_node_type nt)
+{
+    FILE *fp = ((struct RAST_Param_*)ud)->outfp;
+    rast_Start(ud, nt);
+    return;
+}
+
+void rast_Cdata(ESIS_UserData ud, const char *cdata, size_t len)
+{
+    FILE *fp = ((struct RAST_Param_*)ud)->outfp;
+    if (len == NTS) len = strlen(cdata);
+    
+    rast_data(fp, cdata, len, '|');
+}
+
+void rast_End(ESIS_UserData ud, cmark_node_type nt)
+{
+    FILE *fp = ((struct RAST_Param_*)ud)->outfp;
+    fprintf(fp, "[/%s]\n", nodename[nt]);
+    return;   
+}
+
+const struct ESIS_API_ rast_API = {
+    rast_Attr,
+    rast_Start,
+    rast_Empty,
+    rast_Cdata,
+    rast_End,
+    &rast_param
+};
+
 /*
  * Rendering into the translator.
  */
  
-static int S_render_node(cmark_node *node, cmark_event_type ev_type)
+#define do_Attr(N, V, L)   api->attr(api->ud, N, V, L)
+#define do_Start(NT)       api->start(api->ud, NT)
+#define do_Empty(NT)       api->empty(api->ud, NT)
+#define do_Cdata(D, L)     api->cdata(api->ud, D, L)
+#define do_End(NT)         api->end(api->ud, NT)
+
+static int S_render_node_esis(cmark_node *node,
+                              cmark_event_type ev_type,
+                              const ESIS_API *api)
 {
   cmark_delim_type delim;
   bool entering = (ev_type == CMARK_EVENT_ENTER);
@@ -710,7 +1217,7 @@ static int S_render_node(cmark_node *node, cmark_event_type ev_type)
   return 1;
 }
 
-char *cmark_render_esis(cmark_node *root)
+char *cmark_render_esis(cmark_node *root, const ESIS_API *api)
 {
   cmark_event_type ev_type;
   cmark_node *cur;
@@ -718,7 +1225,7 @@ char *cmark_render_esis(cmark_node *root)
 
   while ((ev_type = cmark_iter_next(iter)) != CMARK_EVENT_DONE) {
     cur = cmark_iter_get_node(iter);
-    S_render_node(cur, ev_type);
+    S_render_node_esis(cur, ev_type, api);
   }
   cmark_iter_free(iter);
   return NULL;
@@ -735,7 +1242,8 @@ char *cmark_render_esis(cmark_node *root)
  * data into the writer.
  */
 static void gen_document(cmark_node *document,
-                         cmark_option_t options)
+                         cmark_option_t options,
+                         const ESIS_API *api)
 {
     int bol[2];
     
@@ -746,16 +1254,14 @@ static void gen_document(cmark_node *document,
 	put_repl(rn_repl[RN_PROLOG], bol);
     }
 
-    cmark_render_esis(document);
+    cmark_render_esis(document, api);
 
     if (rn_repl[RN_EPILOG] != NULL) {
 	put_repl(rn_repl[RN_EPILOG], bol);
     }
 }
 
-void do_Attr(const char *name, const char *val, size_t len);
-
-size_t do_prolog(char *buffer, size_t nbuf)
+size_t do_prolog(char *buffer, size_t nbuf, const ESIS_API *api)
 {
     size_t ibol, nused;
     unsigned dc_count = 0U;
@@ -1293,11 +1799,16 @@ int main(int argc, char *argv[])
     time_t now;
     const char *username;
     const char *title_arg = NULL, *css_arg = NULL;
-
+    
     cmark_parser *parser;
     cmark_node *document;
     cmark_option_t options = CMARK_OPT_DEFAULT | CMARK_OPT_ISO;
 
+    const ESIS_API *api = &repl_API;
+    int doing_rast = 0;
+
+    rast_param.outfp = stdout;
+    
     if ( (username = getenv("LOGNAME"))   != NULL ||
          (username = getenv("USERNAME"))  != NULL )
 	strncpy(default_creator, username, sizeof default_creator -1U);
@@ -1317,7 +1828,14 @@ int main(int argc, char *argv[])
 	} else if ((strcmp(argv[argi], "--repl") == 0) ||
 	    (strcmp(argv[argi], "-r") == 0)) {
 	    const char *filename = argv[++argi];
+	    if (doing_rast) {
+		fprintf(stderr, "--rast can't use --repl!\n");
+		exit(EXIT_FAILURE);
+	    }
 	    setup(filename);
+	} else if (strcmp(argv[argi], "--rast") == 0) {
+	    api = &rast_API;
+	    doing_rast = 1;
 	} else if ((strcmp(argv[argi], "--title") == 0) ||
 	    (strcmp(argv[argi], "-t") == 0)) {
 		title_arg = argv[++argi];
@@ -1354,7 +1872,7 @@ int main(int argc, char *argv[])
      * try using the default replacement file given in the
      * environment.
      */
-    if (repl_filecount == 0U)
+    if (repl_filecount == 0U && !doing_rast)
 	setup(NULL);
 
     parser = cmark_parser_new(options);
@@ -1376,7 +1894,9 @@ int main(int argc, char *argv[])
 	    if (in_header) {
 		char version[1024];
 		
-		hbytes = do_prolog(buffer, sizeof buffer);
+		if (doing_rast) {
+		}
+		hbytes = do_prolog(buffer, sizeof buffer, api);
 		
 		if (title_arg != NULL)
 		    do_Attr(META_DC_TITLE, title_arg, NTS);
@@ -1409,7 +1929,7 @@ int main(int argc, char *argv[])
     document = cmark_parser_finish(parser);
     cmark_parser_free(parser);
 
-    gen_document(document, options);
+    gen_document(document, options, api);
 
     cmark_node_free(document);
 
