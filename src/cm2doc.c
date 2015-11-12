@@ -1,4 +1,86 @@
-/* C90 header */
+/*== cm2doc.c =========================================================*
+
+NAME
+    cm2doc -
+	    .
+            .
+
+SYNOPSIS
+    cm2doc [ cmark-opts ] [(--title | -t) string] [(--css | -c) url]
+           [ --rast | { ( --repl | -r ) replfile } ] file ...
+
+DESCRIPTION
+	...
+	...
+	...
+
+	 1. ...
+
+	 2. ...
+	    ...
+
+
+OPTIONS
+    --rast
+	...
+
+    --repl
+    -r
+
+    --title
+    -t
+	...
+
+    --css
+    -c
+	...
+
+EXIT STATUS
+	...
+	...
+
+ENVIRONMENT
+	XXX	...
+		...
+
+BUGS
+	...
+	...
+	...
+
+
+------------------------------------------------------------------------
+
+COPYRIGHT NOTICE AND LICENSE
+
+Copyright (C) 2015 Martin Hofmann <mh@tin-pot.net>
+
+Redistribution and use in source and binary forms, with or without 
+modification, are permitted provided that the following conditions 
+are met:
+
+   1. Redistributions of source code must retain the above copyright 
+      notice, this list of conditions and the following disclaimer.
+
+   2. Redistributions in binary form must reproduce the above copy-
+      right notice, this list of conditions and the following dis-
+      claimer in the documentation and/or other materials provided 
+      with the distribution.
+
+THIS SOFTWARE IS PROVIDED BY THE AUTHOR ''AS IS'' AND ANY 
+EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE 
+IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR 
+PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE AUTHOR OR
+CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, 
+EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, 
+PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR 
+PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY 
+OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLU-
+DING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF 
+THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+
+*=====================================================================*/
+
 #include <assert.h>
 #include <ctype.h> /* toupper() */
 #include <errno.h>
@@ -15,22 +97,415 @@
 #include "node.h"
 #include "buffer.h"
 
-/*
- * Make the Git commit ident and the repository URL available.
- * Use -DWITH_GITIDENT=0 to supress this, and use placeholder
- * values instead.
- */
-#ifndef WITH_GITIDENT
-#define WITH_GITIDENT 1
-#endif
+/*== ESIS API ========================================================*/
 
+/*
+ * Callback function types for document traversal.
+ */
+
+typedef void *ESIS_UserData;
+
+typedef void (ESIS_Attr)(ESIS_UserData,
+                             const char *name, const char *val, size_t);
+typedef void (ESIS_Start)(ESIS_UserData,               cmark_node_type);
+typedef void (ESIS_Empty)(ESIS_UserData,               cmark_node_type);
+typedef void (ESIS_Cdata)(ESIS_UserData,          const char *, size_t);
+typedef void (ESIS_End)(ESIS_UserData,                 cmark_node_type);
+
+typedef struct ESIS_API_ {
+    ESIS_Attr	 *attr;
+    ESIS_Start	 *start;
+    ESIS_Empty	 *empty;
+    ESIS_Cdata	 *cdata;
+    ESIS_End	 *end;
+    ESIS_UserData ud;
+} ESIS_API;
+
+#define NUL  0
+
+
+/*== Unicode UTF-8 handling ==========================================*/
+
+void error(const char *msg, ...);
+
+typedef long ucs_t;
+
+#define U(X)                    ((ucs_t)(0x ## X ##L))
+#define UCS(CH)                 ((ucs_t)((CH)&0xFFU))
+
+#define IS_BYTE(c)              (!((c) & ~0xFF))
+#define BYTE(c)                 ((c) & 0xFF)
+#define HIGH(w)                 (BYTE((w) >> 8))
+#define LOW(w)                  (BYTE(w))
+#define POINT(hi,lo)            ((BYTE(hi) << 8) | BYTE(lo))
+
+/*-- UCS code points -------------------------------------------------*/
+
+#define UEOF                    -1L
+#define UCS_NUL                  0UL
+
+#define UCS_SURR_FIRST          U(D800)
+#define UCS_HI_FIRST            U(D800)
+#define UCS_HI_LAST             U(DBFF)
+#define UCS_LO_FIRST            U(DC00)
+#define UCS_LO_LAST             U(DFFF)
+#define UCS_SURR_LAST           U(DFFF)
+
+#define UCS_NONCH_FIRST         U(FDD0) /* Not assigned, but allowed */
+#define UCS_NONCH_LAST          U(FDEF) /* in XML. */
+
+#define UCS_BOM                 U(FEFF)
+#define UCS_NONCH_HIGH          U(FFFF)
+
+#define UCS_REPLACEMENT         U(FFFD)
+
+#define UCS_MAX                 U(10FFFF)
+
+/*
+ * UCS_ISXML() - Check XML code point
+ *
+ * The XML "Character Range" is defined in W3C XML 1.0 5th Edition
+ * as:
+ *
+ *     Char ::= #x9 | #xA | #xD
+ *            | [#x20-#xD7FF] | [#xE000-#xFFFD] | [#x10000-#x10FFFF]
+ *
+ * The SGML declaration for XML in ISO 8879:1986/Cor.2:1999 (in the
+ * the informative "Annex L: Added Requirements for XML" does also
+ * exclude 
+ * 
+ *  1. the U+007F DELETE character (which has the Unicode General
+ *     Category Cc [Other, Control], but is *not* a control character
+ *     by ISO 646:1991), and
+ *
+ *  2. all the C1 control characters (range U+0080 .. U+009F).
+ *
+ * We go with W3C XML here.
+ */
+ 
+#define UCS_ISXML(CP) (							\
+( (CP) >= 32 || (CP) == 9 || (CP) == 10 || (CP) == 13 ) &&		\
+  ( (CP) < U(D800) || U(DFFF) < (CP) ) &&				\
+  (CP) != U(FFFE) && (CP) != U(FFFF) &&					\
+  (CP) <= UCS_MAX )
+
+/*-- UTF-8 lengths ---------------------------------------------------*/
+
+/*
+ * The first byte determines how many "contiunuation" bytes follow.
+ */
+
+#define UTF_START2_MASK 0x1F   /* Mask payload bits in start 2 byte   */
+#define UTF_START3_MASK 0x0F   /* Mask payload bits in start 3 byte   */
+#define UTF_START4_MASK 0x07   /* Mask payload bits in start 3 byte   */
+#define UTF_CONTIN_MASK 0x3F   /* Mask payload bits in contin byte    */
+#define UTF_CONTIN_BITS 6      /* There are 6 payload bits in that    */
+
+/*
+ * We only want to process well-formed sequences.
+ *
+ * See Table 3-7 "Well formed UTF-8 byte sequences" in
+ * <http://www.unicode.org/versions/Unicode6.0.0/ch03.pdf>
+ * for details.
+ */
+
+#define UTF_IS_START2(c) ('\xC2' <= (c) && (c) <= '\xDF')   /* C2..DF */
+#define UTF_IS_START3(c) (((c) & '\xF0') == '\xE0')         /* E0..EF */
+#define UTF_IS_START4(c) (((c) & '\xF8') == '\xF0')         /* F0..F7 */
+
+#define UTF_IS_CONTIN(c) (((c) & '\xC0') == '\x80')         /* 80..BF */
+
+/*
+ * utf8len -
+ *	Determine length and check validity of a supposed 
+ *	UTF-8 sequence.
+ *
+ * Return:
+ * 
+ *   m > 0 : A valid m-byte long seqence is in buf[0..m-1].
+ *
+ *   m < 0 : Either the (-m)-byte long sequence is invalid,
+ *           or the size allowed by parameter len is too low.
+ */
+ 
+int utf8tab[32] = {
+    1, 1, 1, 1, 1, 1, 1, 1,   1, 1, 1, 1, 1, 1, 1, 1,
+    0, 0, 0, 0, 0, 0, 0, 0,   2, 2, 2, 2, 3, 3, 4, 5,
+};
+
+int utf8len(const char buf[4], size_t len)
+{
+    unsigned byte = buf[0] & 0xFFU;
+    unsigned idx = (byte >> 3) & 0x1FU;
+    int u8len = utf8tab[idx];
+    
+    switch (u8len) {
+    case 0: return 0; /* UTF-8 trailing octet */
+    case 1: return ( u8len <= (int)len ) ? u8len : -u8len;
+    case 2: return ( u8len <= (int)len && UTF_IS_CONTIN(buf[1]) ) ?
+                                                         u8len : -u8len;
+    case 3: return ( u8len <= (int)len && UTF_IS_CONTIN(buf[1])
+                                       && UTF_IS_CONTIN(buf[2]) ) ?
+                                                         u8len : -u8len;
+    case 4: return ( u8len <= (int)len && UTF_IS_CONTIN(buf[1])
+                                       && UTF_IS_CONTIN(buf[2])
+                                       && UTF_IS_CONTIN(buf[3]) ) ?
+                                                         u8len : -u8len;
+    default:
+	    return -u8len;
+    }
+}
+
+/*-- UTF-8 decoding --------------------------------------------------*/
+
+ucs_t utf8_decode2(const char buf[2])
+{
+    ucs_t val;
+
+    val  = (buf[0] & UTF_START2_MASK);               /* Upper 5 bits  */
+
+    if (!UTF_IS_CONTIN(buf[1]))
+	return UCS_REPLACEMENT;
+    val <<= UTF_CONTIN_BITS;
+    val |= (buf[1] & UTF_CONTIN_MASK);               /* Lower 6 bits  */
+
+    return val;
+}
+
+ucs_t utf8_decode3(const char buf[3])
+{
+    ucs_t val;
+
+    val  = (buf[0] & UTF_START3_MASK);               /* Upper 4 bits  */
+
+    if (!UTF_IS_CONTIN(buf[1]))
+	return UCS_REPLACEMENT;
+    val <<= UTF_CONTIN_BITS;
+    val |= (buf[1] & UTF_CONTIN_MASK) ;              /* Middle 6 bits */
+
+    if (!UTF_IS_CONTIN(buf[2]))
+	return UCS_REPLACEMENT;
+    val <<= UTF_CONTIN_BITS;
+    val |= (buf[2] & UTF_CONTIN_MASK) ;              /* Lower 6 bits  */
+
+    return val;
+}
+
+ucs_t utf8_decode4(const char buf[4])
+{
+    ucs_t val;
+
+    val  = (buf[0] & UTF_START4_MASK);               /* Upper 3 bits  */
+
+    if (!UTF_IS_CONTIN(buf[1]))
+	return UCS_REPLACEMENT;
+    val <<= UTF_CONTIN_BITS;
+    val |= (buf[1] & UTF_CONTIN_MASK) ;              /* Upper 6 bits  */
+
+    if (!UTF_IS_CONTIN(buf[2]))
+	return UCS_REPLACEMENT;
+    val <<= UTF_CONTIN_BITS;
+    val |= (buf[2] & UTF_CONTIN_MASK) ;              /* Middle 6 bits */
+
+    if (!UTF_IS_CONTIN(buf[3]))
+	return UCS_REPLACEMENT;
+    val <<= UTF_CONTIN_BITS;
+    val |= (buf[3] & UTF_CONTIN_MASK) ;              /* Lower 6 bits  */
+
+    return val;
+}
+
+/*
+ * utf8decode -- Convert UTF-8 to UCS
+ *
+ * Return UCS_REPLACEMENT if 
+ *
+ *   - buf[] is not a valid UTF-8 sequence, or
+ *
+ *   - len is too short.
+ */
+ucs_t utf8decode(const char buf[4], size_t len)
+{
+    int n = utf8len(buf, len);
+    
+    if (n > 0) switch (n) {
+	case 1: return UCS(buf[0]);
+	case 2: return utf8_decode2(buf);
+	case 3: return utf8_decode3(buf);
+	case 4: return utf8_decode4(buf);
+    }
+    return UCS_REPLACEMENT;
+}
+
+
+/*-- UTF-8 encoding --------------------------------------------------*/
+
+/*
+ * utf8encode - Convert UCS to UTF-8, storing up to 4 octets 
+ *              and a terminating NUL character in buf[].
+ *
+ * Return: Number of UTF-8 octets generated (not including the NUL).
+ */
+size_t utf8encode(char buf[5], ucs_t codepoint)
+{
+    buf[0] = NUL;
+    
+    if (UCS_MAX < codepoint) {
+        error("Invalid UCS output code point discarded", codepoint);
+        return 0;
+    } else if (UCS_SURR_FIRST <= codepoint && 
+                                           codepoint <= UCS_SURR_LAST) {
+        error("Invalid UCS output surrogate discarded", codepoint);
+	return 0;
+    }
+           
+    if (codepoint <= U(007F)) {
+	buf[0] = (char)codepoint;
+	buf[1] = NUL;
+	return 1;
+    } else if (codepoint <= U(07FF)) {
+        unsigned const bits = (unsigned)codepoint;
+        unsigned first, second;
+        
+        first  = ((bits >>  6) & 0x1FU) | 0xC0U,
+	second = ((bits      ) & 0x3FU) | 0x80U;
+
+	buf[0] = (char)first;
+	buf[1] = (char)second;
+	buf[2] = NUL;
+	return 2;
+    } else if (codepoint <= U(FFFF)) {
+        unsigned const bits = (unsigned)codepoint;
+        unsigned first, second, third;
+        first  = ((bits >> 12) & 0x0FU) | 0xE0U,
+	second = ((bits >>  6) & 0x3FU) | 0x80U,
+	third  = ((bits      ) & 0x3FU) | 0x80U;
+
+	buf[0] = (char)first;
+	buf[1] = (char)second;
+	buf[2] = (char)third;
+	buf[3] = NUL;
+	return 3;
+    } else /* codepoint <= U(10FFFF) */ {
+        unsigned first, second, third, fourth;
+
+        first  = (unsigned)((codepoint >> 18) & 0x07L) | 0xF0U;
+        second = (unsigned)((codepoint >> 12) & 0x3FL) | 0x80U;
+        third  = (unsigned)((codepoint >>  6) & 0x3FL) | 0x80U;
+        fourth = (unsigned)((codepoint      ) & 0x3FL) | 0x80U;
+        
+	buf[0] = (char)first;
+	buf[1] = (char)second;
+	buf[2] = (char)third;
+	buf[3] = (char)fourth;
+	buf[4] = NUL;
+	return 4;
+    }
+    
+    return 0;
+}
+
+
+/*--------------------------------------------------------------------*/
+
+/*
+ * Reading and writing UCS characters from/to text streams.
+ *
+ *             **UNTESTED, NOT YET IN USE**
+ */
+ 
+ucs_t getuc(FILE *);
+long putuc(ucs_t, FILE *);
+long ungetuc(ucs_t, FILE *);
+#define UNGETUC_MAX 4
+
+char       uc_buf[5];
+ucs_t      uc_ungot[UNGETUC_MAX];
+unsigned   uc_nungot = 0U;
+
+ucs_t getuc(FILE *fp)
+{
+    int ch;
+    int len, i;
+    ucs_t ucs;
+    
+    if (uc_nungot > 0U)
+	return uc_ungot[--uc_nungot];
+
+    if ((ch = getc(fp)) == EOF)
+	return UEOF;
+
+    i = 1;
+    uc_buf[0] = ch;
+    uc_buf[i] = NUL;
+    len = utf8len(uc_buf, 5U);
+    if (len < -1)
+	while (++len < 0) {
+	    if ((ch = getc(fp)) == EOF) return UEOF;
+	    uc_buf[i++] = ch;
+	}
+    else if (len > 1)
+	while (--len > 0) {
+	    if ((ch = getc(fp)) == EOF) return UEOF;
+	    uc_buf[i++] = ch;
+	}
+    ucs = utf8decode(uc_buf, 5U);
+    return ucs;
+}
+
+long putuc(ucs_t ucs, FILE *fp)
+{
+    char buf[5];
+    int len, i;
+    int st;
+    
+    len = utf8encode(buf, ucs);
+    if (len > 0) {
+	for (i = 0; i < len; ++i)
+	    if ((st = putc(buf[i], fp)) == EOF)
+		return UEOF;
+	return ucs;
+    } else {
+	return UEOF;
+    }
+}
+
+long ungetuc(ucs_t ucs, FILE *fp)
+{
+    if (uc_nungot + 1 < UNGETUC_MAX)
+	return uc_ungot[uc_nungot++] = ucs;
+    else
+	return UEOF;
+}
+
+/*====================================================================*/
+
+/*
+ * Names of environment variables used to 
+ *  1. Point to a directory used in the search path.
+ *  2. Point to a default replacement file if none given otherwise.
+ */
+#define REPL_DIR_VAR     "REPL_DIR"
+#define REPL_DEFAULT_VAR "REPL_DEFAULT"
+
+/*
+ * Optionally make the Git commit ident and the repository URL 
+ * available as character strings.
+ *
+ * Use -DWITH_GITIDENT=1 to switch this on (and have the strings
+ * ready for the linker to find them!); or do nothing and use the
+ * placeholder values given below. 
+ */
+ 
 #if WITH_GITIDENT
 extern const char cmark_gitident[];
 extern const char cmark_repourl[];
 #else
 static const char cmark_gitident[] = "n/a";
-static const char cmark_repourl[]  = "URL: n/a";
+static const char cmark_repourl[]  = "https://github.com/tin-pot/cmark";
 #endif
+
+/*--------------------------------------------------------------------*/
 
 /*
  * Predefined "pseudo-attribute" names, usable in the "replacement" text
@@ -67,7 +542,7 @@ static const char cmark_repourl[]  = "URL: n/a";
 #define META_DC_TITLE   "DC.title"
 #define META_DC_CREATOR "DC.creator"
 #define META_DC_DATE    "DC.date"
-#define META_CSS        "cm2doc.css"
+#define META_CSS        "CM.css"
 
 /*
  * Default values for the "pseudo-attributes".
@@ -85,6 +560,8 @@ static char default_creator[81] = "N.N.";
 /* Hard-coded defaults for command-line options --title and --css. */
 #define DEFAULT_DC_TITLE    "Untitled Document"
 #define DEFAULT_CSS         "default.css"
+
+/*--------------------------------------------------------------------*/
 
 /*
  * For each CommonMark node type we define a GI conforming to the
@@ -117,32 +594,37 @@ static char default_creator[81] = "N.N.";
 #define ISUCNMCHAR(C) ( ISUCNMSTRT(C) || (C) == '-' || (C) == '.' )
 #define ISLCNMCHAR(C) ( ISLCNMSTRT(C) || (C) == '-' || (C) == '.' )
 
+/*====================================================================*/
+
 /* How many node types there are, and what the name length limit is. */
 #define NODE_NUM       (CMARK_NODE_LAST_INLINE+1)
 #define NODENAME_LEN   NAMELEN
 
 static const char* const nodename[NODE_NUM] = {
      NULL,	/* The "none" type (enum const 0) is invalid! */
-    "DOC",
-    "QUOTE-BL",
-    "LIST",
-    "ITEM",
-    "CODE-BL",
-    "FRAG-BL", /* Block HTML/SGML/XHTML/XML fragment: literal output. */
-    "PARA",
-    "HEADER",
-    "HRULE",
-    "TEXT",
-    "SOFT-BR",
-    "LINE-BR",
-    "CODE",
-    "FRAG",   /* Inline HTML/SGML/XHTML/XML fragment: literal output. */
-    "EMPH",
-    "STRONG",
-    "LINK",
-    "IMAGE",
+   /*12345678*/
+    "CM.DOC",
+    "CM.QUO-B",
+    "CM.LIST",
+    "CM.LI",
+    "CM.COD-B",
+    "CM.FRG-B", /* Block HTML/SGML/XHTML/XML fragment: literal output. */
+    "CM.PAR",
+    "CM.HDR",
+    "CM.HR",
+    "CM.TXT",
+    "CM.SF-BR",
+    "CM.LN-BR",
+    "CM.COD",
+    "CM.FRG",   /* Inline HTML/SGML/XHTML/XML fragment: literal output. */
+    "CM.EMPH",
+    "CM.STRN",
+    "CM.LNK",
+    "CM.IMG",
 };
 
+
+/*--------------------------------------------------------------------*/
 
 /*
  * "Reserved Names" to bind special "replacement texts" to:
@@ -162,11 +644,12 @@ static const char *const rn_name[] = {
     
 static const char *rn_repl[RN_NUM]; /* Replacement texts for RNs. */
 
+/*--------------------------------------------------------------------*/
+
 /*
  * Character classification.
  */
  
-#define NUL  0
 #define SOH  1
 #define STX  2
 #define ETX  3
@@ -184,6 +667,8 @@ static const char *rn_repl[RN_NUM]; /* Replacement texts for RNs. */
 #define EOL          LF	    /* Per ISO C90 text stream. */
 
  
+/*--------------------------------------------------------------------*/
+
 /*
  * SGML function roles.
  */
@@ -214,6 +699,8 @@ static const char *rn_repl[RN_NUM]; /* Replacement texts for RNs. */
                                                           ISSEPCHAR(C) )
 #define ISNMSTART(C) ( ISDIGIT(C) || ISUCNMSTRT(C) || ISLCNMSTRT(C) )
 #define ISNMCHAR(C)  ( ISNMSTART(C) || (C) == '-' || (C) == '.' )
+
+/*--------------------------------------------------------------------*/
 
 /*
  * The output stream (right now, this is always stdout).
@@ -248,6 +735,8 @@ unsigned colno       = 0U;  /* Text input position: Column number. */
  */
 #define NTS (~0U)
 
+/*--------------------------------------------------------------------*/
+
 void error(const char *msg, ...)
 {
     va_list va;
@@ -256,6 +745,8 @@ void error(const char *msg, ...)
     va_end(va);
     exit(EXIT_FAILURE);
 }
+
+/*====================================================================*/
 
 /*
  * Translation definitions for a node type are hold in a 
@@ -269,12 +760,6 @@ void error(const char *msg, ...)
 #define ETAG_BOL_START  040
 #define ETAG_BOL_END    100
 
-/*typedef size_t textidx_t; /* Index into text_buf. */
-typedef size_t nameidx_t; /* Index into attr_buf. */
-typedef size_t validx_t;  /* Index into attr_buf. */
-
-static const size_t NULLIDX = 0U; /* Common NULL value for indices. */
-
 struct trans_ {
     const char *stag_repl;
     const char *etag_repl;
@@ -283,18 +768,20 @@ struct trans_ {
 
 /*
  * Translation definitions: one array member per node type,
- * plus the **unused** member at index 0 == CMARK_NODE_NONE.
+ * plus the (currently unused) member at index 0 == CMARK_NODE_NONE.
  */
  
 static struct trans_ trans[NODE_NUM];
 
-/*
- * Replacement texts.
- */
-static cmark_strbuf text_buf; /* NOT USED YET - RFU. */
+/*--------------------------------------------------------------------*/
+
+typedef size_t nameidx_t; /* Index into attr_buf. */
+typedef size_t validx_t;  /* Index into attr_buf. */
+
+static const size_t NULLIDX = 0U; /* Common NULL value for indices. */
 
 /*
- *Attribute names and values of current node.
+ * Attribute names and values of current node(s).
  */
 static cmark_strbuf attr_buf;
 
@@ -445,6 +932,8 @@ const char* att_val(const char *name, unsigned depth)
 }
 
 
+/*--------------------------------------------------------------------*/
+
 /*
  * Set the replacement text for a node type.
  */
@@ -457,9 +946,13 @@ void set_repl(cmark_node_type nt,
     
     switch (tag_bit & (STAG_REPL|ETAG_REPL)) {
     case STAG_REPL:
+	if (trans[nt].defined & STAG_REPL)
+	    free((void*)trans[nt].stag_repl);
 	trans[nt].stag_repl = repl;
 	break;
     case ETAG_REPL:
+	if (trans[nt].defined & ETAG_REPL)
+	    free((void*)trans[nt].stag_repl);
 	trans[nt].etag_repl = repl;
 	break;
     default:
@@ -469,24 +962,11 @@ void set_repl(cmark_node_type nt,
     trans[nt].defined |= tag_bit;
 }
 
+/*--------------------------------------------------------------------*/
 
-void usage()
-{
-    printf("Usage:   cm2html spec [FILE*]\n");
-    printf("\nspec is the output specification.\n\n");
-    printf("Options:\n");
-    printf("  -t --title TITLE Set the document title\n");
-    printf("  -c --css CSS     Set the document style sheet to CSS\n");
-    printf("  --sourcepos      Include source position attribute\n");
-    printf("  --hardbreaks     Treat newlines as hard line breaks\n");
-    printf("  --safe           Suppress raw HTML and dangerous URLs\n");
-    printf("  --smart          Use smart punctuation\n");
-    printf("  --normalize      Consolidate adjacent text nodes\n");
-    printf("  --help, -h       Print usage information\n");
-    printf("  --version        Print version\n");
-}
 
-void do_Attr(const char *name, const char *val, size_t len)
+void repl_Attr(ESIS_UserData ud,
+                          const char *name, const char *val, size_t len)
 {
     push_att(name, val, len);
 }
@@ -567,7 +1047,7 @@ void put_repl(const char *repl, int bol[2])
 	PUTC(EOL);
 }
 
-void do_Start(cmark_node_type nt)
+void repl_Start(ESIS_UserData ud, cmark_node_type nt)
 {
     const struct trans_ *tr = &trans[nt];
     
@@ -581,14 +1061,14 @@ void do_Start(cmark_node_type nt)
     }
 }
 
-void do_Empty(cmark_node_type nt)
+void repl_Empty(ESIS_UserData ud, cmark_node_type nt)
 {
-    do_Start(nt);
+    repl_Start(ud, nt);
     
     pop_atts();
 }
 
-void do_Cdata(const char *cdata, size_t len)
+void repl_Cdata(ESIS_UserData ud, const char *cdata, size_t len)
 {
     size_t k;
     
@@ -597,26 +1077,191 @@ void do_Cdata(const char *cdata, size_t len)
 	PUTC(cdata[k]);
 }
 
-void do_End(cmark_node_type nt)
+void repl_End(ESIS_UserData ud, cmark_node_type nt)
 {
     const struct trans_ *tr = &trans[nt];
     
     if (tr->defined & ETAG_REPL) {
 	int bol[2];
-	bol[0] = (tr->defined & STAG_BOL_START) != 0;
-	bol[1] = (tr->defined & STAG_BOL_END)   != 0;
+	bol[0] = (tr->defined & ETAG_BOL_START) != 0;
+	bol[1] = (tr->defined & ETAG_BOL_END)   != 0;
 	put_repl(tr->etag_repl, bol);
     }
 	
     pop_atts();
 }
  
+static const struct ESIS_API_ repl_API = {
+    repl_Attr,
+    repl_Start,
+    repl_Empty,
+    repl_Cdata,
+    repl_End
+};
  
+/*====================================================================*/
+
+/*
+ * RAST
+ *
+ */
+ 
+struct RAST_Param_ {
+    FILE *outfp;
+} rast_param;
+
+void rast_data(FILE *fp, const char *data, size_t len, char delim)
+{
+    size_t k;
+    int in_special = 1;
+    int at_bol = 1;
+    
+    for (k = 0U; k < len; ++k) {
+	int ch = data[k] & 0xFF;
+	if (32 <= ch && ch < 128) {
+	    if (in_special) {
+		if (!at_bol) {
+		    fputc(EOL, fp);
+		}
+		fputc(delim, fp);
+		in_special = 0;
+		at_bol = 0;
+	    }
+	    fputc(ch, fp);
+	} else {
+	    if (!in_special) {
+		if (!at_bol) {
+		    fputc(delim, fp);
+		    fputc('\n', fp);
+		}
+		in_special = 1;
+		at_bol = 1;
+	    }
+	    if (128 < ch) {
+		size_t n = len - k;
+		int i = utf8len(&data[k], n);
+		if (i > 0) {
+		    ucs_t ucs = utf8decode(&data[k], n);
+		    fprintf(fp, "#%lu\n", ucs);
+		    k += i-1;
+		} else {
+		    unsigned m;
+		    n = (unsigned)(-i);
+		    if (n == 0) n = 1;
+		    
+		    for (m = 0; m < n; ++m) {
+			fprintf(fp, "#X%02X\n", 0xFFU & data[k+m]);
+		    }
+		    k = k + m - 1;
+		    fprintf(stderr, "Invalid UTF-8 sequence in data line!\n");
+		}
+	    } else {
+		switch (ch) {
+		case RS:  fputs("#RS\n", fp);	    break;
+		case RE:  fputs("#RE\n", fp);	    break;
+		case HT:  fputs("#TAB\n", fp);	    break;
+		default:  fprintf(fp, "#%u\n", ch); break;
+		}
+	    }
+	    
+	    at_bol = 1;
+	}
+    }
+    if (!in_special) { fputc(delim, fp); at_bol = 0; }
+    if (!at_bol) fputc(EOL, fp);
+}
+
+
+void discard_atts(void)
+{
+    cmark_strbuf_clear(&attr_buf);
+    cmark_strbuf_putc(&attr_buf, NUL); /* Index = 0U is unsused.*/
+    
+    cmark_strbuf_clear(&nameidx_buf);
+    cmark_strbuf_clear(&validx_buf);
+}
+
+void rast_Attr(ESIS_UserData ud, const char *name, const char *val, size_t len)
+{
+    FILE *fp = ((struct RAST_Param_*)ud)->outfp;
+    
+    if (len == NTS) len = strlen(val);
+    
+    push_att(name, val, len);
+    return;
+}
+
+void rast_Start(ESIS_UserData ud, cmark_node_type nt)
+{
+    FILE *fp = ((struct RAST_Param_*)ud)->outfp;
+    size_t nattr = NATTR;
+    
+    if (nattr > 0U) {
+	size_t k;
+
+	fprintf(fp, "[%s\n", nodename[nt]);
+	for (k = nattr; k > 0U; --k) {
+	    nameidx_t nameidx = NAMEIDX[k-1];
+	    nameidx_t validx  = VALIDX[k-1];
+	    const char *name = attr_buf.ptr + nameidx;
+	    const char *val  = attr_buf.ptr + validx;
+	    fprintf(fp, "%s=\n", name);
+	    rast_data(fp, val, strlen(val), '!');
+	}
+	fprintf(fp, "]\n");
+    } else
+	fprintf(fp, "[%s]\n", nodename[nt]);
+	
+    discard_atts();
+    return;
+}
+
+void rast_Empty(ESIS_UserData ud, cmark_node_type nt)
+{
+    FILE *fp = ((struct RAST_Param_*)ud)->outfp;
+    rast_Start(ud, nt);
+    return;
+}
+
+void rast_Cdata(ESIS_UserData ud, const char *cdata, size_t len)
+{
+    FILE *fp = ((struct RAST_Param_*)ud)->outfp;
+    if (len == NTS) len = strlen(cdata);
+    
+    rast_data(fp, cdata, len, '|');
+}
+
+void rast_End(ESIS_UserData ud, cmark_node_type nt)
+{
+    FILE *fp = ((struct RAST_Param_*)ud)->outfp;
+    fprintf(fp, "[/%s]\n", nodename[nt]);
+    return;   
+}
+
+const struct ESIS_API_ rast_API = {
+    rast_Attr,
+    rast_Start,
+    rast_Empty,
+    rast_Cdata,
+    rast_End,
+    &rast_param
+};
+
+/*====================================================================*/
+
 /*
  * Rendering into the translator.
  */
  
-static int S_render_node(cmark_node *node, cmark_event_type ev_type)
+#define do_Attr(N, V, L)   api->attr(api->ud, N, V, L)
+#define do_Start(NT)       api->start(api->ud, NT)
+#define do_Empty(NT)       api->empty(api->ud, NT)
+#define do_Cdata(D, L)     api->cdata(api->ud, D, L)
+#define do_End(NT)         api->end(api->ud, NT)
+
+static int S_render_node_esis(cmark_node *node,
+                              cmark_event_type ev_type,
+                              const ESIS_API *api)
 {
   cmark_delim_type delim;
   bool entering = (ev_type == CMARK_EVENT_ENTER);
@@ -698,7 +1343,7 @@ static int S_render_node(cmark_node *node, cmark_event_type ev_type)
   return 1;
 }
 
-char *cmark_render_esis(cmark_node *root)
+char *cmark_render_esis(cmark_node *root, const ESIS_API *api)
 {
   cmark_event_type ev_type;
   cmark_node *cur;
@@ -706,7 +1351,7 @@ char *cmark_render_esis(cmark_node *root)
 
   while ((ev_type = cmark_iter_next(iter)) != CMARK_EVENT_DONE) {
     cur = cmark_iter_get_node(iter);
-    S_render_node(cur, ev_type);
+    S_render_node_esis(cur, ev_type, api);
   }
   cmark_iter_free(iter);
   return NULL;
@@ -723,25 +1368,28 @@ char *cmark_render_esis(cmark_node *root)
  * data into the writer.
  */
 static void gen_document(cmark_node *document,
-                         cmark_option_t options)
+                         cmark_option_t options,
+                         const ESIS_API *api)
 {
     int bol[2];
     
     close_atts();
     bol[0] = bol[1] = 0;
     
-    if (rn_repl[RN_PROLOG] != NULL)
+    if (rn_repl[RN_PROLOG] != NULL) {
 	put_repl(rn_repl[RN_PROLOG], bol);
+    }
 
-    cmark_render_esis(document);
+    cmark_render_esis(document, api);
 
-    if (rn_repl[RN_EPILOG] != NULL)
+    if (rn_repl[RN_EPILOG] != NULL) {
 	put_repl(rn_repl[RN_EPILOG], bol);
+    }
 }
 
-void do_Attr(const char *name, const char *val, size_t len);
+/*====================================================================*/
 
-size_t do_prolog(char *buffer, size_t nbuf)
+size_t do_prolog(char *buffer, size_t nbuf, const ESIS_API *api)
 {
     size_t ibol, nused;
     unsigned dc_count = 0U;
@@ -786,27 +1434,34 @@ size_t do_prolog(char *buffer, size_t nbuf)
          * from ifield to just before the '\n', and append a NUL 
          * terminator, of course.
          */
-        len = ibol - ifield;
+        len = ibol - ifield - 1U;
         if (len > 1U) {
-	    
 	    if (dc_name[dc_count] != NULL)
 		do_Attr(dc_name[dc_count++], buffer+ifield, len);
 	    else {
-		const char *colon;
-		char name[NAMELEN+1], *val;
+		const char *colon, *val;
+		char name[NAMELEN+1];
 		size_t nname, nval;
-		colon = strchr(buffer+ifield, ':');
-		if (colon != NULL) {
-		    nname   = (colon-buffer) - ifield;
+		colon = strstr(buffer+ifield, ": ");
+		if (colon != NULL && 
+		              (nname = colon - (buffer+ifield)) < len) {
 		    if (nname > NAMELEN) nname = NAMELEN;
 		    strncpy(name, buffer + ifield, nname);
 		    name[nname] = NUL;
     		
-		    val     = name + nname + 1;
-		    nval    = len - nname - 1;
+		    val     = colon + 2;
+		    while (val[0] != EOL && ISSPACE(val[0]) &&
+		                                          val[1] != EOL)
+			++val;
+		    nval = 0U;
+		    while (val[nval] != EOL)
+			++nval;
 		    
-		    do_Attr(name, val, len);
-		}
+		    do_Attr(name, val, nval);
+		} else
+		    fprintf(stderr, "Meta line \"%% %.*s\" ignored: "
+		                           "No ': ' delimiter found.\n",
+		                               (int)len, buffer+ifield);
 	    }
 	    
         }
@@ -817,6 +1472,8 @@ size_t do_prolog(char *buffer, size_t nbuf)
     nused = ibol;
     return nused;
 }
+
+/*====================================================================*/
 
 /*
  * setup -- Parse the replacement definition file.
@@ -936,6 +1593,7 @@ int rni_repl(int ch)
     repl = get_repl(ch, bol);
     
     if (repl != NULL) {
+	free((void*)rn_repl[rn]);
 	rn_repl[rn] = repl;
     } 
     return GETC();
@@ -1142,16 +1800,83 @@ int name_repl(int ch, unsigned bits)
 }
 
 
+static unsigned    repl_filecount = 0U;
+static const char *repl_dir = NULL;
+static const char *repl_default = NULL;
+    
+#ifdef _WIN32
+#define DIRSEP "\\"
+#else
+#define DIRSEP "/"
+#endif
+static const char dirsep[] = DIRSEP;
+
+int is_relpath(const char *pathname)
+{
+    if (pathname[0] == dirsep[0])
+	return 0;
+#ifdef _WIN32
+    if ( (('A' <= pathname[0] && pathname[0] <= 'Z') || 
+          ('a' <= pathname[0] && pathname[0] <= 'z')) && 
+         pathname[1] == ':' )
+	return 0;
+#endif
+    return 1;
+}
+
 void setup(const char *repl_filename)
 {
     int ch;
     
+    if (repl_dir == NULL)     repl_dir = getenv(REPL_DIR_VAR);
+    if (repl_default == NULL) repl_default = getenv(REPL_DEFAULT_VAR);
+    
+    /*
+     * Passing in NULL means: use the default replacement definition.
+     */
+    if (repl_filename == NULL) {
+	repl_filename = repl_default;
+	if (repl_filename == NULL)
+	    return;
+    }
+	
+    /*
+     * First try the given filename literally.
+     */
     filename = repl_filename;
     replfp = fopen(filename, "r");
     
-    if (replfp == NULL)
+    /*
+     * Otherwise, try a *relative* pathname with the REPL_DIR_VAR
+     * environment variable.
+     */
+    if (replfp == NULL && repl_dir != NULL) {
+	size_t fnlen, rdlen;
+	int trailsep;
+	char *pathname;
+
+	if (is_relpath(filename)) {
+	    fnlen = strlen(filename);
+	    rdlen = strlen(repl_dir);
+	    trailsep = rdlen > 0U && (repl_dir[rdlen-1U] == dirsep[0]);
+	    pathname = malloc(rdlen + !trailsep + fnlen + 16);
+	    sprintf(pathname, "%s%s%s",
+		repl_dir, dirsep+trailsep, filename);
+	    replfp = fopen(pathname, "r");
+	    if (replfp != NULL) filename = pathname;
+	    else free(pathname);
+	}
+    }
+    
+    /*
+     * If we **still** have no replacement definition file, it is
+     * time to give up.
+     */
+    if (replfp == NULL) {
 	error("Can't open replacement file \"%s\": %s.", filename,
 	                                               strerror(errno));
+    } else
+	++repl_filecount;
     
     COUNT_EOL();
     
@@ -1192,6 +1917,25 @@ void setup(const char *repl_filename)
     replfp = NULL;
 }
 
+/*====================================================================*/
+
+void usage()
+{
+    printf("Usage:   cm2html spec [FILE*]\n");
+    printf("\nspec is the output specification.\n\n");
+    printf("Options:\n");
+    printf("  -t --title TITLE Set the document title\n");
+    printf("  -c --css CSS     Set the document style sheet to CSS\n");
+    printf("  --sourcepos      Include source position attribute\n");
+    printf("  --hardbreaks     Treat newlines as hard line breaks\n");
+    printf("  --safe           Suppress raw HTML and dangerous URLs\n");
+    printf("  --smart          Use smart punctuation\n");
+    printf("  --normalize      Consolidate adjacent text nodes\n");
+    printf("  --help, -h       Print usage information\n");
+    printf("  --version        Print version\n");
+}
+
+
 int main(int argc, char *argv[])
 {
     FILE *fp;
@@ -1203,16 +1947,16 @@ int main(int argc, char *argv[])
     time_t now;
     const char *username;
     const char *title_arg = NULL, *css_arg = NULL;
-
+    
     cmark_parser *parser;
     cmark_node *document;
     cmark_option_t options = CMARK_OPT_DEFAULT | CMARK_OPT_ISO;
 
-    if (argc <= 2) {
-	usage();
-	exit(EXIT_FAILURE);
-    }
+    const ESIS_API *api = &repl_API;
+    int doing_rast = 0;
 
+    rast_param.outfp = stdout;
+    
     if ( (username = getenv("LOGNAME"))   != NULL ||
          (username = getenv("USERNAME"))  != NULL )
 	strncpy(default_creator, username, sizeof default_creator -1U);
@@ -1220,9 +1964,8 @@ int main(int argc, char *argv[])
     time(&now);
     strftime(default_date, sizeof default_date, "%Y-%m-%d",
                                                           gmtime(&now));
-    setup(argv[1]);
     
-    for (argi = 2; argi < argc && argv[argi][0] == '-'; ++argi) {
+    for (argi = 1; argi < argc && argv[argi][0] == '-'; ++argi) {
 	if (strcmp(argv[argi], "--version") == 0) {
 	    printf("cmark %s", CMARK_VERSION_STRING
 		" ( %s %s )\n",
@@ -1230,6 +1973,17 @@ int main(int argc, char *argv[])
 	    printf(" - CommonMark converter\n"
 	                            "(C) 2014, 2015 John MacFarlane\n");
 	    exit(EXIT_SUCCESS);
+	} else if ((strcmp(argv[argi], "--repl") == 0) ||
+	    (strcmp(argv[argi], "-r") == 0)) {
+	    const char *filename = argv[++argi];
+	    if (doing_rast) {
+		fprintf(stderr, "--rast can't use --repl!\n");
+		exit(EXIT_FAILURE);
+	    }
+	    setup(filename);
+	} else if (strcmp(argv[argi], "--rast") == 0) {
+	    api = &rast_API;
+	    doing_rast = 1;
 	} else if ((strcmp(argv[argi], "--title") == 0) ||
 	    (strcmp(argv[argi], "-t") == 0)) {
 		title_arg = argv[++argi];
@@ -1260,6 +2014,14 @@ int main(int argc, char *argv[])
 	    error("\"%s\": Invalid option.\n", argv[argi]);
 	}
     }
+    
+    /*
+     * If no replacement file was mentioned (and processed),
+     * try using the default replacement file given in the
+     * environment.
+     */
+    if (repl_filecount == 0U && !doing_rast)
+	setup(NULL);
 
     parser = cmark_parser_new(options);
 
@@ -1280,14 +2042,19 @@ int main(int argc, char *argv[])
 	    if (in_header) {
 		char version[1024];
 		
-		hbytes = do_prolog(buffer, sizeof buffer);
+		if (doing_rast) {
+		}
+		hbytes = do_prolog(buffer, sizeof buffer, api);
 		
 		if (title_arg != NULL)
 		    do_Attr(META_DC_TITLE, title_arg, NTS);
 		    
 		do_Attr(META_CSS, css_arg ? css_arg : DEFAULT_CSS, NTS);
 		
-		sprintf(version, "\n\t\t%s;\n\t\tdate: %s;\n\t\tid: %s\n\t",
+		sprintf(version, "            %s;\n"
+		                 "            date: %s;\n"
+		                 "            id: %s\n"
+		                 "        ",
 			cmark_repourl,
 			__DATE__ ", " __TIME__,
 			cmark_gitident);
@@ -1310,9 +2077,11 @@ int main(int argc, char *argv[])
     document = cmark_parser_finish(parser);
     cmark_parser_free(parser);
 
-    gen_document(document, options);
+    gen_document(document, options, api);
 
     cmark_node_free(document);
 
     return EXIT_SUCCESS;
 }
+
+/*== EOF =============================================================*/
