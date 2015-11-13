@@ -96,6 +96,7 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include "cmark_ctype.h"
 #include "node.h"
 #include "buffer.h"
+#include "houdini.h"
 
 /*== ESIS API ========================================================*/
 
@@ -608,7 +609,7 @@ static const char* const nodename[NODE_NUM] = {
     "CM.LIST",
     "CM.LI",
     "CM.COD-B",
-    "CM.FRG-B", /* Block HTML/SGML/XHTML/XML fragment: literal output. */
+    "MARK-UP", /* Block HTML/SGML/XHTML/XML fragment: literal output. */
     "CM.PAR",
     "CM.HDR",
     "CM.HR",
@@ -616,7 +617,7 @@ static const char* const nodename[NODE_NUM] = {
     "CM.SF-BR",
     "CM.LN-BR",
     "CM.COD",
-    "CM.FRG",   /* Inline HTML/SGML/XHTML/XML fragment: literal output. */
+    "MARK-UP",   /* Inline HTML/SGML/XHTML/XML fragment: literal output. */
     "CM.EMPH",
     "CM.STRN",
     "CM.LNK",
@@ -753,12 +754,12 @@ void error(const char *msg, ...)
  * `struct trans_`
  */
  
-#define STAG_REPL       001
-#define ETAG_REPL       002
-#define STAG_BOL_START  010
-#define STAG_BOL_END    020
-#define ETAG_BOL_START  040
-#define ETAG_BOL_END    100
+#define STAG_REPL       0x0001
+#define ETAG_REPL       0x0002
+#define STAG_BOL_START  0x0010
+#define STAG_BOL_END    0x0020
+#define ETAG_BOL_START  0x0040
+#define ETAG_BOL_END    0x0080
 
 struct trans_ {
     const char *stag_repl;
@@ -768,7 +769,7 @@ struct trans_ {
 
 /*
  * Translation definitions: one array member per node type,
- * plus the (currently unused) member at index 0 == CMARK_NODE_NONE.
+ * plus the (currently unused) member at index 0 == NODE_NONE.
  */
  
 static struct trans_ trans[NODE_NUM];
@@ -821,8 +822,9 @@ static cmark_strbuf validx_buf;
  * attribute name and value into a "new" activation record, while
  * "unlocking" the new activation record.
  */
-#define close_atts()   ( PUT_NAMEIDX(NULLIDX), PUT_VALIDX(NULLIDX) )
+#define close_atts(NT)   ( PUT_NAMEIDX(NULLIDX), PUT_VALIDX(NT) )
 #define pop_atts()       POP_ATTS()
+#define current_nt()     ( VALIDX[NATTR-1U] )
 
 void push_att(const char *name, const char *val, size_t len)
 {
@@ -1051,7 +1053,7 @@ void repl_Start(ESIS_UserData ud, cmark_node_type nt)
 {
     const struct trans_ *tr = &trans[nt];
     
-    close_atts();
+    close_atts(nt);
     
     if (tr->defined & STAG_REPL) {
 	int bol[2];
@@ -1070,11 +1072,32 @@ void repl_Empty(ESIS_UserData ud, cmark_node_type nt)
 
 void repl_Cdata(ESIS_UserData ud, const char *cdata, size_t len)
 {
+    cmark_node_type nt = current_nt();
+    static cmark_strbuf houdini;
+    static int houdini_init = 0;
     size_t k;
+    const char *p;
+    
+    
+    if (!houdini_init) {
+	cmark_strbuf_init(&houdini, 1024);
+	houdini_init = 1;
+    }
     
     if (len == NTS) len = strlen(cdata);
+    
+    if (nt == NODE_HTML || nt == NODE_INLINE_HTML) {
+	p = cdata;
+    } else {
+	houdini_escape_html(&houdini, (uint8_t*)cdata, len);
+	p = cmark_strbuf_cstr(&houdini);
+	len = cmark_strbuf_len(&houdini);
+    }
+	
     for (k = 0U; k < len; ++k)
-	PUTC(cdata[k]);
+	PUTC(p[k]);
+	
+    cmark_strbuf_clear(&houdini);
 }
 
 void repl_End(ESIS_UserData ud, cmark_node_type nt)
@@ -1270,23 +1293,28 @@ static int S_render_node_esis(cmark_node *node,
 
   if (entering) {
     switch (node->type) {
-    case CMARK_NODE_TEXT:
-    case CMARK_NODE_CODE:
-    case CMARK_NODE_HTML:
-    case CMARK_NODE_INLINE_HTML:
+    case NODE_TEXT:
+    case NODE_CODE:
+    case NODE_HTML:
+    case NODE_INLINE_HTML:
+      if (node->type == NODE_HTML || node->type == NODE_INLINE_HTML) {
+	do_Attr("type", "text.html", NTS);
+	do_Attr("display", 
+	            node->type == NODE_HTML ? "block" : "inline", NTS);
+      }
       do_Start(node->type);
       do_Cdata(node->as.literal.data, node->as.literal.len);
       do_End(node->type);
       break;
 
-    case CMARK_NODE_LIST:
+    case NODE_LIST:
       switch (cmark_node_get_list_type(node)) {
-      case CMARK_ORDERED_LIST:
+      case ORDERED_LIST:
         do_Attr("type", "ordered", NTS); 
         sprintf(buffer, "%d", cmark_node_get_list_start(node));
         do_Attr("start", buffer, NTS);
         delim = cmark_node_get_list_delim(node);
-        do_Attr("delim", (delim == CMARK_PAREN_DELIM) ?
+        do_Attr("delim", (delim == PAREN_DELIM) ?
                               "paren" : "period", NTS);
         break;
       case CMARK_BULLET_LIST:
@@ -1300,13 +1328,13 @@ static int S_render_node_esis(cmark_node *node,
       do_Start(node->type);
       break;
 
-    case CMARK_NODE_HEADER:
+    case NODE_HEADER:
       sprintf(buffer, "%d", node->as.header.level);
       do_Attr("level", buffer, NTS);
       do_Start(node->type);
       break;
 
-    case CMARK_NODE_CODE_BLOCK:
+    case NODE_CODE_BLOCK:
       if (node->as.code.info.len > 0U)
         do_Attr("info", 
 		       node->as.code.info.data, node->as.code.info.len);
@@ -1316,8 +1344,8 @@ static int S_render_node_esis(cmark_node *node,
       do_End(node->type);
       break;
 
-    case CMARK_NODE_LINK:
-    case CMARK_NODE_IMAGE:
+    case NODE_LINK:
+    case NODE_IMAGE:
       do_Attr("destination",
 	                 node->as.link.url.data, node->as.link.url.len);
       do_Attr("title", node->as.link.title.data,
@@ -1325,13 +1353,13 @@ static int S_render_node_esis(cmark_node *node,
       do_Start(node->type);
       break;
 
-    case CMARK_NODE_HRULE:
-    case CMARK_NODE_SOFTBREAK:
-    case CMARK_NODE_LINEBREAK:
+    case NODE_HRULE:
+    case NODE_SOFTBREAK:
+    case NODE_LINEBREAK:
       do_Empty(node->type);
       break;
 
-    case CMARK_NODE_DOCUMENT:
+    case NODE_DOCUMENT:
     default:
       do_Start(node->type);
       break;
@@ -1372,8 +1400,9 @@ static void gen_document(cmark_node *document,
                          const ESIS_API *api)
 {
     int bol[2];
+    const cmark_node_type none = CMARK_NODE_NONE;
     
-    close_atts();
+    close_atts(none);
     bol[0] = bol[1] = 0;
     
     if (rn_repl[RN_PROLOG] != NULL) {
@@ -2058,8 +2087,8 @@ int main(int argc, char *argv[])
 			cmark_repourl,
 			__DATE__ ", " __TIME__,
 			cmark_gitident);
-		do_Attr("cm2doc.version", version, NTS);
-		do_Attr("cmark.version", CMARK_VERSION_STRING, NTS);
+		do_Attr("CM.asp.v", version, NTS);
+		do_Attr("CM.ver", CMARK_VERSION_STRING, NTS);
 		
 		in_header = false;
 	    }
