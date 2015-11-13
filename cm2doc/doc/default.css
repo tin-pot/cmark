@@ -1,0 +1,562 @@
+/*
+ * default.css --
+ *
+ *     A style sheet for code- and wiki- oriented texts.
+ *     This was partly inspired from the [CodeProject.com]
+ *     article style.
+ *
+ * All style options can be controlled via `class` attributes, no
+ * non-HTML attributes are introduced, and no non-ISO attributes
+ * are needed: The style is therefore suitable for HTML 4.01 Strict
+ * and for ISO 15445:2000 documents.
+ *
+ * Validates as CSS level 2.0.
+ *
+ * Martin Hofmann <tin-pot@gmx.net> 2014-03-04.
+ *
+ * [CodeProject.com]:http://www.codeproject.com/
+ */
+
+@import url("zed.css");
+
+/*
+ * Basic page layout: BODY
+ */
+
+BODY {
+  margin-left:		4em;
+  margin-right:		4em;
+  margin-top:		0em;
+  margin-bottom:	4em;
+
+  /*font-family:		sans-serif;
+  font-size:		12pt;*/
+}
+
+
+/*
+ * A DIV.embed is used to embed an <OBJECT>, indented like other
+ * (blockquote, code, table) block elements.
+ */
+DIV.embed {
+  margin-left:		1.5em;
+  margin-right:		0.0em;
+  margin-top:		1.0em;
+  margin-bottom:	1.0em;
+
+  padding-top:		0px;
+  padding-bottom:	0px;
+}
+
+DIV.embed OBJECT,
+BLOCKQUOTE OBJECT {
+  background-color:	inherit;
+
+  position:		relative;
+  right:		2px;            /* border-width */
+
+  border-width:		2px;
+  border-style:		solid;
+  border-color:		red;
+}
+
+/*
+ * A DIV.hi containing highlighted stuff, color is the same as
+ * in table head <TH>.
+ * (There is corresponding SPAN.hi for this.)
+ */
+
+.hi {
+  background-color:	#E6E6EB;/*#D8D8E0;*/
+  color:		#000000;
+}
+
+DIV.hi {
+  margin-left:		1.5em;
+  margin-right:		0.0em;
+  margin-top:		1.0ex;
+  margin-bottom:	1.0ex;
+
+  padding-left:		1.0em;
+  padding-right:	0.5em;
+  padding-top:		1px;
+  padding-bottom:	1ex;
+}
+
+
+.center { 
+  text-align:		center;
+}
+
+/*
+ * Block level elements: TABLE
+ */
+
+TABLE {
+  text-align:		left;
+
+  margin-left:		1.5em;
+
+  border-width:		2px;
+  border-style:		solid;
+  border-collapse:	collapse;
+
+  background-color:	#E8E8F0;
+  color:		#000000;
+}
+
+TH {
+  border-width:		0px 0px 2px 1px;	/* top right bottom left */
+  border-style:		solid;
+/*background-clip: padding-box;			/* Needed for Firefox? */
+  padding:		0.5ex 1em 0.5ex 1em;
+  background-color:	#D8D8E0;
+  color:		#000000;
+  text-align:		left;
+}
+
+TD {
+  border-width:		1px 1px 1px 1px; /* T.R.B.L. */
+  border-left-style:	solid;
+  border-right-style:	none;
+  border-top-style:	none;
+  border-bottom-style:	none;
+  padding:		0.5ex 1em 0.5ex 1em;
+}
+
+DIV.badges TABLE {
+  margin:		0px;
+  border-width:		0px;
+  border-style:		none;
+  border-collapse:	collapse;
+  background-color:	#FFF;
+  color:		#F00;
+  text-align:		left;
+}
+
+DIV.badges TABLE TBODY TR TD {
+  vertical-align:	middle;
+  border-width:		0px 1px 0px 0px;
+  border-style:		none;
+}
+
+/*
+ * Block level elements: Ordered Lists.
+ *
+ * We have 6 classes for OL:
+ *
+ *    "num"                     1.
+ *    "alf"                     a)
+ *    "num-d"                   1.
+ *    "alf-d"                   a.
+ *    "num-p"                   1)
+ *    "alf-p"                   a)
+ *
+ * The default (no class for OL is given), the default
+ * label generation is done.
+ *
+ * The UL layout has the same dimensions: 2em indent.
+ */
+
+/*
+ * In OL with class lists, we do the numbering and produce 
+ * the labels.
+ */
+
+DD, OL, UL,
+OL.num, OL.num-p, OL.num-d,
+OL.alf, OL.alf-p, OL.alf-d {
+  position:		relative;
+  padding-left:		2em;
+  counter-reset:	value 0;
+}
+
+OL,
+OL.num, OL.num-p, OL.num-d,
+OL.alf, OL.alf-p, OL.alf-d {
+  list-style-type:	none;
+}
+
+/*
+ * A  `<OL><LI>...</OL>`                         list has "1." labels.
+ * A  `<OL type="1"><LI>...</OL>`                list has "1." labels.
+ * A  `<OL type="a"><LI>...</OL>`                list has "a)" labels.
+ */
+
+OL > LI {
+  display:		block;
+  counter-increment:	value;
+}
+
+OL > LI:before {
+  position:		absolute;
+  left:			0.0em;
+  width:		1.5em;	/* Let 0.5em space between label box and text. */
+  text-align:		right;
+/*
+  background-color:	yellow;
+ */
+  content:		counter(value, decimal) ".";
+}
+
+OL[type="1"] > LI:before,
+OL.num > LI:before,
+OL.num-d > LI:before {
+  content:		counter(value, decimal) ".";
+}
+
+OL.alf-d > LI:before {
+  content:		counter(value, lower-alpha) ".";
+}
+
+/* Now the OL.paren style - add parenthesis. */
+
+OL.num-p > LI:before {
+  content:		counter(value, decimal) ")";
+}
+
+OL[type="a"] > LI:before,
+OL.alf > LI:before,
+OL.alf-p > LI:before {
+  content:		counter(value, lower-alpha) ")";
+}
+
+  
+/*
+ * Block level elements: DL
+ */
+
+DT {
+  color: #F90; /* Section header color */
+  font-weight: bold;
+  /* We shift the DT labels down a bit - the
+   * default (in Firefox at least) is spread out
+   * much too wide IMO.
+   *
+   * It's ok that we gain the same amount of space
+   * at the top.
+   *
+   */
+/*
+  position:		relative;
+  top:			1.0em;
+  padding-bottom:	1.0em;
+*/
+  margin-right:		2em;
+/*
+  background-color:	yellow;
+*/
+}
+
+DD {
+  /* 
+   * Bring the DD text line with the other LI texts.
+   */
+  padding-left:		0px;
+  margin-top:		0em;
+  margin-left:		2em;
+/*
+  background-color:	blue;
+*/
+}
+
+/*
+ * Block level elements: PRE
+ *
+ * "Code blocks" with distinct background color and
+ * a scroll bar if needed (if the text would overflow
+ * the colored box). 
+ *
+ * TODO: Distinction between "ordinary" PRE element
+ * and a "Code block" PRE element? (`class` attribute?)
+ *
+ * Margin-left and padding-left will align the text in
+ * PRE with the text of UL and OL items, and the text
+ * in BLOCKQUOTEs.
+ */
+
+PRE {
+  margin-left:		1.5em;
+  margin-right:		0.0em;
+
+  padding-left:		0.5em;
+  padding-right:	0.5em;
+  padding-top:		1.0ex;
+  padding-bottom:	1.0ex;
+
+  white-space:		pre;
+  font-family:		monospace;
+  overflow:		auto;
+
+  background-color:	#FBEDBB;
+  color:		#000000;
+}
+
+
+/*
+ * Block level elements: H1, ..., H6
+ *
+ * Headers all have a common special color. The top level
+ * header is centered.
+ */
+
+H1 {
+  text-align:		center;
+}
+
+H1,H2,H3,H4,H5,H6 {
+  color:		#E68A00; /*#F90;*/
+}
+
+/*
+ * Block level elements: DIV.abstract
+ *
+ * Style for the document abstract (a DIV with class="abstract"):
+ * centered, indented on both sides, oblique.
+ *
+ * With `discount`, you can produce an abstract (or any 'classified'
+ * DIV element) with a special blockquote:
+ *
+ *     >%abstract%
+ *     >This paper has really nothing new to say ...
+ *
+ */
+
+DIV.abstract {
+  margin-left:		6em;
+  margin-right:		6em;
+  text-align:		center;
+  font-size:		smaller;
+  font-style:		oblique;
+}
+
+/*
+ * Block level elements: BLOCKQUOTE
+ *
+ * Style for (nested) blockquotes.
+ *
+ * Blueish background, vertical line on the left,
+ * nicely nested with "inner" colors getting darker.
+ * Six levels of blockquotes should be enough for 
+ * everybody, and the color does not change in even
+ * deeper-nested quotes.
+ */
+
+DIV.hi > BLOCKQUOTE {
+  background-color:	inherit;
+  color:		inherit;
+  border-style:		none;
+}
+
+BLOCKQUOTE {
+  /* Generally no border ... */
+  border-top-width:	0pt;
+  border-bottom-width:	0pt;
+  border-right-width:	0pt;
+
+  /* ... but a thin vertical line on the left. */
+  border-color:		#88F;
+  border-left-width:	0.15em;
+  border-left-style:	solid;
+
+  /*
+   * Same left margin and general padding as <pre> 
+   * ("code block") elements, but a distance of 1em
+   * to the vertical border bar on the left.
+   *
+   * Outermost color is very light blue.
+   */
+
+  margin-left:		1.50em;
+
+  padding-left:		0.35em;
+  padding-right:	0.65em;
+  padding-top:		0.20ex;
+  padding-bottom:	0.20ex;
+
+  background-color:	#EEEEFF;
+  color:		#000000;
+
+  margin-right:		0px;
+}
+
+BLOCKQUOTE P {
+  margin-top:		1.0ex;
+  margin-bottom:	1.0ex;
+  padding-top:		0.0ex;
+  padding-bottom:	0.0ex;
+}
+
+BODY BLOCKQUOTE  BLOCKQUOTE {
+  /*
+   * Inner (nested) blockquotes get darker and darker.
+   * The vertical line is aligned with the outer text.
+   */
+  margin-left:		0.15em;
+  padding-bottom:	0ex;
+  background-color:	#E7E7FF;
+  color:		#000000;
+}
+
+
+BODY BLOCKQUOTE  BLOCKQUOTE  BLOCKQUOTE {
+  background-color: #DEDEFF;
+  color:		#000000;
+}
+
+BODY BLOCKQUOTE  BLOCKQUOTE  BLOCKQUOTE  BLOCKQUOTE {
+  background-color:	#D7D7FF;
+  color:		#000000;
+}
+
+BODY BLOCKQUOTE  BLOCKQUOTE  BLOCKQUOTE  BLOCKQUOTE  BLOCKQUOTE {
+  background-color:	#CECEFF;
+  color:		#000000;
+}
+
+BODY BLOCKQUOTE  BLOCKQUOTE  BLOCKQUOTE  BLOCKQUOTE  BLOCKQUOTE BLOCKQUOTE {
+  background-color:	#C7C7FF;
+  color:		#000000;
+}
+
+/*
+ * Block level: DIV.footnotes
+ *
+ * Separate footnotes with a footnote line with a
+ * solid, thin line across 1/3 of the page from the left. 
+ *
+ * The footnote texts are in a smaller font, with
+ * the paragraphs tighter together.
+ */
+
+HR.footnotes {
+  margin-right:		66%;
+  border-top-width:	2px;
+  border-bottom-width:	0px;
+  border-color:		#000;
+  color:		#000000;
+  height:		0.5pt;
+}
+
+DIV.footnotes {
+  font-size:		smaller;
+}
+
+DIV.footnotes P {
+  margin-top:		0em;
+  margin-bottom:	0.25em;
+}
+
+DIV.footnotes OL { 
+  position: relative;
+  padding-left:		2.5em;
+  list-style-type:	none;
+  counter-reset:	footnr 0;
+}
+
+DIV.footnotes OL LI {
+  counter-increment:	footnr;
+}
+
+DIV.footnotes > OL > LI:before  {
+  position:		absolute;
+  left:			0em;
+  width:		2.0em;
+  text-align:		right;
+  content:		counter(footnr) ")";
+}
+
+/*
+ * Span level: SUP.fnref
+ *
+ * Format footnote references like '1)'.
+ *
+ * We adjust the SUP position a little.
+ */
+
+SUP {
+  position:		relative;
+  top:		       -0.40em;
+  font-size:		0.83em;
+  vertical-align:	baseline;
+}
+
+A.fnref:link,
+A.fnref:visited {
+  text-decoration:	none;
+}
+
+A.fnref:after {
+  content:		")";
+}
+
+/*
+ * Embedded objects. Default width is set to 100 %,
+ * both width and height may be overwritten in the
+ * <OBJECT> instance.
+ */
+OBJECT {
+  width:		100%;
+  color:		inherit;
+  padding:		0px;
+  margin:		0px;
+}
+
+/*
+ * Span level elements: A
+ */
+
+A {
+  color:		#004cd5;
+  text-decoration:	underline;
+}
+
+A:visited {
+  color:		purple;
+}
+
+A:focus {
+  outline:		none;
+}
+
+/*
+ * Span level elements: CODE
+ * Inline "code spans" have their own color (related to
+ * the "code block" background color) ...
+ * A SPAN or DIV with class "code" is rendered in a similar style.
+ */
+
+
+CODE, SPAN.code {
+  font-family:		monospace;
+  color:		#F90;		/* (Header text color).       */
+/*color:		#784800;	/* (Header text color) * 1/2. */
+/*color:		#B46C00;	/* (Header text color) * 3/4. */
+/*color:		#997;		/* ??                         */
+/*color:		#FBEDBB;	/*  (Code block bg-color).    */
+/*color:		#7D5F5D;	/*  (CB bg-color) * 1/2.      */
+/*color:		#BCB18C;	/*  (CB bg-color) * 3/4.      */
+/* DEBUG
+  color:		blue;
+*/
+}
+
+/*
+ * Highlighted spans get some space inserted, so that
+ * there is some "padding" between characters and the edge of
+ * colored background.
+ */
+SPAN.hi:after,
+SPAN.hi:before {
+  content: "\A0";		/* A single NBSP.             */
+}
+
+/*
+ * ... but not if embedded in a title or anchor. Code inside a PRE
+ * gets it color from there.
+ */
+
+H1 CODE, H2 CODE, H3 CODE, H4 CODE, A CODE, PRE CODE, DT CODE {
+  color:		inherit;
+}
+

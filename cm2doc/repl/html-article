@@ -1,0 +1,143 @@
+ -- 
+    html-article: Article template with Dublin Core metadata.
+
+    DOCTYPE HTML PUBLIC "ISO/IEC 15445:2000//DTD HTML//EN"            --
+
+#PROLOG 
+	"<!DOCTYPE HTML PUBLIC \"ISO/IEC 15445:2000//DTD HTML//EN\">\n"
+	"<HTML>\n"
+	"<HEAD profile=\"http://dublincore.org/documents/2008/08/04/"
+	                                                 "dc-html/\">\n"
+	"  <META http-equiv=\"Content-Type\" content=\"text/html; "
+	                                            "charset=UTF-8\">\n"
+        "\n"
+	"  <LINK rel=\"schema.DC\"      "
+	                  "href=\"http://purl.org/dc/elements/1.1/\">\n"
+	"  <LINK rel=\"schema.DCTERMS\" "
+	                  "href=\"http://purl.org/dc/terms/\">\n"
+        "\n"
+        "  <META name=\"DC.format\"  content=\"text/html\" "
+	                                     "scheme=\"DCTERMS.IMT\">\n"
+	"  <META name=\"DC.type\"    content=\"Text\" "
+	                                "scheme=\"DCTERMS.DCMIType\">\n"
+	"  <META name=\"DC.title\"   lang=\"[lang=de?de:en]\" "
+	                                     "content=\"\n\n"
+        "        [DC.title]\n\n"
+	"        \">\n"
+	"  <META name=\"DC.creator\"      content=\"[DC.creator]\">\n"
+	"  <META name=\"DC.date\"         content=\"[DC.date]\">\n"
+	"  <META name=\"DC.language\"     content=\"[lang=de?de:en]\">\n"
+	"  <META name=\"DCTERMS.rights\"  content=\"\n\n"
+	"        © Martin Hofmann <mh@tin-pot.net>. "
+                                              "All rights reserved.\n\n"
+	"        \">\n"
+	"  <META name=\"DCTERMS.license\" content=\"\n\n"
+	"              Creative Commons Attribution-ShareAlike 4.0\n"
+	"                    International Public License\n"
+	"                    (CC BY-SA 4.0 International)\n\n"
+	"        \">\n"
+        "\n"
+	"  <LINK rel=\"stylesheet\"       type=\"text/css\"\n"
+	"        href=\"[cm2doc.css]\">\n"
+	"  <META name=\"GENERATOR\"       content=\"\n"
+	"        cm2doc (\n[cm2doc.version])\n"
+	"        \">\n"
+        "\n\n"
+	"  <TITLE>[DC.title]</TITLE>\n\n"
+
+% HTML epilog: </HTML> is required.
+
+#EPILOG
+	"</HTML>\n"
+
+% CommonMark node types:
+%
+% CM.DOC	CM.QUO-B	CM.LIST		CM.LI		CM.COD-B
+% CM.FRG-B	CM.PAR		CM.HDR		CM.HR		CM.TXT
+% CM.SF-BR	CM.LN-BR	CM.COD		CM.FRG		CM.EMPH
+% CM.STRN	CM.LNK		CM.IMG
+
+% CM.DOC - Maps to HTML <BODY>
+<CM.DOC>
+	+ "<BODY>"
+	"<H1>[.DC.title]</H1>\n"
+	'<DIV class="abstract">\n'
+	'  <P><A href="mailto:[.DC.creator]">[.DC.creator]</A><BR>\n'
+	"[.DC.date]</P>\n"
+	"</DIV>" +
+
+<CM.QUO-B>
+	+ "<BLOCKQUOTE>" +
+</CM.QUO-B>
+	+ "</BLOCKQUOTE>" +
+
+% CM.LIST - Maps to <OL> or <UL>.
+<CM.LIST>
+	+ "<[type=ordered?OL:UL]>"
+</CM.LIST>
+	"</[type=ordered?OL:UL]>" +
+
+ % CM.LI - Maps to <LI>, but </LI> can be omitted.
+<CM.LI>
+	"<LI>"
+
+<CM.COD-B>
+	+ "<PRE><CODE>" +
+</CM.COD-B>
+	+ "</CODE></PRE>" +
+
+% CM.FRG-B ("HTML Block") - Omit start and end tag.
+
+<CM.PAR>
+	+ "<P>"
+</CM.PAR>
+	"</P>" +
+
+% CM.HDR - Maps to <H1> .. <H6>
+<CM.HDR>
+	+ "<H[level]>"
+
+</CM.HDR>
+	"</H[level]>\n"
+
+% CM.HR - Maps to <HR>, which is EMPTY.
+<CM.HR>
+	"<HR>"
+
+% CM.TXT - Omit start and end tag.
+
+% CM.SF-BR - Just a line break in the output text.
+<CM.SF-BR>
+	"\n"
+
+% CM.LN-BR - Maps to HTML <BR>, which is EMPTY.
+<CM.LN-BR>
+	"<BR>"
+
+<CM.COD>
+	"<CODE>"
+</CM.COD>
+	"</CODE>"
+
+% CM.FRG ("Inline HTML") - Omit start and end tag.
+
+<CM.EMPH>
+	"<EM>"
+</CM.EMPH>
+	"</EM>"
+
+<CM.STRN>
+	"<STRONG>"
+</CM.STRN>
+	"</STRONG>"
+
+% CM.LNK - Maps to <A> element with 'href' attribute for destination.
+<CM.LNK>
+	"<A href=\"[destination]\" title=\"[title]\">"
+</CM.LNK>
+	"</A>"
+
+ % CM.IMG - Maps to <IMG> element with 'src' for URL; EMPTY.
+<CM.IMG>
+	"<IMG src=\"[url]\" title=\"[title]\">"
+

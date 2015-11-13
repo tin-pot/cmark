@@ -1750,48 +1750,7 @@ char *get_repl(int ch, int bol[2])
 	return NULL;
 }
 
-/*
 
-Parsing procedures:
-
-The ch argument is the not yet accepted char (last GETC() result).
-
-int P_rule(int ch, struct rule_ **); // ch == '<'
-
-int P_stag(ch, name, buf*, iatts); // ch == '<', [14] (minimized [15]: empty [16], unclosed [17], NET [18].
-int P_etag(ch, name); // ch == '/', [19] (minimized [20]: empty [21], unclosed [22], NET [23].
-
-int P_attspeclist(ch=SP, buf*, bufidx_t iatts[2*ATTCNT+1]); // [31].
-int P_attvallit(ch=lit or lita, buf*, bufidx_t *); // [34].
-int P_name(int ch=nmstart, char name[NAMELEN+1]);   // [52], [53], -> [55].
-
-int P_literal(int ch=lit or lita, cmark_strbuf*); // parameter literal [66].
-int P_nmtoken(int ch=nmchar, char nmtoken[NAMELEN+1]);   // [52], [53], -> [55].
-
-int P_comment(ch='-' or '%');     // [92]
-
-Replacement rule:
-
-    struct rule_ {
-	struct rule_     *next;
-	char              name[NAMELEN+1];
-	const char       *atts[2*ATTCNT+1]; // in text_buf 
-	const char       *srepl, *erepl; // alloced, owned, or in buf?
-    };
-
-        
-Repl encoding:
-
-Src   Enc
-
-'['   SO    (Attr ref)
-']'   SI    (Attr ref)
-'+'   VT    (BOL enforce)
-
-bufidx_t attsidx[2*ATTCNT+1]; // 0 as terminator, not used as text index, 
-
- */
- 
 int name_repl(int ch, unsigned bits)
 {
     char name[NODENAME_LEN+1];
@@ -1799,8 +1758,6 @@ int name_repl(int ch, unsigned bits)
     cmark_node_type nt;
     const char *repl;
     int bol[2];
-    int is_start = (bits & STAG_REPL) != 0;
-    
     
     *p++ = toupper(ch);
     
@@ -2126,5 +2083,49 @@ int main(int argc, char *argv[])
 
     return EXIT_SUCCESS;
 }
+
+/*--------------------------------------------------------------------*/
+/*
+
+Parsing procedures:
+
+The ch argument is the not yet accepted char (last GETC() result).
+
+int P_rule(int ch, struct rule_ **); // ch == '<'
+
+int P_stag(ch, name, buf*, iatts); // ch == '<', [14] (minimized [15]: empty [16], unclosed [17], NET [18].
+int P_etag(ch, name); // ch == '/', [19] (minimized [20]: empty [21], unclosed [22], NET [23].
+
+int P_attspeclist(ch=SP, buf*, bufidx_t iatts[2*ATTCNT+1]); // [31].
+int P_attvallit(ch=lit or lita, buf*, bufidx_t *); // [34].
+int P_name(int ch=nmstart, char name[NAMELEN+1]);   // [52], [53], -> [55].
+
+int P_literal(int ch=lit or lita, cmark_strbuf*); // parameter literal [66].
+int P_nmtoken(int ch=nmchar, char nmtoken[NAMELEN+1]);   // [52], [53], -> [55].
+
+int P_comment(ch='-' or '%');     // [92]
+
+Replacement rule:
+
+    struct rule_ {
+	struct rule_     *next;
+	char              name[NAMELEN+1];
+	const char       *atts[2*ATTCNT+1]; // in text_buf 
+	const char       *srepl, *erepl; // alloced, owned, or in buf?
+    };
+
+        
+Repl encoding:
+
+Src   Enc
+
+'['   SO    (Attr ref)
+']'   SI    (Attr ref)
+'+'   VT    (BOL enforce)
+
+bufidx_t attsidx[2*ATTCNT+1]; // 0 as terminator, not used as text index, 
+
+ */
+ 
 
 /*== EOF =============================================================*/
