@@ -1518,12 +1518,20 @@ int get_repl(int ch, char **prepl)
 }
 
 
-int name_repl(int ch, unsigned bits)
+int name_repl(int ch)
 {
     char name[NODENAME_LEN+1];
     char *p = name;
     cmark_node_type nt;
     char *repl;
+    
+    assert(ch == STAGO[0]);
+    
+    ch = GETC();
+    if (ch == '/') {
+	/* Parse end tag ... */
+    } else if (ISNMSTART(ch)) {
+    }
     
     *p++ = toupper(ch);
     
@@ -1649,13 +1657,13 @@ void setup(const char *repl_filename)
 	    break;
 
 	if (ch == STAGO[0])
-	    ch = name_repl(ch, STAG_REPL);
+	    ch = name_repl(ch);
 	else if (ch == RNI[0])
 	    ch = rni_repl(ch);
-	else if (DELIM("%"))
-	    ch = comment("\n");
+	else if (ch == '%'))
+	    ch = comment('\n');
 	else if (ch == COM[0])
-	    ch = comment(COM);
+	    ch = comment(COM[0]));
 	else
 	    syntax_error("Unexpected character \'%c\'.\n", ch);
     }
