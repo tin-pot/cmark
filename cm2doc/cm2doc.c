@@ -104,9 +104,10 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #define NUL  0
 
 /*
- * Prototype here, because of ubiquituous use.
+ * Prototypes here, because of ubiquituous use.
  */
 void error(const char *msg, ...);
+void syntax_error(const char *msg, ...);
 
 /*== ESIS API ========================================================*/
 
@@ -493,54 +494,6 @@ static const char *rn_repl[RN_NUM]; /* Replacement texts for RNs. */
 #define ISNMSTART(C) ( ISDIGIT(C) || ISUCNMSTRT(C) || ISLCNMSTRT(C) )
 #define ISNMCHAR(C)  ( ISNMSTART(C) || (C) == '-' || (C) == '.' )
 
-/*== Text input/output ===============================================*/
-
-/*
- * The output stream (right now, this is always stdout).
- */
-FILE *outfp;
-int outbol = 1;
-
-#define PUTC(ch)							\
-do {									\
-    putc(ch, outfp);							\
-    outbol = (ch == EOL);						\
-} while (0)
-
-/*
- * During parsing of the "Replacement Definition" file we keep these
- * globals around, mostly to simplify the job of keeping track of
- * the position in the input text file (for diagnostic messages).
- */
-FILE *replfp         = NULL;
-const char *filename = "<no file>";
-unsigned lineno      = 0U;  /* Text input position: Line number. */
-unsigned colno       = 0U;  /* Text input position: Column number. */
-
-/*--------------------------------------------------------------------*/
-
-/*
- * Error and syntax error diagnostics.
- */
- 
-void error(const char *msg, ...)
-{
-    va_list va;
-    va_start(va, msg);
-    vfprintf(stderr, msg, va);
-    va_end(va);
-    exit(EXIT_FAILURE);
-}
-
-
-void syntax_error(const char *msg, ...)
-{
-    va_list va;
-    va_start(va, msg);
-    fprintf(stderr, "%s(%u:%u): error: ", filename, lineno, colno);
-    vfprintf(stderr, msg, va);
-    va_end(va);
-}
 
 /*== Replacement Definitions =========================================*/
 
@@ -571,8 +524,8 @@ static struct repl_ repl_tab[NODE_NUM];
 
 /*== Element Stack Keeping ===========================================*/
 
-typedef size_t nameidx_t; /* Index into attr_buf. */
-typedef size_t validx_t;  /* Index into attr_buf. */
+typedef size_t nameidx_t; /* Index into nameidx_buf. */
+typedef size_t validx_t;  /* Index into validx_buf. */
 
 static const size_t NULLIDX = 0U; /* Common NULL value for indices. */
 
@@ -731,6 +684,9 @@ const char* att_val(const char *name, unsigned depth)
 
 /*== Replacement Definitions =========================================*/
 
+typedef size_t textidx_t;  /* Index into text_buf. */
+cmark_strbuf text_buf;
+
 /*
  * Set the replacement text for a node type.
  */
@@ -760,6 +716,18 @@ void set_repl(cmark_node_type nt,
 }
 
 /*--------------------------------------------------------------------*/
+
+/*
+ * The output stream (right now, this is always stdout).
+ */
+FILE *outfp;
+int outbol = 1;
+
+#define PUTC(ch)							\
+do {									\
+    putc(ch, outfp);							\
+    outbol = (ch == EOL);						\
+} while (0)
 
 /*
  * Attribute substitution and replacement text output.
@@ -1236,121 +1204,77 @@ size_t do_meta_lines(char *buffer, size_t nbuf, const ESIS_API *api)
     return nused;
 }
 
-/*====================================================================*/
+/*== Text input/output ===============================================*/
+
+
+/*
+ * During parsing of the "Replacement Definition" file we keep these
+ * globals around, mostly to simplify the job of keeping track of
+ * the position in the input text file (for diagnostic messages).
+ */
+ 
+FILE *replfp         = NULL;
+const char *filename = "<no file>";
+unsigned lineno      = 0U;  /* Text input position: Line number. */
+unsigned colno       = 0U;  /* Text input position: Column number. */
+
+#define LA_SIZE 4
+
+char        la_buf[LA_SIZE];
+unsigned    la_num = 0U;
+
+#define COUNT_EOL(CH) (((CH) == EOL) ? (++lineno, colno = 0U, (CH)) :	\
+                                                              (CH))
+
+#define GETC(CH) ( la_num ? ( (CH) = la_buf[--la_num] ) :		\
+                            ( (CH) = getc(replfp), COUNT_EOL(CH) ) )
+
+#define UNGETC(CH) (la_buf[la_num++] = (CH))
+
+/*--------------------------------------------------------------------*/
+
+/*
+ * Error and syntax error diagnostics.
+ */
+ 
+void error(const char *msg, ...)
+{
+    va_list va;
+    va_start(va, msg);
+    vfprintf(stderr, msg, va);
+    va_end(va);
+    exit(EXIT_FAILURE);
+}
+
+
+void syntax_error(const char *msg, ...)
+{
+    va_list va;
+    va_start(va, msg);
+    fprintf(stderr, "%s(%u:%u): error: ", filename, lineno, colno);
+    vfprintf(stderr, msg, va);
+    va_end(va);
+}
 
 /*
  * setup -- Parse the replacement definition file.
  */
  
-
-#define COUNT_EOL() (++lineno, colno = 0U)
-
-#define GETC()     ( ch = getc(replfp),					\
-                     ((ch == EOL) ? COUNT_EOL() : ++colno),		\
-                     ch )
-                   
-#define UNGETC(ch) ( ungetc(ch, replfp),				\
-                     assert(colno > 0U),				\
-                     --colno,						\
-                     ch )
+struct taginfo_ {
+    cmark_node_type nt;
+    textidx_t atts[2*ATTCNT + 2];
+};
 
 /*
  * S = SPACE | SEPCHAR | RS | RE
  *
- * accept ( { S } )
- *
- * Uses char ch.
+ * P_S(ch) accepts ( { S } )
  */
-#define S()								\
+#define P_S(CH)								\
 do {									\
-    while (ISSPACE(ch))							\
-	ch = GETC();							\
+    while (ISSPACE(CH))							\
+	CH = GETC(CH);							\
 } while (0)
-
-/*
- * Where DELIM = ( CHAR , [ CHAR ] )
- *
- * accept? ( DELIM )
- *
- * Uses `char ch`.
- */
-#define DELIM(STR) delim_(&ch, STR)
-
-int delim_(int *pch, const char STR[2])
-{
-    int ch = *pch;
-    int ch0 = ch;
-    
-    if (ch == STR[0]) {
-	if (STR[1] == NUL) {
-	    *pch = GETC();
-	    return 1;
-	} else {
-	    ch = GETC();
-	    if (ch == STR[1]) {
-	        *pch = GETC();
-		return 1;
-	    } else {
-		UNGETC(ch);
-		*pch = ch0;
-		return 0;
-	    }
-	}
-    } else
-	return 0;
-}
-
-int comment(const char lit[2])
-{
-    int ch;
-
-    while ((ch = GETC()) != EOF)
-	if (DELIM(lit))
-	    return ch;
-	    
-    return ch;
-}
-
-int get_repl(int, char **);
-
-int rni_repl(int ch)
-{
-    char name[NAMELEN+1], *p = name;
-    enum rn_ rn;
-    char *repl;
-    
-    if (ISNMSTART(ch))
-	*p++ = toupper(ch);
-    else
-	syntax_error("'%c': Not a NMSTART.\n", ch);
-    
-    while ((ch = GETC()) != EOF)
-	if (ISNMCHAR(ch))
-	    *p++ = toupper(ch);
-	else
-	    break;
-    *p = NUL;
-
-    /*
-     * Look up the "reserved name".
-     */
-    for (rn = 0; rn_name[rn] != NULL; ++rn)
-	if (!strcmp(rn_name[rn], name))
-	    break;
-    
-    if (rn_name[rn] == NULL) {
-	syntax_error("\"%s\": Unknown name.\n", name);
-	return ch;
-    }
-	
-    ch = get_repl(ch, &repl);
-    
-    if (repl != NULL) {
-	free((void*)rn_repl[rn]);
-	rn_repl[rn] = repl;
-    } 
-    return GETC();
-}
 
 /*
  * An _attribute substitution_ in the _replacement text_ gets encoded
@@ -1383,7 +1307,7 @@ int rni_repl(int ch)
  *     initial SO.
  */
  
-int substitution(cmark_strbuf *pbuf, int ch, const char lit[2])
+int P_attr_subst(int ch, cmark_strbuf *pbuf, const char lit)
 {
     int code = 0;
        
@@ -1396,7 +1320,7 @@ int substitution(cmark_strbuf *pbuf, int ch, const char lit[2])
 	ptrdiff_t idx = strchr(in_, ch) - in_;
 	
 	code = out_[idx];
-	ch = GETC();
+	ch = GETC(ch);
     } else {
 	syntax_error("Expected NMSTART or '.' or Digit, got '%c'\n",
 	                                                            ch);
@@ -1410,13 +1334,13 @@ int substitution(cmark_strbuf *pbuf, int ch, const char lit[2])
     cmark_strbuf_putc(pbuf, code);
     if (code == SP) {
         cmark_strbuf_putc(pbuf, ch); /* The NMSTART char of name */
-        ch = GETC();
+        ch = GETC(ch);
     }
     
     while (ch != EOF && ch != DSC[0]) {
 	if (ISNMCHAR(ch)) {
 	    cmark_strbuf_putc(pbuf, ch);
-	} else if (ch == lit[0]) { /* Hit the string delimiter! */
+	} else if (ch == lit) { /* Hit the string delimiter! */
 	    syntax_error("Unclosed attribute reference "
 		"(missing '" DSC "').\n");
 	    break;
@@ -1427,7 +1351,7 @@ int substitution(cmark_strbuf *pbuf, int ch, const char lit[2])
 	} else {
 	    syntax_error("Expected NMCHAR, got '%c'.\n", ch);
 	}
-	ch = GETC();
+	ch = GETC(ch);
     }
     
     /*
@@ -1440,12 +1364,14 @@ int substitution(cmark_strbuf *pbuf, int ch, const char lit[2])
     return ch;
 }
 
-int get_string(cmark_strbuf *pbuf, int ch, const char lit[2])
+int P_string(int ch, cmark_strbuf *pbuf, const char lit)
 {
-    while (!DELIM(lit)) {
+    assert(ch == lit);
+    ch = GETC(ch);
+    while (ch != lit) {
 	if (ch == MSSCHAR) {
 	
-	    switch (ch = GETC()) {
+	    switch (ch = GETC(ch)) {
 	    case MSSCHAR: ch = MSSCHAR; break;
 	    case  'n': ch = '\n';  break;
 	    case  'r': ch = '\r';  break;
@@ -1458,110 +1384,238 @@ int get_string(cmark_strbuf *pbuf, int ch, const char lit[2])
 	    }
 	    if (ch != EOF)
 		cmark_strbuf_putc(pbuf, ch);
-	    ch = GETC();
+	    ch = GETC(ch);
 	    
-	} else if (DELIM(DSO)) {
+	} else if (ch == DSO[0]) {
 	
-	    ch = substitution(pbuf, ch, lit);
+	    ch = P_attr_subst(ch, pbuf, lit);
 	    
 	} else {
 	    cmark_strbuf_putc(pbuf, ch);
-	    ch = GETC();
+	    ch = GETC(ch);
 	}
     }    
     return ch;
 }
 
-int get_repl(int ch, char **prepl)
+int P_repl_text(int ch, char *repl_text[1])
 {
     static cmark_strbuf repl = { NULL, 0, 0 };
     unsigned nstrings = 0U;
     
     /* cmark_strbuf_init(&repl, 16); */
     
-    S();
+    P_S(ch);
     
     if (ch == PLUS[0]) 
         cmark_strbuf_putc(&repl, VT);
     
     while (ch != EOF) {
 
-	S();
+	P_S(ch);
 	
 	if (ch == LIT[0])
-	    ch = get_string(&repl, ch, LIT);
+	    ch = P_string(ch, &repl, LIT[0]);
 	else if (ch == LITA[0])
-	    ch = get_string(&repl, ch, LITA);
+	    ch = P_string(ch, &repl, LITA[0]);
 	else
 	    break;
 	++nstrings;
     }
     
-    S();
+    P_S(ch);
     
     if (ch == PLUS[0]) {
         cmark_strbuf_putc(&repl, VT);
-        ch = GETC();
+        ch = GETC(ch);
     }
     
     if (nstrings > 0U) {
 	char *res;
 	cmark_strbuf_putc(&repl, NUL);
 	res = cmark_strbuf_dup(&repl);
-	*prepl = res;
+	repl_text[0] = res;
 	return ch;
     } else {
 	cmark_strbuf_clear(&repl);
-	*prepl = NULL;
+	repl_text[0] = NULL;
 	return ch;
     }
 }
 
-
-int name_repl(int ch)
+int P_repl_text_pair(int ch, char *repl_text[2])
 {
-    char name[NODENAME_LEN+1];
+    ch = P_repl_text(ch, repl_text+0);
+    ch = P_repl_text(ch, repl_text+1); /* TODO */
+    
+    return ch;
+}
+
+
+int P_rni_name(int ch, char name[NAMELEN+1]) /*rni_repl(int ch)*/
+{
     char *p = name;
-    cmark_node_type nt;
-    char *repl;
+    enum rn_ rn;
     
-    assert(ch == STAGO[0]);
+    if (ISNMSTART(ch))
+	*p++ = toupper(ch);
+    else
+	syntax_error("'%c': Not a NMSTART.\n", ch);
     
-    ch = GETC();
-    if (ch == '/') {
-	/* Parse end tag ... */
-    } else if (ISNMSTART(ch)) {
-    }
-    
-    *p++ = toupper(ch);
-    
-    while ((ch = GETC()) != EOF) {
+    while ((ch = GETC(ch)) != EOF)
 	if (ISNMCHAR(ch))
 	    *p++ = toupper(ch);
-	else if (DELIM(TAGC))
-	    break;
 	else
-	    syntax_error("'%c': Not a NMCHAR.\n", ch);    
-    }
+	    break;
     *p = NUL;
 
     /*
-     * Look up the "GI" for a CommonMark node type.
+     * Look up the "reserved name".
      */
-    for (nt = 1; nodename[nt] != NULL; ++nt)
-	if (!strcmp(nodename[nt], name))
+    for (rn = 0; rn_name[rn] != NULL; ++rn)
+	if (!strcmp(rn_name[rn], name))
 	    break;
-    if (nodename[nt] == NULL) {
-	syntax_error("\"%s\": Not a CommonMark node type.", name);
-	return ch;
-    }
-
-    ch = get_repl(ch, &repl);
     
-    set_repl(nt, bits, repl);
-    return GETC();
+    if (rn_name[rn] == NULL) {
+	syntax_error("\"%s\": Unknown name.\n", name);
+	name[0] = NUL;
+    }
+    return ch;
 }
 
+int P_name(int ch, cmark_node_type *pnt, char name[NAMELEN+1], int fold)
+{
+    char *p = name;
+    cmark_node_type nt;
+    
+    assert(ISNMSTART(ch));
+    
+    name[0] = NUL, *pnt = 0;
+    
+    do {
+	*p++ = fold ? toupper(ch) : ch;
+	ch = GETC(ch);
+    } while (p < name + NAMELEN + 1 && ISNMCHAR(ch));
+    
+    *p = NUL;
+    if (p == name + NAMELEN + 1) {
+	syntax_error("\"%s\": Name truncated after NAMELEN = %u "
+	                                "characters.\n", name, NAMELEN);
+    }
+    while (ISNMCHAR(ch))
+	ch = GETC(ch);
+    
+    if (pnt == NULL)
+	return ch;
+    else
+	*pnt = 0;
+    /*
+     * Look up the "GI" for a CommonMark node type.
+     */
+     
+    for (nt = 1; nodename[nt] != NULL; ++nt)
+	if (nodename[nt] != NULL && strcmp(nodename[nt], name) == 0)
+	    *pnt = nt;
+	    
+    if (*pnt == 0)
+	syntax_error("\"%s\": Not a CommonMark node type.", name);
+
+    return ch;
+}
+
+int P_tag(int ch, struct taginfo_ taginfo[1])
+{
+    char name[NAMELEN+1];
+    cmark_node_type nt;
+    const int fold = 1;
+    int is_etag = 0;
+    
+    assert(ch == STAGO[0]);
+    
+    ch = GETC(ch);
+    if (ch == '/')
+	is_etag = 1;
+    else
+	UNGETC(ch);
+    /* TODO: note start or end tag in taginfo */
+    ch = P_name(ch, &nt, name, fold);
+    /* TODO set nt in taginfo */
+    
+    while (ISSPACE(ch)) {
+	bufsize_t name_idx = 0, val_idx = 0;
+	
+	ch = P_name(ch, NULL, name, 0);
+	P_S(ch);
+	if (ch == VI[0]) {
+	    ch = GETC(ch);
+	    P_S(ch);
+	    if (ch == LIT[0] || ch == LITA[0]) {
+		val_idx = text_buf.size;
+		ch = P_string(ch, &text_buf, ch);
+	    }   
+	}
+	name_idx = text_buf.size;
+	cmark_strbuf_puts(&text_buf, name);
+	cmark_strbuf_putc(&text_buf, NUL);
+	/* TODO add (name_idx, val_idx) in taginfo */
+    }
+    return ch;
+}
+
+int P_tag_rule(int ch)
+{
+    struct taginfo_ taginfo[1];
+    char *repl_texts[2];
+    
+    ch = P_tag(ch, taginfo);
+    
+    ch = P_repl_text_pair(ch, repl_texts);
+    
+    return ch;
+}
+
+int P_rn_rule(int ch)
+{
+    char name[NAMELEN+1];
+    char *repl_text[1];
+    
+    ch = P_rni_name(ch, name);
+    
+    ch = P_repl_text(ch, repl_text);
+    /* TODO store reserved name repl_text */
+    return ch;
+}
+
+int P_comment(int ch, const char lit)
+{
+    while ((ch = GETC(ch)) != EOF)
+	if (ch == lit)
+	    return ch;
+	    
+    return ch;
+}
+
+int P_repl_defs(int ch)
+{
+    while (ch != EOF) {
+	P_S(ch);
+	
+	if (ch == EOF)
+	    break;
+
+	if (ch == STAGO[0])
+	    ch = P_tag_rule(ch);
+	else if (ch == RNI[0])
+	    ch = P_rn_rule(ch);
+	else if (ch == '%')
+	    ch = P_comment(ch, '\n');
+	else if (ch == COM[0])
+	    ch = P_comment(ch, COM[0]);
+	else
+	    syntax_error("Unexpected character \'%c\'.\n", ch);
+    }
+    return ch;
+}
 
 static unsigned    repl_filecount = 0U;
 static const char *repl_dir = NULL;
@@ -1573,6 +1627,8 @@ static const char *repl_default = NULL;
 #define DIRSEP "/"
 #endif
 static const char dirsep[] = DIRSEP;
+
+
 
 int is_relpath(const char *pathname)
 {
@@ -1587,9 +1643,36 @@ int is_relpath(const char *pathname)
     return 1;
 }
 
-void setup(const char *repl_filename)
+void load_repl_defs(FILE *fp)
 {
     int ch;
+    
+    assert(fp != NULL);
+    
+    replfp = fp;
+    
+    COUNT_EOL(EOL); /* Move to start of first line */
+    
+    cmark_strbuf_init(&text_buf, 2048U);
+    cmark_strbuf_putc(&text_buf, NUL); /* NULLIDX is unsused.*/
+    
+    cmark_strbuf_init(&attr_buf, ATTSPLEN);
+    cmark_strbuf_putc(&attr_buf, NUL); /* NULLIDX is unsused.*/
+    
+    cmark_strbuf_init(&nameidx_buf, ATTCNT * sizeof(nameidx_t));
+    cmark_strbuf_init(&validx_buf,  ATTCNT * sizeof(validx_t));
+
+    ch = GETC(ch);
+    ch = P_repl_defs(ch);
+    assert(ch == EOF);
+    
+    fclose(replfp);
+    replfp = NULL;
+}
+
+void load_repl_file(const char *repl_filename)
+{
+    FILE *fp;
     
     if (repl_dir == NULL)     repl_dir = getenv(REPL_DIR_VAR);
     if (repl_default == NULL) repl_default = getenv(REPL_DEFAULT_VAR);
@@ -1607,13 +1690,13 @@ void setup(const char *repl_filename)
      * First try the given filename literally.
      */
     filename = repl_filename;
-    replfp = fopen(filename, "r");
+    fp = fopen(filename, "r");
     
     /*
      * Otherwise, try a *relative* pathname with the REPL_DIR_VAR
      * environment variable.
      */
-    if (replfp == NULL && repl_dir != NULL) {
+    if (fp == NULL && repl_dir != NULL) {
 	size_t fnlen, rdlen;
 	int trailsep;
 	char *pathname;
@@ -1625,8 +1708,8 @@ void setup(const char *repl_filename)
 	    pathname = malloc(rdlen + !trailsep + fnlen + 16);
 	    sprintf(pathname, "%s%s%s",
 		repl_dir, dirsep+trailsep, filename);
-	    replfp = fopen(pathname, "r");
-	    if (replfp != NULL) filename = pathname;
+	    fp = fopen(pathname, "r");
+	    if (fp != NULL) filename = pathname;
 	    else free(pathname);
 	}
     }
@@ -1635,41 +1718,13 @@ void setup(const char *repl_filename)
      * If we **still** have no replacement definition file, it is
      * time to give up.
      */
-    if (replfp == NULL) {
+    if (fp == NULL) {
 	error("Can't open replacement file \"%s\": %s.", filename,
 	                                               strerror(errno));
-    } else
+    } else {
+	load_repl_defs(fp);
 	++repl_filecount;
-    
-    COUNT_EOL();
-    
-    cmark_strbuf_init(&attr_buf, ATTSPLEN);
-    cmark_strbuf_putc(&attr_buf, NUL); /* Index = 0U is unsused.*/
-    
-    cmark_strbuf_init(&nameidx_buf, ATTCNT * sizeof(nameidx_t));
-    cmark_strbuf_init(&validx_buf,  ATTCNT * sizeof(validx_t));
-
-    ch = GETC();
-    while (ch != EOF) {
-	S();
-	
-	if (ch == EOF)
-	    break;
-
-	if (ch == STAGO[0])
-	    ch = name_repl(ch);
-	else if (ch == RNI[0])
-	    ch = rni_repl(ch);
-	else if (ch == '%'))
-	    ch = comment('\n');
-	else if (ch == COM[0])
-	    ch = comment(COM[0]));
-	else
-	    syntax_error("Unexpected character \'%c\'.\n", ch);
     }
-		
-    fclose(replfp);
-    replfp = NULL;
 }
 
 /*====================================================================*/
@@ -1772,7 +1827,7 @@ int main(int argc, char *argv[])
 		fprintf(stderr, "--rast can't use --repl!\n");
 		exit(EXIT_FAILURE);
 	    }
-	    setup(filename);
+	    load_repl_file(filename);
 	} else if (strcmp(argv[argi], "--rast") == 0) {
 	    doing_rast = 1;
 	} else if ((strcmp(argv[argi], "--title") == 0) ||
@@ -1812,7 +1867,7 @@ int main(int argc, char *argv[])
      * environment.
      */
     if (repl_filecount == 0U && !doing_rast)
-	setup(NULL);
+	load_repl_file(NULL);
 
     parser = cmark_parser_new(options);
 
