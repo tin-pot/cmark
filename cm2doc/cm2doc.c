@@ -422,12 +422,14 @@ static const char* const nodename[NODE_NUM] = {
  * The output document's prolog (and, if needed, epilog).
  */
 enum rn_ {
+    RN_INVALID,
     RN_PROLOG,
     RN_EPILOG,
     RN_NUM,	/* Number of defined "reserved names". */
 };
 
 static const char *const rn_name[] = {
+    NULL,
     "PROLOG",
     "EPILOG",
     NULL
@@ -509,10 +511,17 @@ static const char *rn_repl[RN_NUM]; /* Replacement texts for RNs. */
 #define ETAG_BOL_START  0x0040
 #define ETAG_BOL_END    0x0080
 
+typedef size_t textidx_t;  /* Index into cmark_strbuf text_buf. */
+
+struct taginfo_ {
+    cmark_node_type nt;
+    textidx_t atts[2*ATTCNT + 2];
+};
+
 struct repl_ {
-    const char *stag_repl;
-    const char *etag_repl;
-    unsigned    defined; /* STAG_REPL, ETAG_REPL, STAG_BOL, ETAG_BOL. */
+    struct taginfo_ taginfo;
+    const char *repl[2];
+    struct repl_ *next;
 };
 
 /*
@@ -520,7 +529,11 @@ struct repl_ {
  * plus the (currently unused) member at index 0 == NODE_NONE.
  */
  
-static struct repl_ repl_tab[NODE_NUM];
+static struct repl_ *repl_tab[NODE_NUM];
+
+cmark_strbuf text_buf;
+
+
 
 /*== Element Stack Keeping ===========================================*/
 
@@ -684,35 +697,25 @@ const char* att_val(const char *name, unsigned depth)
 
 /*== Replacement Definitions =========================================*/
 
-typedef size_t textidx_t;  /* Index into text_buf. */
-cmark_strbuf text_buf;
 
 /*
  * Set the replacement text for a node type.
  */
-void set_repl(cmark_node_type nt,
-	      unsigned tag_bit,
-              const char *repl)
+void set_repl(struct taginfo_ *pti,
+              const char *repl_text[2])
 {
+    cmark_node_type nt = pti->nt;
+    struct repl_ *rp = malloc(sizeof *rp);
+    
     assert(0 <= nt);
     assert(nt < NODE_NUM);
     
-    switch (tag_bit & (STAG_REPL|ETAG_REPL)) {
-    case STAG_REPL:
-	if (repl_tab[nt].defined & STAG_REPL)
-	    free((void*)repl_tab[nt].stag_repl);
-	repl_tab[nt].stag_repl = repl;
-	break;
-    case ETAG_REPL:
-	if (repl_tab[nt].defined & ETAG_REPL)
-	    free((void*)repl_tab[nt].stag_repl);
-	repl_tab[nt].etag_repl = repl;
-	break;
-    default:
-	assert(!"Invalid tag_bit");
-    }
+    rp->repl[0] = repl_text[0];
+    rp->repl[1] = repl_text[1];
+    rp->taginfo = *pti;
     
-    repl_tab[nt].defined |= tag_bit;
+    rp->next = repl_tab[nt];
+    repl_tab[nt] = rp;
 }
 
 /*--------------------------------------------------------------------*/
@@ -772,6 +775,33 @@ void put_repl(const char *repl)
     }
 }
 
+struct repl_ *select_rule(cmark_node_type nt)
+{
+    struct repl_ *rp;
+    
+    for (rp = repl_tab[nt]; rp != NULL; rp = rp->next) {
+	textidx_t *atts = rp->taginfo.atts;
+	int i;
+	
+	for (i = 0; atts[2*i] != NULLIDX; ++i) {
+	    const char *name, *sel_val = NULL;
+	    const char *cur_val;
+	    
+	    name = text_buf.ptr + atts[2*i+0];
+	    cur_val = att_val(name, 1);
+	    if (atts[2*i+1] != NULLIDX) {
+		sel_val = text_buf.ptr + atts[2*i+1];
+	    }
+	    if (sel_val != NULL &&
+		     (cur_val == NULL || strcmp(cur_val, sel_val) != 0))
+		break;
+	}
+	if (atts[2*i] == NULLIDX)
+	    return rp; /* Matched all attribute selectors. */
+    }
+    return NULL; /* No matching rule found. */
+}
+
 /*== ESIS API for the Replacement Backend ============================*/
 
 void repl_Attr(ESIS_UserData ud,
@@ -782,16 +812,13 @@ void repl_Attr(ESIS_UserData ud,
 
 void repl_Start(ESIS_UserData ud, cmark_node_type nt)
 {
-    const struct repl_ *tr = &repl_tab[nt];
+    const struct repl_ *rp;
     
     close_atts(nt);
     
-    if (nt != CMARK_NODE_NONE) {
-	if (tr->defined & STAG_REPL) {
-	    int bol[2];
-	    bol[0] = (tr->defined & STAG_BOL_START) != 0;
-	    bol[1] = (tr->defined & STAG_BOL_END)   != 0;
-	    put_repl(tr->stag_repl);
+    if (nt != CMARK_NODE_NONE && (rp = select_rule(nt)) != NULL) {
+	if (rp->repl[0] != NULL) {
+	    put_repl(rp->repl[0]);
 	}
     }
 }
@@ -829,15 +856,11 @@ void repl_Cdata(ESIS_UserData ud, const char *cdata, size_t len)
 
 void repl_End(ESIS_UserData ud, cmark_node_type nt)
 {
-    const struct repl_ *tr = &repl_tab[nt];
+    const struct repl_ *rp = repl_tab[nt];
     
-    
-    if (nt != CMARK_NODE_NONE) {
-	if (tr->defined & ETAG_REPL) {
-	    int bol[2];
-	    bol[0] = (tr->defined & ETAG_BOL_START) != 0;
-	    bol[1] = (tr->defined & ETAG_BOL_END)   != 0;
-	    put_repl(tr->etag_repl);
+    if (nt != CMARK_NODE_NONE && (rp = select_rule(nt)) != NULL) {
+	if (rp->repl[1] != NULL) {
+	    put_repl(rp->repl[1]);
 	}
     }
 	
@@ -1220,7 +1243,7 @@ unsigned colno       = 0U;  /* Text input position: Column number. */
 
 #define LA_SIZE 4
 
-char        la_buf[LA_SIZE];
+char        la_buf[LA_SIZE], ch0;
 unsigned    la_num = 0U;
 
 #define COUNT_EOL(CH) (((CH) == EOL) ? (++lineno, colno = 0U, (CH)) :	\
@@ -1230,6 +1253,9 @@ unsigned    la_num = 0U;
                             ( (CH) = getc(replfp), COUNT_EOL(CH) ) )
 
 #define UNGETC(CH) (la_buf[la_num++] = (CH))
+
+#define PEEK()   ( la_buf[la_num++] = ch0 = getc(replfp),		\
+                                                        COUNT_EOL(ch0) )
 
 /*--------------------------------------------------------------------*/
 
@@ -1260,10 +1286,6 @@ void syntax_error(const char *msg, ...)
  * setup -- Parse the replacement definition file.
  */
  
-struct taginfo_ {
-    cmark_node_type nt;
-    textidx_t atts[2*ATTCNT + 2];
-};
 
 /*
  * S = SPACE | SEPCHAR | RS | RE
@@ -1311,6 +1333,9 @@ int P_attr_subst(int ch, cmark_strbuf *pbuf, const char lit)
 {
     int code = 0;
        
+    assert(ch == '[');
+    ch = GETC(ch);
+    
     if (ISNMSTART(ch))
 	code = SP;
     else if (ISDIGIT(ch) || ch == '.') {
@@ -1364,9 +1389,14 @@ int P_attr_subst(int ch, cmark_strbuf *pbuf, const char lit)
     return ch;
 }
 
-int P_string(int ch, cmark_strbuf *pbuf, const char lit)
+#define P_repl_string(CH, P, L)  P_string((CH), (P), (L), 1)
+#define P_attr_val_lit(CH, P, L)  P_string((CH), (P), (L), 0)
+
+int P_string(int ch, cmark_strbuf *pbuf, const char lit, int is_repl)
 {
     assert(ch == lit);
+    assert(ch == '"' || ch == '\'');
+    
     ch = GETC(ch);
     while (ch != lit) {
 	if (ch == MSSCHAR) {
@@ -1386,17 +1416,26 @@ int P_string(int ch, cmark_strbuf *pbuf, const char lit)
 		cmark_strbuf_putc(pbuf, ch);
 	    ch = GETC(ch);
 	    
-	} else if (ch == DSO[0]) {
+	} else if (ch == DSO[0] && is_repl) {
 	
 	    ch = P_attr_subst(ch, pbuf, lit);
 	    
+	} else if (ch == EOL) {
+	    cmark_strbuf_putc(pbuf, ch);
+	    ch = GETC(ch);
 	} else {
 	    cmark_strbuf_putc(pbuf, ch);
 	    ch = GETC(ch);
 	}
     }    
+    if (!is_repl)
+	cmark_strbuf_putc(pbuf, NUL);
+    
+    assert(ch == lit);
+    ch = GETC(ch);
     return ch;
 }
+
 
 int P_repl_text(int ch, char *repl_text[1])
 {
@@ -1407,17 +1446,19 @@ int P_repl_text(int ch, char *repl_text[1])
     
     P_S(ch);
     
-    if (ch == PLUS[0]) 
+    if (ch == PLUS[0]) {
         cmark_strbuf_putc(&repl, VT);
+        ch = GETC(ch);
+    }
     
     while (ch != EOF) {
 
 	P_S(ch);
 	
 	if (ch == LIT[0])
-	    ch = P_string(ch, &repl, LIT[0]);
+	    ch = P_repl_string(ch, &repl, LIT[0]);
 	else if (ch == LITA[0])
-	    ch = P_string(ch, &repl, LITA[0]);
+	    ch = P_repl_string(ch, &repl, LITA[0]);
 	else
 	    break;
 	++nstrings;
@@ -1445,43 +1486,31 @@ int P_repl_text(int ch, char *repl_text[1])
 
 int P_repl_text_pair(int ch, char *repl_text[2])
 {
-    ch = P_repl_text(ch, repl_text+0);
-    ch = P_repl_text(ch, repl_text+1); /* TODO */
+    repl_text[0] = repl_text[1] = NULL;
     
-    return ch;
-}
-
-
-int P_rni_name(int ch, char name[NAMELEN+1]) /*rni_repl(int ch)*/
-{
-    char *p = name;
-    enum rn_ rn;
-    
-    if (ISNMSTART(ch))
-	*p++ = toupper(ch);
-    else
-	syntax_error("'%c': Not a NMSTART.\n", ch);
-    
-    while ((ch = GETC(ch)) != EOF)
-	if (ISNMCHAR(ch))
-	    *p++ = toupper(ch);
-	else
-	    break;
-    *p = NUL;
-
-    /*
-     * Look up the "reserved name".
-     */
-    for (rn = 0; rn_name[rn] != NULL; ++rn)
-	if (!strcmp(rn_name[rn], name))
-	    break;
-    
-    if (rn_name[rn] == NULL) {
-	syntax_error("\"%s\": Unknown name.\n", name);
-	name[0] = NUL;
+    if (ch == '-') {
+	ch = GETC(ch);
+    } else if (ch == '/') {
+	;
+    } else {
+	ch = P_repl_text(ch, repl_text+0);
     }
+    
+    P_S(ch);
+    
+    if (ch == '/') {
+	ch = GETC(ch);
+	P_S(ch);
+	if (ch == '-') {
+	    ch = GETC(ch);
+	} else {
+	    ch = P_repl_text(ch, repl_text+1);
+	}
+    }
+    
     return ch;
 }
+
 
 int P_name(int ch, cmark_node_type *pnt, char name[NAMELEN+1], int fold)
 {
@@ -1489,8 +1518,6 @@ int P_name(int ch, cmark_node_type *pnt, char name[NAMELEN+1], int fold)
     cmark_node_type nt;
     
     assert(ISNMSTART(ch));
-    
-    name[0] = NUL, *pnt = 0;
     
     do {
 	*p++ = fold ? toupper(ch) : ch;
@@ -1514,11 +1541,44 @@ int P_name(int ch, cmark_node_type *pnt, char name[NAMELEN+1], int fold)
      */
      
     for (nt = 1; nodename[nt] != NULL; ++nt)
-	if (nodename[nt] != NULL && strcmp(nodename[nt], name) == 0)
+	if (nodename[nt] != NULL && strcmp(nodename[nt], name) == 0) {
 	    *pnt = nt;
+	    break;
+	}
 	    
     if (*pnt == 0)
 	syntax_error("\"%s\": Not a CommonMark node type.", name);
+
+    return ch;
+}
+
+
+int P_rni_name(int ch, enum rn_ *prn, char name[NAMELEN+1])
+{
+    char *p = name;
+    enum rn_ rn;
+ 
+    assert(ch == RNI[0]);
+    
+    ch = GETC(ch);
+    ch = P_name(ch, NULL, name, 1);
+    
+    if (prn == NULL)
+	return ch;
+    else
+	*prn = 0;
+	
+    /*
+     * Look up the "reserved name".
+     */
+    for (rn = 1; rn_name[rn] != NULL; ++rn)
+	if (strcmp(rn_name[rn], name) == 0) {
+	    *prn = rn;
+	    break;
+	}
+    
+    if (*prn == 0)
+	syntax_error("\"%s\": Unknown reserved name.\n", name);
 
     return ch;
 }
@@ -1528,22 +1588,24 @@ int P_tag(int ch, struct taginfo_ taginfo[1])
     char name[NAMELEN+1];
     cmark_node_type nt;
     const int fold = 1;
+    unsigned nattr = 0U;
     int is_etag = 0;
     
     assert(ch == STAGO[0]);
     
     ch = GETC(ch);
-    if (ch == '/')
+    if (ch == '/') {
 	is_etag = 1;
-    else
-	UNGETC(ch);
-    /* TODO: note start or end tag in taginfo */
+	ch = GETC(ch);
+    } 
+	
     ch = P_name(ch, &nt, name, fold);
-    /* TODO set nt in taginfo */
+    taginfo->nt = nt;
     
     while (ISSPACE(ch)) {
 	bufsize_t name_idx = 0, val_idx = 0;
 	
+	P_S(ch);
 	ch = P_name(ch, NULL, name, 0);
 	P_S(ch);
 	if (ch == VI[0]) {
@@ -1551,14 +1613,22 @@ int P_tag(int ch, struct taginfo_ taginfo[1])
 	    P_S(ch);
 	    if (ch == LIT[0] || ch == LITA[0]) {
 		val_idx = text_buf.size;
-		ch = P_string(ch, &text_buf, ch);
+		ch = P_attr_val_lit(ch, &text_buf, ch);
 	    }   
 	}
 	name_idx = text_buf.size;
 	cmark_strbuf_puts(&text_buf, name);
 	cmark_strbuf_putc(&text_buf, NUL);
-	/* TODO add (name_idx, val_idx) in taginfo */
+	taginfo->atts[2*nattr+0] = name_idx;
+	taginfo->atts[2*nattr+1] = val_idx;
+	++nattr;
     }
+    taginfo->atts[2*nattr+0] = NULLIDX;
+    
+    if (ch != TAGC[0])
+	syntax_error("Expected \'%c\'.\n", TAGC[0]);
+    else
+	ch = GETC(ch);
     return ch;
 }
 
@@ -1567,10 +1637,13 @@ int P_tag_rule(int ch)
     struct taginfo_ taginfo[1];
     char *repl_texts[2];
     
-    ch = P_tag(ch, taginfo);
+    assert(ch == STAGO[0]);
     
+    ch = P_tag(ch, taginfo);
+    P_S(ch);
     ch = P_repl_text_pair(ch, repl_texts);
     
+    set_repl(taginfo, repl_texts);
     return ch;
 }
 
@@ -1578,19 +1651,39 @@ int P_rn_rule(int ch)
 {
     char name[NAMELEN+1];
     char *repl_text[1];
+    enum rn_ rn;
     
-    ch = P_rni_name(ch, name);
+    assert(ch == RNI[0]);
+    
+    ch = P_rni_name(ch, &rn, name);
     
     ch = P_repl_text(ch, repl_text);
-    /* TODO store reserved name repl_text */
+    rn_repl[rn] = repl_text[0];
     return ch;
 }
 
 int P_comment(int ch, const char lit)
 {
+    assert(ch == '%' || ch == '-');
+    assert(lit == EOL || lit == '-'); /* TODO "--" vs EOL */
+    assert(ch == '%' || ch == lit);
+       
+    if (ch == '-') {
+	ch = GETC(ch);
+	assert(ch == '-');
+    }
+    
     while ((ch = GETC(ch)) != EOF)
-	if (ch == lit)
-	    return ch;
+	if (ch == lit) {
+	    if (lit == '-' && PEEK() == '-') {
+		ch = GETC(ch);
+		break;
+	    } else if (lit == EOL)
+		break;
+	}
+
+    assert(ch == lit || ch == EOF);
+    ch = GETC(ch);
 	    
     return ch;
 }
@@ -1609,10 +1702,12 @@ int P_repl_defs(int ch)
 	    ch = P_rn_rule(ch);
 	else if (ch == '%')
 	    ch = P_comment(ch, '\n');
-	else if (ch == COM[0])
-	    ch = P_comment(ch, COM[0]);
-	else
+	else if (ch == '-' && PEEK() == '-')
+	    ch = P_comment(ch, '-');
+	else {
 	    syntax_error("Unexpected character \'%c\'.\n", ch);
+	    ch = GETC(ch);
+	}
     }
     return ch;
 }

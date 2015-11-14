@@ -1,10 +1,14 @@
+ #EPILOG 'one two
+          three four
+	  six seven'
+
  -- 
     html-article: Article template with Dublin Core metadata.
 
     DOCTYPE HTML PUBLIC "ISO/IEC 15445:2000//DTD HTML//EN"            --
 
 #PROLOG 
-	"<!DOCTYPE HTML PUBLIC \"ISO/IEC 15445:2000//DTD HTML//EN\">\n"
+	"<!DOCTXPE HTML PUBLIC \"ISO/IEC 15445:2000//DTD HTML//EN\">\n"
 	"<HTML>\n"
 	"<HEAD profile=\"http://dublincore.org/documents/2008/08/04/"
 	                                                 "dc-html/\">\n"
@@ -45,19 +49,20 @@
         "\n\n"
 	"  <TITLE>[.DC.title]</TITLE>\n\n"
 
-% HTML epilog: </HTML> is required.
+-- HTML epilog: </HTML> is required. --
 
-#EPILOG
-	"</HTML>\n"
+#EPILOG "</HTML>\n"
 
-% CommonMark node types:
-%
-% CM.DOC	CM.QUO-B	CM.LIST		CM.LI		CM.COD-B
-% CM.FRG-B	CM.PAR		CM.HDR		CM.HR		CM.TXT
-% CM.SF-BR	CM.LN-BR	CM.COD		CM.FRG		CM.EMPH
-% CM.STRN	CM.LNK		CM.IMG
+--
+   CommonMark node types:
 
-% CM.DOC - Maps to HTML <BODY>
+  CM.DOC	CM.QUO-B	CM.LIST		CM.LI		CM.COD-B
+  CM.FRG-B	CM.PAR		CM.HDR		CM.HR		CM.TXT
+  CM.SF-BR	CM.LN-BR	CM.COD		CM.FRG		CM.EMPH
+  CM.STRN	CM.LNK		CM.IMG
+--
+
+-- CM.DOC - Maps to HTML <BODY> --
 <CM.DOC>
 	+ "<BODY>\n"
 	"<H1>[.DC.title]</H1>\n"
@@ -65,79 +70,51 @@
 	'<P><A href="mailto:[.DC.creator]">[.DC.creator]</A><BR>\n'
 	"[.DC.date]</P>\n"
 	"</DIV>" +
+	/ -
 
-<CM.QUO-B>
-	+ "<BLOCKQUOTE>" +
-</CM.QUO-B>
-	+ "</BLOCKQUOTE>" +
+<CM.QUO-B> + "<BLOCKQUOTE>" + / + "</BLOCKQUOTE>" +
 
-% CM.LIST - Maps to <OL> or <UL>.
-<CM.LIST>
-	+ "<UL>"
-</CM.LIST>
-	"</UL>" +
+-- CM.LIST - Maps to <OL> or <UL>. --
+<CM.LIST type="bullet"> + "<UL>" / "</UL>" +
 
- % CM.LI - Maps to <LI>, but </LI> can be omitted.
-<CM.LI>
-	"<LI>"
+<CM.LIST type="ordered"> + "<OL>" / "</OL>" +
 
-<CM.COD-B>
-	+ "<PRE><CODE>" +
-</CM.COD-B>
-	+ "</CODE></PRE>" +
+-- CM.LI - Maps to <LI>, but </LI> can be omitted. --
+<CM.LI> "<LI>" / -
 
-% CM.FRG-B ("HTML Block") - Omit start and end tag.
+<CM.COD-B> + "<PRE><CODE>" + / + "</CODE></PRE>" +
 
-<CM.PAR>
-	  "<P>"
-</CM.PAR>
-	"</P>" +
+-- CM.FRG-B ("HTML Block") - Omit start and end tag. --
 
-% CM.HDR - Maps to <H1> .. <H6>
-<CM.HDR>
-	+ "<H[level]>"
+<CM.PAR> "<P>" / "</P>" +
 
-</CM.HDR>
-	"</H[level]>\n"
+-- CM.HDR - Maps to <H1> .. <H6> --
+<CM.HDR> + "<H[level]>" / "</H[level]>\n"
 
-% CM.HR - Maps to <HR>, which is EMPTY.
-<CM.HR>
-	"<HR>"
+-- CM.HR - Maps to <HR>, which is EMPTY. --
+<CM.HR> "<HR>" / -
 
-% CM.TXT - Omit start and end tag.
+-- CM.TXT - Omit start and end tag. --
 
-% CM.SF-BR - Just a line break in the output text.
-<CM.SF-BR>
-	"\n"
+-- CM.SF-BR - Just a line break in the output text. --
+<CM.SF-BR> + / -
 
-% CM.LN-BR - Maps to HTML <BR>, which is EMPTY.
-<CM.LN-BR>
-	"<BR>"
+-- CM.LN-BR - Maps to HTML <BR>, which is EMPTY. --
+<CM.LN-BR> "<BR>" / - 
 
-<CM.COD>
-	"<CODE>"
-</CM.COD>
-	"</CODE>"
+<CM.COD> "<CODE>" / "</CODE>"
 
 % CM.FRG ("Inline HTML") - Omit start and end tag.
 
-<CM.EMPH>
-	"<EM>"
-</CM.EMPH>
-	"</EM>"
+<CM.EMPH> "<EM>" / "</EM>"
 
-<CM.STRN>
-	"<STRONG>"
-</CM.STRN>
-	"</STRONG>"
+<CM.STRN> "<STRONG>" / "</STRONG>"
 
-% CM.LNK - Maps to <A> element with 'href' attribute for destination.
-<CM.LNK>
-	"<A href=\"[destination]\" title=\"[title]\">"
-</CM.LNK>
-	"</A>"
+-- CM.LNK - Maps to <A> element 
+   with 'href' attribute for destination. --
+<CM.LNK> "<A href=\"[destination]\" title=\"[title]\">" /
+	 "</A>"
 
- % CM.IMG - Maps to <IMG> element with 'src' for URL; EMPTY.
-<CM.IMG>
-	"<IMG src=\"[url]\" title=\"[title]\">"
+-- CM.IMG - Maps to <IMG> element with 'src' for URL; EMPTY. --
+<CM.IMG> "<IMG src=\"[url]\" title=\"[title]\">" / -
 
