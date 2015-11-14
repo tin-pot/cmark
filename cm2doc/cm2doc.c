@@ -1260,7 +1260,7 @@ char        la_buf[LA_SIZE], ch0;
 unsigned    la_num = 0U;
 
 #define COUNT_EOL(CH) (((CH) == EOL) ? (++lineno, colno = 0U, (CH)) :	\
-                                                              (CH))
+                                                       (++colno, (CH)) )
 
 #define GETC(CH) ( la_num ? ( (CH) = la_buf[--la_num] ) :		\
                             ( (CH) = getc(replfp), COUNT_EOL(CH) ) )
