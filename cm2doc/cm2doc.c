@@ -103,6 +103,11 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 #define NUL  0
 
+/*
+ * Prototype here, because of ubiquituous use.
+ */
+void error(const char *msg, ...);
+
 /*== ESIS API ========================================================*/
 
 /*
@@ -247,6 +252,24 @@ size_t utf8encode(char buf[5], ucs_t ucs)
     strbuf.size = 0U;
     
     return n;
+}
+
+/*== cmark_strbuf_dup() ==============================================*/
+
+char *cmark_strbuf_dup(cmark_strbuf *pbuf)
+{
+    size_t n = pbuf->size;
+    char *p;
+    
+    if (n == 0U) return NULL;
+    p = malloc(n);
+    if (p != NULL) {
+	memcpy(p, pbuf->ptr, n);
+	cmark_strbuf_clear(pbuf);
+    } else {
+	error("Out of memory! Allocating %lu bytes failed.\n", n);
+    }
+    return p;
 }
 
 /*== Meta-data =======================================================*/
@@ -422,8 +445,9 @@ static const char *rn_repl[RN_NUM]; /* Replacement texts for RNs. */
 #define STX  2
 #define ETX  3
 #define EOT  4
-#define SO  14
-#define SI  15
+#define VT  11 /* Encodes the begin-of-line "+". */
+#define SO  14 /* Encodes the attribute substitution "[". */
+#define SI  15 /* Encodes the attribute substitution "]". */
 
 /*
  * The C0 control characters allowed in SGML/XML; all other C0 are
@@ -740,23 +764,8 @@ void set_repl(cmark_node_type nt,
 /*
  * Attribute substitution and replacement text output.
  */
-const char *put_subst(const char *p, int output);
 
-const char *put_text(const char *p, int output)
-{
-    int ch;
-    
-    assert(p[-1] == STX);
-    while ((ch = *p++) != ETX) {
-	if (ch == SOH)
-	    put_subst(p, output);
-	else if (output)
-	    PUTC(ch);
-    }
-    return p;
-}
-
-const char *put_subst(const char *p, int output)
+const char *put_subst(const char *p)
 {
     const char *name;
     const char *val = NULL;
@@ -779,23 +788,20 @@ const char *put_subst(const char *p, int output)
     return p+1U;
 }
 
-void put_repl(const char *repl, int bol[2])
+void put_repl(const char *repl)
 {
     const char *p = repl;
     char ch;
     
-    if (bol[0] && !outbol)
-	PUTC(EOL);
-    
     while ((ch = *p++) != NUL) {
-	if (ch != SO)
-	    PUTC(ch);
+	if (ch == VT) {
+	    if (!outbol)
+		PUTC(EOL);
+	} else if (ch == SO)
+	    p = put_subst(p);
 	else 
-	    p = put_subst(p, 1);
+	    PUTC(ch);
     }
-    
-    if (bol[1] && !outbol)
-	PUTC(EOL);
 }
 
 /*== ESIS API for the Replacement Backend ============================*/
@@ -817,7 +823,7 @@ void repl_Start(ESIS_UserData ud, cmark_node_type nt)
 	    int bol[2];
 	    bol[0] = (tr->defined & STAG_BOL_START) != 0;
 	    bol[1] = (tr->defined & STAG_BOL_END)   != 0;
-	    put_repl(tr->stag_repl, bol);
+	    put_repl(tr->stag_repl);
 	}
     }
 }
@@ -863,7 +869,7 @@ void repl_End(ESIS_UserData ud, cmark_node_type nt)
 	    int bol[2];
 	    bol[0] = (tr->defined & ETAG_BOL_START) != 0;
 	    bol[1] = (tr->defined & ETAG_BOL_END)   != 0;
-	    put_repl(tr->etag_repl, bol);
+	    put_repl(tr->etag_repl);
 	}
     }
 	
@@ -1305,14 +1311,13 @@ int comment(const char lit[2])
     return ch;
 }
 
-char *get_repl(int, int[2]);
+int get_repl(int, char **);
 
 int rni_repl(int ch)
 {
     char name[NAMELEN+1], *p = name;
     enum rn_ rn;
-    const char *repl;
-    int bol[2];
+    char *repl;
     
     if (ISNMSTART(ch))
 	*p++ = toupper(ch);
@@ -1338,7 +1343,7 @@ int rni_repl(int ch)
 	return ch;
     }
 	
-    repl = get_repl(ch, bol);
+    ch = get_repl(ch, &repl);
     
     if (repl != NULL) {
 	free((void*)rn_repl[rn]);
@@ -1467,26 +1472,25 @@ int get_string(cmark_strbuf *pbuf, int ch, const char lit[2])
     return ch;
 }
 
-char *get_repl(int ch, int bol[2])
+int get_repl(int ch, char **prepl)
 {
-    cmark_strbuf repl;
+    static cmark_strbuf repl = { NULL, 0, 0 };
     unsigned nstrings = 0U;
     
-    bol[0] = bol[1] = 0;
-    cmark_strbuf_init(&repl, 16);
+    /* cmark_strbuf_init(&repl, 16); */
     
     S();
     
-    if (DELIM(PLUS)) 
-	bol[0] = 1;
+    if (ch == PLUS[0]) 
+        cmark_strbuf_putc(&repl, VT);
     
     while (ch != EOF) {
 
 	S();
 	
-	if (DELIM(LIT))
+	if (ch == LIT[0])
 	    ch = get_string(&repl, ch, LIT);
-	else if (DELIM(LITA))
+	else if (ch == LITA[0])
 	    ch = get_string(&repl, ch, LITA);
 	else
 	    break;
@@ -1495,16 +1499,22 @@ char *get_repl(int ch, int bol[2])
     
     S();
     
-    if (DELIM(PLUS)) 
-	bol[1] = 1;
-    else
-	UNGETC(ch);
+    if (ch == PLUS[0]) {
+        cmark_strbuf_putc(&repl, VT);
+        ch = GETC();
+    }
     
     if (nstrings > 0U) {
+	char *res;
 	cmark_strbuf_putc(&repl, NUL);
-	return (char*)cmark_strbuf_detach(&repl);
-    } else
-	return NULL;
+	res = cmark_strbuf_dup(&repl);
+	*prepl = res;
+	return ch;
+    } else {
+	cmark_strbuf_clear(&repl);
+	*prepl = NULL;
+	return ch;
+    }
 }
 
 
@@ -1513,8 +1523,7 @@ int name_repl(int ch, unsigned bits)
     char name[NODENAME_LEN+1];
     char *p = name;
     cmark_node_type nt;
-    const char *repl;
-    int bol[2];
+    char *repl;
     
     *p++ = toupper(ch);
     
@@ -1539,18 +1548,7 @@ int name_repl(int ch, unsigned bits)
 	return ch;
     }
 
-    repl = get_repl(ch, bol);
-    
-    switch (bits & (STAG_REPL|ETAG_REPL)) {
-    case STAG_REPL:
-	if (bol[0]) bits |= STAG_BOL_START;
-	if (bol[1]) bits |= STAG_BOL_END;
-	break;
-    case ETAG_REPL:
-	if (bol[0]) bits |= ETAG_BOL_START;
-	if (bol[1]) bits |= ETAG_BOL_END;
-	break;
-    }
+    ch = get_repl(ch, &repl);
     
     set_repl(nt, bits, repl);
     return GETC();
@@ -1650,21 +1648,13 @@ void setup(const char *repl_filename)
 	if (ch == EOF)
 	    break;
 
-	if (DELIM(ETAGO)) {
-	    if (ISNMSTART(ch))
-		ch = name_repl(ch, ETAG_REPL);
-	    else
-		syntax_error("\'%c\' after '" ETAGO "'", ch);
-	} else if (DELIM(STAGO)) {
-	    if (ISNMSTART(ch))
-    		ch = name_repl(ch, STAG_REPL);
-	    else
-		syntax_error("\'%c\' after '" STAGO "': Not a NMSTART.\n", ch);
-	} else if (DELIM(RNI))
+	if (ch == STAGO[0])
+	    ch = name_repl(ch, STAG_REPL);
+	else if (ch == RNI[0])
 	    ch = rni_repl(ch);
 	else if (DELIM("%"))
 	    ch = comment("\n");
-	else if (DELIM(COM))
+	else if (ch == COM[0])
 	    ch = comment(COM);
 	else
 	    syntax_error("Unexpected character \'%c\'.\n", ch);
@@ -1698,13 +1688,13 @@ static void gen_document(cmark_node *document,
     bol[0] = bol[1] = 0;
     
     if (rn_repl[RN_PROLOG] != NULL) {
-	put_repl(rn_repl[RN_PROLOG], bol);
+	put_repl(rn_repl[RN_PROLOG]);
     }
 
     cmark_render_esis(document, api);
 
     if (rn_repl[RN_EPILOG] != NULL) {
-	put_repl(rn_repl[RN_EPILOG], bol);
+	put_repl(rn_repl[RN_EPILOG]);
     }
     do_End(CMARK_NODE_NONE);
 }
