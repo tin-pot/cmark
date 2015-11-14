@@ -758,43 +758,25 @@ const char *put_text(const char *p, int output)
 
 const char *put_subst(const char *p, int output)
 {
-    const char *name = p;
+    const char *name;
     const char *val = NULL;
-    const char *cmpval = NULL;
-    int pred;
-    unsigned depth = 1U;
+    unsigned depth = *p & 0xFFU;
     
-    assert(p[-1] == SOH);
-    
-    p = name + strlen(name)+1U;
+    assert(p[-1] == SO);
+    name = p + 1U;
+    p = name + strlen(name)+2U;
+    assert(p[-1] == SI);
 
-    if (name[0] == '.')
-	depth = ~0U, ++name;
-    else if (ISDIGIT(name[0]))
-	depth = name[0] - '0', ++name;
-
-    if (output)
-	val = att_val(name, depth);
+    val = att_val(name, depth);
     
-    if (p[0] != STX && p[0] != EOT) {
-	cmpval = p;
-	p = cmpval + strlen(cmpval)+1U;
-    }
-    pred = (val != NULL && cmpval != NULL) ? strcmp(val, cmpval) == 0 :
-           (val != NULL);
-    if (p[0] == STX) {
-	p = put_text(p+1, output && pred);
-	if (p[0] == STX) 
-	    p = put_text(p+1, output && !pred);
-    } else if (output) {
-	if (val != NULL) {
-	    size_t k;
-	    for (k = 0U; val[k] != NUL; ++k)
-		PUTC(val[k]);
-	}
-    } 
-    assert(p[0] == EOT);
-    return ++p;
+    if (val != NULL) {
+        size_t k;
+        for (k = 0U; val[k] != NUL; ++k)
+    	PUTC(val[k]);
+    } else
+	syntax_error("Undefined attribute '%s'\n", name);
+    
+    return p+1U;
 }
 
 void put_repl(const char *repl, int bol[2])
@@ -806,7 +788,7 @@ void put_repl(const char *repl, int bol[2])
 	PUTC(EOL);
     
     while ((ch = *p++) != NUL) {
-	if (ch != SOH)
+	if (ch != SO)
 	    PUTC(ch);
 	else 
 	    p = put_subst(p, 1);
@@ -1366,80 +1348,89 @@ int rni_repl(int ch)
 }
 
 /*
- * subst = "[" , name , [ "?" , { elem } , [ ":"  , { elem } ] ] , "]" ;
+ * An _attribute substitution_ in the _replacement text_ gets encoded
+ * like this:
  *
- *         SOH , str , NUL , [ STX , subst ,  [ ETB  , subst ] ] , EOT
+ *     attrib subst = "[" , [ prefix ] , nmstart , { nmchar } , "]" ;
  *
- * elem = restricted char | escape sequence | subst ;
- * restricted char = char - ( LIT | ":" | "]" ) ;
+ *     encoded form:  SO ,  precode   ,  char   , {  char  } ,  NUL , SI 
+ *
+ * The (optional) prefix character "." or **Digit** is encoded like
+ * this (using SP for "no prefix"):
+ *
+ *     prefix  precode
+ *
+ *      ./.      SP
+ *      "."     0xFF
+ *      "0"     0x01
+ *      "1"     0x02
+ *      ...      ...
+ *
+ *      "9"     0x0A
+ *
+ *   - Thus "precode" can be used as a "depth" argument directly, and
+ *     because SI = 13, 
+ *
+ *   - we can still search for SI starting from the SO
+ *     right at the front of this _attribute substitution_ encoding.
+ *
+ *   - And the _attribute name_ is a NTBS starting at offset 2 after the
+ *     initial SO.
  */
+ 
 int substitution(cmark_strbuf *pbuf, int ch, const char lit[2])
 {
-    enum { IN_ATTR_NAME , IN_CMP_VAL, IN_TEXT_1 , IN_TEXT_2 } state;
-    
-    cmark_strbuf_putc(pbuf, SOH);
-    
-    state = IN_ATTR_NAME;
-    while (ch != EOF && !DELIM(DSC)) {
-	if (DELIM(lit)) {
-	    syntax_error("Unclosed attribute reference "
-		"(missing '" DSC "').\n");
-	    if (state == IN_ATTR_NAME)
-		cmark_strbuf_putc(pbuf, NUL);
-	    else
-		cmark_strbuf_putc(pbuf, ETX);
-	    break;
-	}
+    int code = 0;
+       
+    if (ISNMSTART(ch))
+	code = SP;
+    else if (ISDIGIT(ch) || ch == '.') {
+	static const char in_ [] = ".0123456789";
+	static const char out_[] = "\xFF\0x01\0x02\0x03\0x04\0x05"
+	                               "\0x06\0x07\0x08\0x09\0x0A";
+	ptrdiff_t idx = strchr(in_, ch) - in_;
 	
-	switch (state) {
-	case IN_ATTR_NAME:
-	    if (ISSPACE(ch))
-		syntax_error("Space in attribute name.\n");
-	    else if (ch == '=') { 
-		cmark_strbuf_putc(pbuf, NUL);
-		state = IN_CMP_VAL;
-	    } else if (ch == '?') {
-		cmark_strbuf_putc(pbuf, NUL);
-		cmark_strbuf_putc(pbuf, STX);
-		state = IN_TEXT_1;
-	    } else
-		cmark_strbuf_putc(pbuf, ch);
-	    ch = GETC();
-	    break;
-	case IN_CMP_VAL:
-	    if (ch == '?') {
-		cmark_strbuf_putc(pbuf, NUL);
-		cmark_strbuf_putc(pbuf, STX);
-		state = IN_TEXT_1;
-	    } else 
-		cmark_strbuf_putc(pbuf, ch);
-	    ch = GETC();
-	    break;
-	case IN_TEXT_1:
-	case IN_TEXT_2:
-	    if (ch == ':') {
-		if (state == IN_TEXT_1) {
-		    cmark_strbuf_putc(pbuf, ETX);
-		    cmark_strbuf_putc(pbuf, STX);
-		    state = IN_TEXT_2;
-		} else {
-		    syntax_error("Already had ':'\n");
-		}
-		ch = GETC();
-	    } else if (DELIM(DSO)) {
-		ch = substitution(pbuf, ch, lit);
-	    } else {
-		cmark_strbuf_putc(pbuf, ch);
-		ch = GETC();
-	    }
-	}
+	code = out_[idx];
+	ch = GETC();
+    } else {
+	syntax_error("Expected NMSTART or '.' or Digit, got '%c'\n",
+	                                                            ch);
+	return ch;
     }
     
-    if (state == IN_ATTR_NAME)
-	cmark_strbuf_putc(pbuf, NUL);
-    else
-	cmark_strbuf_putc(pbuf, ETX);
-    cmark_strbuf_putc(pbuf, EOT);
+    /*
+     * Code the _**atto**_ delimiter and the "prefix char".
+     */
+    cmark_strbuf_putc(pbuf, SO);
+    cmark_strbuf_putc(pbuf, code);
+    if (code == SP) {
+        cmark_strbuf_putc(pbuf, ch); /* The NMSTART char of name */
+        ch = GETC();
+    }
+    
+    while (ch != EOF && ch != DSC[0]) {
+	if (ISNMCHAR(ch)) {
+	    cmark_strbuf_putc(pbuf, ch);
+	} else if (ch == lit[0]) { /* Hit the string delimiter! */
+	    syntax_error("Unclosed attribute reference "
+		"(missing '" DSC "').\n");
+	    break;
+	} else if (ISSPACE(ch)) {
+	    syntax_error("SPACE in attribute name discarded.\n");
+	} else if (ch == MSSCHAR) {
+	    syntax_error("You can't use '%c' in attribute names.\n", ch);
+	} else {
+	    syntax_error("Expected NMCHAR, got '%c'.\n", ch);
+	}
+	ch = GETC();
+    }
+    
+    /*
+     * Finish the encoded _attribute substitution_.
+     */
+	
+    cmark_strbuf_putc(pbuf, NUL); /* Make the name a NTBS. */
+    cmark_strbuf_putc(pbuf, SI);  /* Mark the end of the coded thing. */
     
     return ch;
 }
