@@ -878,6 +878,7 @@ static const struct ESIS_API_ repl_API = {
 
 struct RAST_Param_ {
     FILE *outfp;
+    int stdrast;   /* Report only ESIS data (not "pseudo"-attributes) */
 } rast_param;
 
 void rast_data(FILE *fp, const char *data, size_t len, char delim)
@@ -963,9 +964,15 @@ void rast_Attr(ESIS_UserData ud, const char *name, const char *val, size_t len)
 
 void rast_Start(ESIS_UserData ud, cmark_node_type nt)
 {
-    FILE *fp = ((struct RAST_Param_*)ud)->outfp;
+    struct RAST_Param_* rastp = ud;
+    FILE *fp = rastp->outfp;
     size_t nattr = NATTR;
     
+    if (nt == 0 && rastp->stdrast) {
+	discard_atts();
+	return;
+    }
+	
     if (nattr > 0U) {
 	size_t k;
 	const char *GI = nodename[nt];
@@ -998,9 +1005,15 @@ void rast_Cdata(ESIS_UserData ud, const char *cdata, size_t len)
 
 void rast_End(ESIS_UserData ud, cmark_node_type nt)
 {
-    FILE *fp = ((struct RAST_Param_*)ud)->outfp;
-    const char *GI = nodename[nt];
-    fprintf(fp, "[/%s]\n", (GI == NULL) ? "#0" : nodename[nt]);
+    struct RAST_Param_* rastp = ud;
+    FILE *fp = rastp->outfp;
+    
+    if (nt == 0 && rastp->stdrast)
+	return;
+    else {
+	const char *GI = nodename[nt];
+	fprintf(fp, "[/%s]\n", (GI == NULL) ? "#0" : nodename[nt]);
+    }
     return;   
 }
 
@@ -1925,6 +1938,10 @@ int main(int argc, char *argv[])
 	    load_repl_file(filename);
 	} else if (strcmp(argv[argi], "--rast") == 0) {
 	    doing_rast = 1;
+	    rast_param.stdrast = 1;
+	} else if (strcmp(argv[argi], "--rasta") == 0) {
+	    doing_rast = 1;
+	    rast_param.stdrast = 0;
 	} else if ((strcmp(argv[argi], "--title") == 0) ||
 	    (strcmp(argv[argi], "-t") == 0)) {
 		title_arg = argv[++argi];
