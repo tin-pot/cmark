@@ -128,10 +128,10 @@ void syntax_error(const char *msg, ...);
 
 typedef void *ESIS_UserData;
 
-typedef void (ESIS_Attr)(ESIS_UserData,
-                             const char *name, const char *val, size_t);
+typedef void (ESIS_Attr)(ESIS_UserData,    const char *name,
+                                           const char *val, size_t);
 typedef void (ESIS_Start)(ESIS_UserData,               cmark_node_type);
-typedef void (ESIS_Cdata)(ESIS_UserData,          const char *, size_t);
+typedef void (ESIS_Cdata)(ESIS_UserData,   const char *cdata, size_t);
 typedef void (ESIS_End)(ESIS_UserData,                 cmark_node_type);
 
 typedef struct ESIS_CB_ {
@@ -146,15 +146,23 @@ typedef struct ESIS_Port_ {
     ESIS_UserData  ud;
 } ESIS_Port;
 
-int parse_cmark(FILE *from, ESIS_Port *to, cmark_option_t,
+/*
+ * We have:
+ *  - input file parsers,
+ *  - output file generators, and
+ *  - ESIS filters.
+ */
+ 
+int        parse_cmark(FILE *from, ESIS_Port *to, cmark_option_t,
                                                     const char *meta[]);
                                    
-int parse_esis(FILE *from, ESIS_Port *to);
-ESIS_Port* generate_repl(FILE *to);
-ESIS_Port* generate_rast(FILE *to, unsigned options);
-#define RAST_ALL 1U /* The only RAST option right now. */
-ESIS_Port* generate_esis(FILE *to);
-ESIS_Port* filter_toc(ESIS_Port*to);
+int        parse_esis(FILE *from, ESIS_Port *to, unsigned options);
+
+ESIS_Port* generate_repl(FILE *to,               unsigned options);
+ESIS_Port* generate_rast(FILE *to,               unsigned options);
+ESIS_Port* generate_esis(FILE *to,               unsigned options);
+
+ESIS_Port* filter_toc(ESIS_Port*to,              unsigned options);
 
 #define DO_ATTR(N, V, L)   esis_cb->attr(esis_ud, N, V, L)
 #define DO_START(NT)       esis_cb->start(esis_ud, NT)
@@ -893,10 +901,11 @@ static const struct ESIS_CB_ repl_CB = {
     repl_End
 };
 
-ESIS_Port* generate_repl(FILE *to)
+ESIS_Port* generate_repl(FILE *to, unsigned options)
 {
     static struct ESIS_Port_ port = { &repl_CB, NULL };
     
+    options = 0U; /* NOT USED */
     /*
      * Only one output file at a time.
      */
@@ -909,6 +918,7 @@ ESIS_Port* generate_repl(FILE *to)
 
 /*== ESIS API for RAST Output Generator ==============================*/
 
+#define RAST_ALL 1U
 
 struct RAST_Param_ {
     FILE *outfp;
@@ -1073,10 +1083,14 @@ ESIS_Port* generate_rast(FILE *to, unsigned options)
     return &rast_port;
 }
 
-/*== CommonMark ESIS Renderer ========================================*/
+/*== Generator for OpenSP format ESIS output =========================*/
+
+/*== Parser for OpenSP format ESIS input  ============================*/
+
+/*== CommonMark Document Rendering into an ESIS Port ================*/
 
 /*
- * Rendering into the ESIS API callbacks:
+ * Rendering a document node into the ESIS callbacks.
  */
  
 
@@ -1288,8 +1302,7 @@ size_t do_meta_lines(char *buffer, size_t nbuf, const ESIS_Port *to)
     return nused;
 }
 
-/*== Text input/output ===============================================*/
-
+/*== Replacement Definitions Parsing =================================*/
 
 /*
  * During parsing of the "Replacement Definition" file we keep these
@@ -1343,8 +1356,10 @@ void syntax_error(const char *msg, ...)
     va_end(va);
 }
 
+/*--------------------------------------------------------------------*/
+
 /*
- * setup -- Parse the replacement definition file.
+ * Parsing the replacement definition file format.
  */
  
 
@@ -1773,31 +1788,12 @@ int P_repl_defs(int ch)
     return ch;
 }
 
-static const char *repl_dir = NULL;
-static const char *repl_default = NULL;
-    
-#ifdef _WIN32
-#define DIRSEP "\\"
-#else
-#define DIRSEP "/"
-#endif
-static const char dirsep[] = DIRSEP;
+/*--------------------------------------------------------------------*/
 
-
-
-int is_relpath(const char *pathname)
-{
-    if (pathname[0] == dirsep[0])
-	return 0;
-#ifdef _WIN32
-    if ( (('A' <= pathname[0] && pathname[0] <= 'Z') || 
-          ('a' <= pathname[0] && pathname[0] <= 'z')) && 
-         pathname[1] == ':' )
-	return 0;
-#endif
-    return 1;
-}
-
+/*
+ * Loading (ie parsing and interpreting) a Replacement Definition file.
+ */
+ 
 void load_repl_defs(FILE *fp)
 {
     int ch;
@@ -1825,7 +1821,57 @@ void load_repl_defs(FILE *fp)
     replfp = NULL;
 }
 
-FILE *find_repl_file(const char *repl_filename, FILE *verbose)
+
+/*--------------------------------------------------------------------*/
+
+/*
+ * Find and open a Replacement Definition file.
+ *
+ * A NULL argument refers to the "default" repl def file.
+ */
+ 
+static const char *repl_dir = NULL;
+static const char *repl_default = NULL;
+    
+#ifdef _WIN32
+#define DIRSEP "\\"
+#else
+#define DIRSEP "/"
+#endif
+static const char dirsep[] = DIRSEP;
+
+int is_relpath(const char *pathname)
+{
+    if (pathname[0] == dirsep[0])
+	return 0;
+#ifdef _WIN32
+    /*
+     * A DOS-style path starting with a "drive letter" like "C:..."
+     * is taken to be "absolute" - although it technically can be 
+     * relative (to the cwd for this drive): we would have to
+     * _insert_ the path prefix after the ":", not simply prefix it.
+     */
+    if ( (('A' <= pathname[0] && pathname[0] <= 'Z') || 
+          ('a' <= pathname[0] && pathname[0] <= 'z')) && 
+         pathname[1] == ':' )
+	return 0;
+#endif
+    return 1;
+}
+
+/*
+ * Find and open a replacement definition file.
+ *
+ * If NULL is given as the filename, the "default repl def" is used
+ * (specified by environment).
+ *
+ * The "verbose" argument can name a text stream (ie stdout or stderr)
+ * into which report is written on the use of environment variables and
+ * which replacement file pathnames were tried etc. (This is used
+ * in `usage()`, invoked eg by the `--help` option);
+ */
+ 
+FILE *open_repl_file(const char *repl_filename, FILE *verbose)
 {
     FILE *fp;
     
@@ -1843,9 +1889,10 @@ FILE *find_repl_file(const char *repl_filename, FILE *verbose)
      * Passing in NULL means: use the default replacement definition.
      */
     if (repl_filename == NULL && (repl_filename = repl_default) == NULL)
-	if (verbose)
+	if (verbose) {
 	    fprintf(verbose, "No default replacement file!\n");
-	else
+	    return NULL;
+	} else
 	    error("No replacement definition file specified, "
 	          "nor a default - giving up!\n");
 	
@@ -1853,9 +1900,12 @@ FILE *find_repl_file(const char *repl_filename, FILE *verbose)
      * First try the given filename literally.
      */
     filename = repl_filename;
+    assert(filename != NULL);
+    
     if (verbose) fprintf(verbose, "Trying \"%s\" ... ", filename);
     fp = fopen(filename, "r");
     if (verbose) fprintf(verbose, "%s.\n", (fp) ? "ok" : "failed");
+
     
     /*
      * Otherwise, try a *relative* pathname with the REPL_DIR_VAR
@@ -1873,11 +1923,13 @@ FILE *find_repl_file(const char *repl_filename, FILE *verbose)
 	    pathname = malloc(rdlen + !trailsep + fnlen + 16);
 	    sprintf(pathname, "%s%s%s",
 		repl_dir, dirsep+trailsep, filename);
+		
 	    if (verbose) fprintf(verbose, "Trying \"%s\" ... ",
 	                                                      pathname);
 	    fp = fopen(pathname, "r");
 	    if (verbose) fprintf(verbose, "%s.\n",
 	                                (fp == NULL) ? "failed" : "ok");
+	                                
 	    if (fp != NULL) filename = pathname;
 	    else free(pathname);
 	}
@@ -2016,7 +2068,7 @@ void usage()
     printf("  --version        Print version\n");
     
     printf("\nReplacement files:\n");
-    find_repl_file(NULL, stdout);
+    open_repl_file(NULL, stdout);
 }
 
 
@@ -2029,7 +2081,7 @@ int main(int argc, char *argv[])
     cmark_option_t cmark_options = CMARK_OPT_DEFAULT;
     unsigned       rast_options  = 0U;
     bool doing_rast              = false;
-    unsigned repl_filecount      = 0U;
+    unsigned repl_file_count     = 0U;
     
     ESIS_Port *port   = NULL;
     FILE      *infp   = stdin;
@@ -2039,6 +2091,8 @@ int main(int argc, char *argv[])
     const char *meta[42], **pmeta = meta;
     time_t now;
     int argi;
+    
+    meta[0] = NULL;
     
     if ( (username = getenv("LOGNAME"))   != NULL ||
          (username = getenv("USERNAME"))  != NULL )
@@ -2059,7 +2113,8 @@ int main(int argc, char *argv[])
 	} else if ((strcmp(argv[argi], "--repl") == 0) ||
 	    (strcmp(argv[argi], "-r") == 0)) {
 	    const char *filename = argv[++argi];
-	    load_repl_defs(find_repl_file(filename, NULL));
+	    load_repl_defs(open_repl_file(filename, NULL));
+	    ++repl_file_count;
 	} else if (strcmp(argv[argi], "--rast") == 0) {
 	    doing_rast = true;
 	} else if (strcmp(argv[argi], "--rasta") == 0) {
@@ -2101,24 +2156,29 @@ int main(int argc, char *argv[])
      * try using the default replacement file given in the
      * environment.
      */
-    if (repl_filecount == 0U)
-	if (!doing_rast) 
-	    load_repl_defs(find_repl_file(NULL, NULL));
+    if (doing_rast)
+	if (repl_file_count > 0U)
+	    error("Can't use RAST with replacement files.\n");
 	else
-	    error("No replacement file.\n");
-    else if (doing_rast)
-	error("Can't use RAST with replacement files.\n");
-    
-    if (title_arg != NULL) {
-	*pmeta++ = META_DC_TITLE;
-	*pmeta++ = title_arg;
+	    /* Do RAST. */
+	    port = generate_rast(outfp, rast_options);
+    else {
+	if (repl_file_count == 0U)
+	    /* Success or die. */
+	    load_repl_defs(open_repl_file(NULL, NULL));
+	    
+	if (title_arg != NULL) {
+	    *pmeta++ = META_DC_TITLE;
+	    *pmeta++ = title_arg;
+	}
+	*pmeta++ = META_CSS;
+	*pmeta++ = (css_arg) ? css_arg : DEFAULT_CSS;
+	*pmeta++ = "lang";
+	*pmeta++ = "en";
+	*pmeta = NULL;
+	
+	port = generate_repl(outfp, 0U);
     }
-    *pmeta++ = META_CSS;
-    *pmeta++ = (css_arg) ? css_arg : DEFAULT_CSS;
-    *pmeta = NULL;
-    
-    port = (doing_rast) ? generate_rast(outfp, rast_options) :
-                          generate_repl(outfp);
 
     /*
      * Loop through the input files.
