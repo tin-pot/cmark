@@ -99,7 +99,7 @@ CommonMark node types:
 '<BODY class="article" lang="[lang]">
 <H1 class="title" id="dc.title">[.DC.title]</H2>
 <DIV class="center">
-<P class="note"><A href="mailto:[.X-email]">[.DC.creator]</A><BR>
+<P class="note"><A href="mailto:[.DC.creator]">[.DC.creator]</A><BR>
 [.DC.date]</DIV>
 <HR class="fullwidth">
 <H2 class="contents">Contents</H2>
