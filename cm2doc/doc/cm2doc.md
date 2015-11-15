@@ -2,6 +2,9 @@
 % mh@tin-pot.net
 % 2015-11-14
 % lang: en
+% X-email: mh@tin-pot.net
+% X-doc.id: cm2doc
+% X-doc.ed: Working Draft
 
 0   Introduction
 ----------------
@@ -27,9 +30,11 @@
 
 (3) *rule* = *start tag rule* | *end tag rule* ;
 
-\[01\] *start tag rule* = *start tag* , { S } , [ _**bol**_ , { S } ] , *repl text* , [ _**bol**_ , { S } ] ;
+\[01\] *start tag rule* = *start tag* , { S } , [ _**bol**_ , { S } ] ,
+                                  *repl text* , [ _**bol**_ , { S } ] ;
 
-\[01\] *end tag rule* = *end tag* , { S } , [ _**bol**_ , { S } ] , *repl text* , [ _**bol**_ , { S } ] ;
+\[01\] *end tag rule* = *end tag* , { S } , [ _**bol**_ , { S } ] ,
+                              *repl text* , [ _**bol**_ , { S } ] ;
 
 \[01\] *start tag* = _**stago**_ , *name* , _**tagc**_ ;
 
@@ -37,17 +42,27 @@
 
 \[01\] *repl text* = { *string* , { S } } ;
 
-\[01\] *string* = _**lit**_ , { *string char* - ( _**lit**_ ) | *escape* | *attr ref* } , _**lit**_ ;
+\[01\] *string* = _**lit**_ , { *string char* - ( _**lit**_ ) 
+                | *escape* | *attr subst* } , _**lit**_  ;
 
-\[01\] *string char* = _**CHAR**_ - ( _**esc**_ | _**atto**_ ) ;
+\[01\] *string* = _**lita**_ , { *string char* - ( _**lita**_ ) 
+                | *escape* | *attr subst* } , _**lita**_  ;
 
-\[01\] *escape* = _**esc** , ( _**esc**_  | _**atto**_  | _**lit**_ | "`n`" | "`t`"  | "`r`"  | "`s`"  | "`f`" | *octal number* ) ;
+\[01\] *string char* = _**CHAR**_ - ( _**esc**_ | _**attsubo**_ ) ;
+
+\[01\] *escape* = _**esc**_ , ( _**esc**_  | _**attsubo**_
+               | _**lit**_ | _**lita**_
+               | &quot;`n`&quot; | &quot;`t`&quot;  | &quot;`r`&quot;
+               | &quot;`s`&quot;  | &quot;`f`&quot; | *octal number* ) ;
 
 \[01\] *octal number* = _**Oct Digit**_ , { _**Oct Digit**_ } ;
 
-\[01\] _**Oct Digit**_ = "`0`" | "`1`" | "`2`" | "`3`" | "`4`" | "`5`" | "`6`" | "`7`" ; 
+\[01\] _**Oct Digit**_ = &quot;`0`&quot; | &quot;`1`&quot;
+                       | &quot;`2`&quot; | &quot;`3`&quot;
+                       | &quot;`4`&quot; | &quot;`5`&quot;
+                       | &quot;`6`&quot; | &quot;`7`&quot; ;
 
-\[01\] *attr ref* = _**atto**_ , *name* , _**attc**_ ;
+\[01\] *attr subst* = _**attsubo**_ , *name* , _**attsubc**_ ;
 
 \[01\] *name* = _**NMSTART**_ , { _**NMCHAR**_ } ; (* XML/SGML name *) 
 
@@ -63,19 +78,28 @@
 
 \[01\] _**tagc**_ = "`>`" ;
 
-\[01\] _**atto**_ = "`[`" ;
+\[01\] _**attsubo**_ = "`[`" ;
 
-\[01\] _**attc**_ = "`]`" ;
+\[01\] _**attsubc**_ = "`]`" ;
 
 \[01\] _**lit**_ = '`"`' ;
 
-\[01\] _**NMSTART**_ = _**UCNMSTRT**_ | _**LCNMSTRT**_ ; (* Or XML _**name start character**_ *)
+\[01\] _**lita**_ = "`'`" ;
 
-\[01\] _**NMCHAR**_ = _**NMSTART**_ | _**Digit**_ | _**UCNMCHAR**_ | _**LCNMCHAR**_ ; (* Or XML _**name character**_ *)
+\[01\] _**NMSTART**_ = _**UCNMSTRT**_ | _**LCNMSTRT**_ ;
+                                 (* Or XML _**name start character**_ *)
 
-\[01\] _**NMCHAR**_ = _**NMSTART**_ | _**Digit**_ | _**UCNMCHAR**_ | _**LCNMCHAR**_ ; (* Or XML _**name character**_ *)
+\[01\] _**NMCHAR**_ = _**NMSTART**_ | _**Digit**_ 
+                    | _**UCNMCHAR**_ | _**LCNMCHAR**_ ;
+                                       (* Or XML _**name character**_ *)
 
-\[01\] _**NMCHAR**_ = _**NMSTART**_ | _**Digit**_ | _**UCNMCHAR**_ | _**LCNMCHAR**_ ; (* Or XML _**name character**_ *)
+\[01\] _**NMCHAR**_ = _**NMSTART**_ | _**Digit**_ 
+                    | _**UCNMCHAR**_ | _**LCNMCHAR**_ ;
+                                       (* Or XML _**name character**_ *)
+
+\[01\] _**NMCHAR**_ = _**NMSTART**_ | _**Digit**_ 
+                    | _**UCNMCHAR**_ | _**LCNMCHAR**_ ; 
+                                       (* Or XML _**name character**_ *)
 
 \[01\] _**CHAR**_ = ? Any XML character ? ;
 
@@ -142,21 +166,27 @@ also specify that "`\`" in front of *any* character which is not a
 *hexadecimal digit* nor one of "`n`", "`r`", "`t`", "`s`" will just
 "mask" this character: this is just a generalization of the 
 previous rule which enumerated **esc** ("`\"`"), **lit** ("`\"`"), and
-**atto** ("`\[`") as the *only* "maskable" characters. 
+**attsubo** ("`\[`") as the *only* "maskable" characters. 
 
 So the new version for the *escape* production is:
 
 <DIV class="hi">
 
-\[01\] *escape* = _**esc** , ( *masked char* | *esc letter* | *hex number* , [ S ] ) ;
+\[01\] *escape* = _**esc**_ , 
+               ( *masked char* | *esc letter* | *hex number* , [ S ] ) ;
 
-\[01\] *esc letter* = "`n`" | "`t`"  | "`r`"  | "`s`" ;
+\[01\] *esc letter* = &quot;`n`&quot; | &quot;`t`&quot; 
+                    | &quot;`r`&quot;  | &quot;`s`&quot; ;
 
 \[01\] *masked char* = _**CHAR**_ - ( _**Hex Digit**_ |  *esc letter* ) ;
 
 \[01\] *hex number* = _**Hex Digit**_ , 5 * [ _**Hex Digit**_ ] ) ;
 
-\[01\] _**Hex Digit**_ = _**Digit**_ | "`A`" | "`B`" | "`C`" | "`D`" | "`E`" | "`F`" | "`a`" | "`b`" | "`c`" | "`d`" | "`e`" | "`f`" ;
+\[01\] _**Hex Digit**_ = _**Digit**_ 
+          | &quot;`A`&quot; | &quot;`B`&quot; | &quot;`C`&quot; 
+	  | &quot;`D`&quot; | &quot;`E`&quot; | &quot;`F`&quot; 
+	  | &quot;`a`&quot; | &quot;`b`&quot; | &quot;`c`&quot; 
+	  | &quot;`d`&quot; | &quot;`e`&quot; | &quot;`f`&quot; ;
 
 </DIV>
 
@@ -204,7 +234,7 @@ not "associated" with (either a *start* or *end*) *tag*, but with an
 *element* (they just happen to be specified inside the *start tag*), so
 this exception had no conceptual reason anyway.
 
-\[**NOTE:** We have called the `ATT_OPEN` token _**atto**_ here, and
+\[**NOTE:** We have called the `ATT_OPEN` token _**attsubo**_ here, and
 the non-terminal *end_repl* obviously is our *end tag rule*. \]
 
 Now the *end tag rule*
@@ -346,11 +376,34 @@ the *start tag* and *end tag* rules from the past:
 
 <DIV class="hi">
 
-\[01\] *tag replacement rule* = [ *start-tag repl text* | _**absent**_ ] , [ _**sep**_ , ( *end-tag repl text* | _**absent**_ ) ] ;
+\[01\] *tag rule* = *tag* , [ *start-tag repl text* | _**absent**_ ] ,
+                [ _**sep**_ , ( *end-tag repl text* | _**absent**_ ) ] ;
 
-\[01\] _**absent**_ = "`-`" ;
+\[01\] *tag* = ( _**stago**_ | _**etag**_ ) , *name* ,
+                         [ { *S* } - , { *attr spec* } ] ,  _**tagc**_ ;
 
-\[01\] _**sep**_ = "`/`" ;
+\[01\] *attr spec* = *name* , { *S* } , _**vi**_ , { *S* } ,
+                                          *attr val literal* , { *S* } ;
+
+\[01\] *attr val literal* = _**lit**_ ,
+                       { *attr val elem* - ( _**lit**_ ) } , _**lit**_ ;
+
+\[01\] *attr val literal* = _**lita**_ ,
+                     { *attr val elem* - ( _**lita**_ ) } , _**lita**_ ;
+
+\[01\] *attr val elem* =  *attr val char* | *escape* ;
+
+\[01\] *attr val char* = _**CHAR**_ - ( _**esc**_ ) ;
+
+\[01\] _**absent**_ = &quot;`-`&quot; ;
+
+\[01\] _**sep**_ = &quot;`/`&quot; ;
+
+\[01\] _**vi**_ = &quot;`=`&quot; ;
+
+\[01\] 
+
+\[01\] 
 
 </DIV>
 

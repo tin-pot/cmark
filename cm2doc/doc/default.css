@@ -29,8 +29,8 @@ BODY {
   margin-top:		0em;
   margin-bottom:	4em;
 
-  /*font-family:		sans-serif;
-  font-size:		12pt;*/
+  font-family:		"Helvetica LT Std", Arimo, Arial, sans-serif;
+  font-size:		12pt;
 }
 
 
@@ -83,6 +83,9 @@ DIV.hi {
   padding-bottom:	1ex;
 }
 
+.small {
+  text-size: 75%;
+}
 
 .center { 
   text-align:		center;
@@ -528,10 +531,11 @@ A:focus {
 
 
 CODE, SPAN.code {
-  font-family:		monospace;
-  color:		#F90;		/* (Header text color).       */
+  font-family:		"Courier New", "Courier", monospace;
+  font-size:            105%;
+/*color:		#FF9900;	/* (Header text color).       */
 /*color:		#784800;	/* (Header text color) * 1/2. */
-/*color:		#B46C00;	/* (Header text color) * 3/4. */
+  color:		#B46C00;	/* (Header text color) * 3/4. */
 /*color:		#997;		/* ??                         */
 /*color:		#FBEDBB;	/*  (Code block bg-color).    */
 /*color:		#7D5F5D;	/*  (CB bg-color) * 1/2.      */
@@ -548,9 +552,12 @@ CODE, SPAN.code {
  */
 SPAN.hi:after,
 SPAN.hi:before {
-  content: "\A0";		/* A single NBSP.             */
+  content: "\2009"; /* U+2009 THIN SPACE (&thinsp;) _around_ hi. */
 }
 
+EM:after {
+  content: "\200A"; /* U+200A HAIR SPACE (&hairsp;) _after_ italics. */
+}
 /*
  * ... but not if embedded in a title or anchor. Code inside a PRE
  * gets it color from there.

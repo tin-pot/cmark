@@ -1,0 +1,557 @@
+<!DOCTYPE HTML PUBLIC "ISO/IEC 15445:2000//DTD HTML//EN">
+<HTML>
+ <HEAD profile="http://dublincore.org/documents/2008/08/04/dc-html/">
+ <META http-equiv="Content-Type" content="text/html; charset=UTF-8">
+
+ <LINK rel="schema.DC"      href="http://purl.org/dc/elements/1.1/">
+ <LINK rel="schema.DCTERMS" href="http://purl.org/dc/terms/">
+
+ <META name="DC.format"  content="text/html" scheme="DCTERMS.IMT">
+ <META name="DC.type"    content="Text" scheme="DCTERMS.DCMIType">
+ <META name="DC.title"   lang="en" content=
+
+     "cm2doc – CommonMark Document Generator"
+
+     >
+ <META name="DC.creator"      content="mh@tin-pot.net">
+ <META name="DC.date"         content="2015-11-14">
+ <META name="DC.language"     content="en">
+ <META name="DCTERMS.rights"  content=
+
+     "© Martin Hofmann <mh@tin-pot.net>. All rights reserved."
+
+     >
+ <META name="DCTERMS.license" content=
+
+	   "Creative Commons Attribution-ShareAlike 4.0
+		 International Public License
+		 (CC BY-SA 4.0 International)"
+     >
+
+ <LINK rel="stylesheet"       type="text/css" href="default.css">
+ <META name="GENERATOR"       content=
+     "cm2doc (
+                     git@github.com:tin-pot/cmark.git;
+            date: Nov 15 2015, 11:53:17;
+            id: 0dbe074380ef
+        
+     )">
+
+ <TITLE>cm2doc – CommonMark Document Generator</TITLE>
+<BODY class="article" lang="en">
+<H1 class="title" id="dc.title">cm2doc – CommonMark Document Generator</H2>
+<DIV class="center">
+<P class="note"><A href="mailto:mh@tin-pot.net">mh@tin-pot.net</A><BR>
+2015-11-14</DIV>
+<HR class="fullwidth">
+<H2 class="contents">Contents</H2>
+<UL>
+<!-- CONTENTS -->
+<LI><A title="Text of Foreword" href="#foreword">Foreword</A>
+<LI><A title="Text of Introduction" href="#intro">Introduction</A>
+<LI><A title="Text of section 1" href="#sec-1">1&emsp;Section 1</A>
+<!-- /CONTENTS -->
+</UL>
+<HR class="fullwidth">
+<H2>0   Introduction</H2>
+<H2>1   Synopsis</H2>
+<H2>2   Replacement file syntax</H2>
+<UL><LI><P>“<CODE>SYNTACTIC LITERAL</CODE>”</P>
+<LI><P><EM><STRONG>delimiter role</STRONG></EM></P>
+<LI><P><EM><STRONG>TERMINAL VARIABLE</STRONG></EM></P>
+<LI><P><EM><STRONG>Terminal Constant</STRONG></EM></P>
+</UL>
+<H3>2.1   ASP Backend</H3>
+<DIV class="hi">
+<P>(1) <EM>repl file</EM> = { <EM>rule</EM> | <EM>comment</EM> } ;</P>
+<P>(2) <EM>comment</EM> = <EM><STRONG>eol com</STRONG></EM>, { <EM><STRONG>CHAR</STRONG></EM> } , <EM><STRONG>EOL</STRONG></EM> ;</P>
+<P>(3) <EM>rule</EM> = <EM>start tag rule</EM> | <EM>end tag rule</EM> ;</P>
+<P>[01] <EM>start tag rule</EM> = <EM>start tag</EM> , { S } , [ <EM><STRONG>bol</STRONG></EM> , { S } ] ,
+<EM>repl text</EM> , [ <EM><STRONG>bol</STRONG></EM> , { S } ] ;</P>
+<P>[01] <EM>end tag rule</EM> = <EM>end tag</EM> , { S } , [ <EM><STRONG>bol</STRONG></EM> , { S } ] ,
+<EM>repl text</EM> , [ <EM><STRONG>bol</STRONG></EM> , { S } ] ;</P>
+<P>[01] <EM>start tag</EM> = <EM><STRONG>stago</STRONG></EM> , <EM>name</EM> , <EM><STRONG>tagc</STRONG></EM> ;</P>
+<P>[01] <EM>start tag</EM> = <EM><STRONG>etago</STRONG></EM> , <EM>name</EM> , <EM><STRONG>tagc</STRONG></EM> ;</P>
+<P>[01] <EM>repl text</EM> = { <EM>string</EM> , { S } } ;</P>
+<P>[01] <EM>string</EM> = <EM><STRONG>lit</STRONG></EM> , { <EM>string char</EM> - ( <EM><STRONG>lit</STRONG></EM> )
+| <EM>escape</EM> | <EM>attr subst</EM> } , <EM><STRONG>lit</STRONG></EM>  ;</P>
+<P>[01] <EM>string</EM> = <EM><STRONG>lita</STRONG></EM> , { <EM>string char</EM> - ( <EM><STRONG>lita</STRONG></EM> )
+| <EM>escape</EM> | <EM>attr subst</EM> } , <EM><STRONG>lita</STRONG></EM>  ;</P>
+<P>[01] <EM>string char</EM> = <EM><STRONG>CHAR</STRONG></EM> - ( <EM><STRONG>esc</STRONG></EM> | <EM><STRONG>attsubo</STRONG></EM> ) ;</P>
+<P>[01] <EM>escape</EM> = <EM><STRONG>esc</STRONG></EM> , ( <EM><STRONG>esc</STRONG></EM>  | <EM><STRONG>attsubo</STRONG></EM>
+| <EM><STRONG>lit</STRONG></EM> | <EM><STRONG>lita</STRONG></EM>
+| &quot;<CODE>n</CODE>&quot; | &quot;<CODE>t</CODE>&quot;  | &quot;<CODE>r</CODE>&quot;
+| &quot;<CODE>s</CODE>&quot;  | &quot;<CODE>f</CODE>&quot; | <EM>octal number</EM> ) ;</P>
+<P>[01] <EM>octal number</EM> = <EM><STRONG>Oct Digit</STRONG></EM> , { <EM><STRONG>Oct Digit</STRONG></EM> } ;</P>
+<P>[01] <EM><STRONG>Oct Digit</STRONG></EM> = &quot;<CODE>0</CODE>&quot; | &quot;<CODE>1</CODE>&quot;
+| &quot;<CODE>2</CODE>&quot; | &quot;<CODE>3</CODE>&quot;
+| &quot;<CODE>4</CODE>&quot; | &quot;<CODE>5</CODE>&quot;
+| &quot;<CODE>6</CODE>&quot; | &quot;<CODE>7</CODE>&quot; ;</P>
+<P>[01] <EM>attr subst</EM> = <EM><STRONG>attsubo</STRONG></EM> , <EM>name</EM> , <EM><STRONG>attsubc</STRONG></EM> ;</P>
+<P>[01] <EM>name</EM> = <EM><STRONG>NMSTART</STRONG></EM> , { <EM><STRONG>NMCHAR</STRONG></EM> } ; (* XML&#47;SGML name *)</P>
+<P>[01]</P>
+</DIV>
+<DIV class="hi">
+<P>[01] <EM><STRONG>stago</STRONG></EM> = “<CODE>&lt;</CODE>” ;</P>
+<P>[01] <EM><STRONG>etago</STRONG></EM> =  “<CODE>&lt;&#47;</CODE>” ;</P>
+<P>[01] <EM><STRONG>tagc</STRONG></EM> = “<CODE>&gt;</CODE>” ;</P>
+<P>[01] <EM><STRONG>attsubo</STRONG></EM> = “<CODE>[</CODE>” ;</P>
+<P>[01] <EM><STRONG>attsubc</STRONG></EM> = “<CODE>]</CODE>” ;</P>
+<P>[01] <EM><STRONG>lit</STRONG></EM> = ‘<CODE>&quot;</CODE>’ ;</P>
+<P>[01] <EM><STRONG>lita</STRONG></EM> = “<CODE>&#39;</CODE>” ;</P>
+<P>[01] <EM><STRONG>NMSTART</STRONG></EM> = <EM><STRONG>UCNMSTRT</STRONG></EM> | <EM><STRONG>LCNMSTRT</STRONG></EM> ;
+(* Or XML <EM><STRONG>name start character</STRONG></EM> *)</P>
+<P>[01] <EM><STRONG>NMCHAR</STRONG></EM> = <EM><STRONG>NMSTART</STRONG></EM> | <EM><STRONG>Digit</STRONG></EM>
+| <EM><STRONG>UCNMCHAR</STRONG></EM> | <EM><STRONG>LCNMCHAR</STRONG></EM> ;
+(* Or XML <EM><STRONG>name character</STRONG></EM> *)</P>
+<P>[01] <EM><STRONG>NMCHAR</STRONG></EM> = <EM><STRONG>NMSTART</STRONG></EM> | <EM><STRONG>Digit</STRONG></EM>
+| <EM><STRONG>UCNMCHAR</STRONG></EM> | <EM><STRONG>LCNMCHAR</STRONG></EM> ;
+(* Or XML <EM><STRONG>name character</STRONG></EM> *)</P>
+<P>[01] <EM><STRONG>NMCHAR</STRONG></EM> = <EM><STRONG>NMSTART</STRONG></EM> | <EM><STRONG>Digit</STRONG></EM>
+| <EM><STRONG>UCNMCHAR</STRONG></EM> | <EM><STRONG>LCNMCHAR</STRONG></EM> ;
+(* Or XML <EM><STRONG>name character</STRONG></EM> *)</P>
+<P>[01] <EM><STRONG>CHAR</STRONG></EM> = ? Any XML character ? ;</P>
+<P>[01] <EM><STRONG>EOL</STRONG></EM> = ? Line break ? ;</P>
+</DIV>
+<H3>2.2   ASP Backend Example</H3>
+<P>A very simple example is given in the <EM>ASP Backend</EM> description:</P>
+<PRE><CODE>&lt;memo&gt;         &quot;.MS&quot;
+&lt;sender&gt;       &quot;From: &quot;
+&lt;forename&gt;     &quot; &quot;
+&lt;receivers&gt;    &quot;To: &quot;
+&lt;contents&gt;     &quot;.PP&quot;
+&lt;&#47;memo&gt;        &quot;.ME&quot;
+</CODE></PRE>
+<P>A more relevant example uses <EM>attribute substitution</EM> to convert
+a <EM>CommonMark</EM> node into a HTML heading:</P>
+<PRE><CODE>&lt;CM.HDR&gt;      + &quot;&lt;H[level]&gt;&quot;
+&lt;&#47;CM.HDR&gt;     &quot;&lt;&#47;H[level]&gt;&quot; +
+</CODE></PRE>
+<P>This appends the value of the <EM>CommonMark</EM> attribute <CODE>level</CODE> to the
+<CODE>H</CODE> and thus generates the appropriate HTML element type name (good
+that the <CODE>level</CODE> attribute <EM>does</EM> start counting at <CODE>level=&quot;1&quot;</CODE>!).</P>
+<P>But wait—an <EM>end tag</EM> does not bear attributes, and consequently
+the <EM>ASP Backend</EM> does not substitute the <CODE>[level]</CODE> attribute
+reference! Duh.</P>
+<P>So we want (and <EM>need</EM> for our purpose) a slightly better variant
+of the  <EM>Replacement File</EM> syntax.</P>
+<P>But before we start extending the syntax we use the opportunity
+to “update” some minor design choices.</P>
+<H3>2.3   A Modest Update of the Replacement Syntax</H3>
+<P>It shows that the syntax for the <EM>ASP Backend</EM> was introduced
+a long time ago: we expect all our document types to be <EM>Unicode</EM>-based
+(if not <EM>encoded</EM> in a UTF schema), so referencing characters by
+<EM>octal numbers</EM> seems really outdated.</P>
+<P>Furthermore, the “<CODE>\f</CODE>” escape sequence is not only a bit pointless
+(like the “<CODE>\r</CODE>” for CR, or for my taste “<CODE>\t</CODE>” too), but borderline
+dangerous: the FORM FEED control character it produces is <STRONG>not</STRONG>
+allowed in XML documents (nor in HTML, nor in SGML’s <EM>Reference Syntax</EM>).
+The only “safe” control characters from the C0 set in our context are:</P>
+<OL><LI><P>U+0009 HT (”<CODE>\t</CODE>”),</P>
+<LI><P>U+000A LF (”<CODE>\n</CODE>”),</P>
+<LI><P>U+000D CR (”<CODE>\r</CODE>”),</P>
+</OL>
+<P>so we decide the “<CODE>\f</CODE>” must go.</P>
+<P>Instead of <EM>octal</EM> numbers for <EM>code points</EM> we want to use <EM>hexadecimal
+numbers</EM>; which leads us to a new production for <EM>escape</EM>, where we
+also specify that “<CODE>\</CODE>” in front of <EM>any</EM> character which is not a
+<EM>hexadecimal digit</EM> nor one of “<CODE>n</CODE>”, “<CODE>r</CODE>”, “<CODE>t</CODE>”, “<CODE>s</CODE>” will just
+“mask” this character: this is just a generalization of the
+previous rule which enumerated <STRONG>esc</STRONG> (”<CODE>\&quot;</CODE>”), <STRONG>lit</STRONG> (”<CODE>\&quot;</CODE>”), and
+<STRONG>attsubo</STRONG> (”<CODE>\[</CODE>”) as the <EM>only</EM> “maskable” characters.</P>
+<P>So the new version for the <EM>escape</EM> production is:</P>
+<DIV class="hi">
+<P>[01] <EM>escape</EM> = <EM><STRONG>esc</STRONG></EM> ,
+( <EM>masked char</EM> | <EM>esc letter</EM> | <EM>hex number</EM> , [ S ] ) ;</P>
+<P>[01] <EM>esc letter</EM> = &quot;<CODE>n</CODE>&quot; | &quot;<CODE>t</CODE>&quot;
+| &quot;<CODE>r</CODE>&quot;  | &quot;<CODE>s</CODE>&quot; ;</P>
+<P>[01] <EM>masked char</EM> = <EM><STRONG>CHAR</STRONG></EM> - ( <EM><STRONG>Hex Digit</STRONG></EM> |  <EM>esc letter</EM> ) ;</P>
+<P>[01] <EM>hex number</EM> = <EM><STRONG>Hex Digit</STRONG></EM> , 5 * [ <EM><STRONG>Hex Digit</STRONG></EM> ] ) ;</P>
+<P>[01] <EM><STRONG>Hex Digit</STRONG></EM> = <EM><STRONG>Digit</STRONG></EM>
+| &quot;<CODE>A</CODE>&quot; | &quot;<CODE>B</CODE>&quot; | &quot;<CODE>C</CODE>&quot;
+| &quot;<CODE>D</CODE>&quot; | &quot;<CODE>E</CODE>&quot; | &quot;<CODE>F</CODE>&quot;
+| &quot;<CODE>a</CODE>&quot; | &quot;<CODE>b</CODE>&quot; | &quot;<CODE>c</CODE>&quot;
+| &quot;<CODE>d</CODE>&quot; | &quot;<CODE>e</CODE>&quot; | &quot;<CODE>f</CODE>&quot; ;</P>
+</DIV>
+<P>The <EM>hex number</EM> here specifies an <EM>Unicode</EM> <EM>code point</EM> (technically in the
+range <EM>0</EM> .. <EM>10FFFF</EM>, while not <EM>all</EM> of these <EM>code points</EM> are allowed),
+and can have one to six digits. Since there is no way to indicate an
+earlier end to the sequence of <EM><STRONG>Hex Digits</STRONG></EM>, one can use a <EM><STRONG>SPACE</STRONG></EM>
+for this purpose, which will then be “gobbled” up the the hex number:
+that’s the [ S ] after the <EM>hex number</EM> token in production [00].</P>
+<P>[<STRONG>NOTE:</STRONG> These conventions for the use of “<CODE>\</CODE>” are a direct
+import from W3C CSS Level 2, and <EM>intentionally</EM> so. Any differences
+are a remaining flaw in <EM>this</EM> specification. IMO it is a good choice
+to <EM>replicate</EM> rather than <EM>re-invent</EM> a syntactic detail as mundane
+as the “backslash-escape” sequences. ]</P>
+<P>With this out of the way, we turn back to our showstopper keeping us
+from translating the <EM>end tag</EM> of the <EM>CommonMark</EM> heading element type:</P>
+<PRE><CODE>&lt;&#47;CM.HDR&gt;     &quot;&lt;&#47;H[level]&gt;&quot; +
+</CODE></PRE>
+<P>can <STRONG>not</STRONG> be used in the <EM>ASP Backend</EM> (as documented), but it is
+obvious what it should do, and there is no reason to “forbid” it.</P>
+<P>[<STRONG>NOTE:</STRONG> The reason that the <EM>ASP Backend</EM> would not substitute
+<EM>attribute values</EM> in the replacement text for <EM>end tags</EM> is probably
+simple: the implementation must <EM>remember</EM> which attributes were
+defined with which values in the corresponding <EM>start tag</EM>, and this
+requires obviously more effort to implement than just using the
+attributes “at hand”, in the <EM>start tag</EM>. ]</P>
+<H3>2.2   Extension: Attribute Replacements for <EM>end tags</EM></H3>
+<P>There is no change needed in the grammar for this extension—on the
+contrary, the <EM>ASP Backend</EM> description had to state it <EM>apart</EM> from
+the grammar (which kind of says otherwise):</P>
+<BLOCKQUOTE>
+<P>There is one exception for the <CODE>ATT_OPEN</CODE> token: <CODE>ATT_OPEN</CODE> is never
+recognised inside the replacement text of an <EM>end_repl</EM>, because there
+are no attributes associated with an endtag.</P>
+</BLOCKQUOTE>
+<P>We simply drop this exception and nitpick that <EM>attributes</EM> in SGML are
+not “associated” with (either a <EM>start</EM> or <EM>end</EM>) <EM>tag</EM>, but with an
+<EM>element</EM> (they just happen to be specified inside the <EM>start tag</EM>), so
+this exception had no conceptual reason anyway.</P>
+<P>[<STRONG>NOTE:</STRONG> We have called the <CODE>ATT_OPEN</CODE> token <EM><STRONG>attsubo</STRONG></EM> here, and
+the non-terminal <EM>end_repl</EM> obviously is our <EM>end tag rule</EM>. ]</P>
+<P>Now the <EM>end tag rule</EM></P>
+<PRE><CODE>&lt;&#47;CM.HDR&gt;     &quot;&lt;&#47;H[level]&gt;&quot; +
+</CODE></PRE>
+<P>produces a flawlessly matching <CODE>&lt;H1&gt;</CODE>, <CODE>&lt;H2&gt;</CODE>, … tag for the <EM>start tag</EM>
+of the same element.</P>
+<H3>2.3   Extension: Attribute presence and value selectors</H3>
+<P>Continuing to set up a <EM>Replacement Definition</EM> file for HTML output,
+we run into the next obstacle: there is only one <EM>CommonMark</EM> node
+type for lists, and this should be mapped to either an <CODE>&lt;UL&gt;</CODE> or an <CODE>&lt;OL&gt;</CODE>
+(<EM>start</EM> and <EM>end</EM>) <EM>tag</EM> in the output—but this time our little
+hack to <EM>substitute an attribute value</EM> into the output GI does not
+work: this is the <EM>attribute definition list declaration</EM> in the
+<EM>CommonMark</EM> DTD:</P>
+<PRE><CODE>&lt;!ATTLIST list
+          type        (bullet|ordered)   #REQUIRED
+          start        CDATA             #IMPLIED
+          tight       (true|false)       #REQUIRED
+          delimiter   (period|paren)     #IMPLIED&gt;
+</CODE></PRE>
+<P>We want to produce <CODE>&lt;UL&gt;</CODE> tags if <CODE>type</CODE> has the value <CODE>bullet</CODE>, and
+<CODE>&lt;OL&gt;</CODE> tags if it has the value <CODE>ordered</CODE>.</P>
+<P>One could dream up elaborate expression inside the <EM>attribute substitution</EM>
+elements in the replacement text, something like</P>
+<PRE><CODE>&lt;CM.HDR&gt;   &quot;&lt;[type==ordered?OL:UL]&gt;&quot; +
+</CODE></PRE>
+<P>But this quickly leads to complications in parsing, nesting, recursion,
+quoting and escaping and is just not worth the effort (<EM>been there, done
+that</EM>).</P>
+<P>A much simpler and cleaner approach is to—again—think of existing
+practice, which means: think of CSS: what about some kind of “selector”
+for alternative rules concerning the same source element type (rsp.
+<EM>CommonMark</EM> node type)?</P>
+<P>We can easily see that the equivalent of a simple <EM>attribute selector</EM>
+(we refer to the definition in <EM>[W3C Selectors][w3c-sel-att]</EM>, but
+the same selector has been around in CSS forever):</P>
+<P>What in CSS looks like this:</P>
+<PRE><CODE>CM.HDR[type=ordered] {
+&#47;* Arrange for a nice display of an *ordered* list *&#47;
+}
+
+CM.HDR[type=bullet] {
+&#47;* Define the style properties for an *unordered* list *&#47;
+}
+</CODE></PRE>
+<P>could look and feel very naturally in our <EM>Replacement Definition</EM>
+syntax too:</P>
+<PRE><CODE>&lt;CM.HDR type=&quot;ordered&quot;&gt;   + &quot;&lt;OL&gt;&quot;
+
+&lt;CM.HDR type=&quot;bullet&quot;&gt;    + &quot;&lt;UL&gt;&quot;
+</CODE></PRE>
+<P>Very easy to understand and apply. However, the same required “selector”
+look a bit wierd in a supposed-to-be <EM>end tag</EM> rule:</P>
+<PRE><CODE>&lt;&#47;CM.HDR type=&quot;ordered&quot;&gt;  &quot;&lt;&#47;OL&gt;&quot; +
+
+&lt;&#47;CM.HDR type=&quot;bullet&quot;&gt;   &quot;&lt;&#47;UL&gt;&quot; +
+</CODE></PRE>
+<P>Let alone that we have to write <EM>four</EM> rules, repeating the <EM>attribute value</EM>
+“selector”—shouldn’t <EM>two</EM> rules be enough?</P>
+<P>I do think so, and while an <EM>attribute value</EM> selector in an <EM>end tag rule</EM>
+is certainly straightforward and possible, I’d prefer to simply drop
+the distinction between <EM>start tag</EM> and <EM>end tag</EM> rules alltogether, and
+just have <EM>one</EM> kind of rule, which specifies <EM>both</EM> the replacement text
+(if any) for the <EM>start tag</EM> and the replacement text (again, if any) for the
+<EM>end tag</EM> of the “selected” element. – You can see how this moves into
+the CSS direction even further …!</P>
+<P>The only “design decision” here is</P>
+<UL><LI><P>how to separate the two replacement texts, and</P>
+<LI><P>how to indicate the <EM>absence</EM> of one or both replacement texts.</P>
+</UL>
+<P>I chose to use a SOLIDUS “<CODE>&#47;</CODE>” to separate the <EM>start tag</EM> replacement
+text before the “<CODE>&#47;</CODE>” from the <EM>end tag</EM> replacement text after it. This
+would also suffice to indicate an <EM>absent</EM> replacement text for the
+<EM>end tag</EM> (the “<CODE>&#47;</CODE>” is missing too), an the <EM>absence</EM> of a replacement
+text for the <EM>start tag</EM> (there is nothing in front of the “<CODE>&#47;</CODE>”).</P>
+<P>However, I find it a more pleasing syntax if an absent replacement text
+is <EM>indicated</EM> explicitly, and choose HYPHEN-MINUS “<CODE>-</CODE>” for this.</P>
+<P>[<STRONG>NOTES:</STRONG></P>
+<UL><LI><P>The choice of “<CODE>&#47;</CODE>” was influenced by the allusion to the <EM>end tag
+open</EM> delimiter <EM><STRONG>etago</STRONG></EM> (”<CODE>&lt;&#47;</CODE>”), and</P>
+<LI><P>the “<CODE>-</CODE>” fits nicely as an “opposite” to the “<CODE>+</CODE>” which is <EM>only</EM>
+used together with a replacement text, but is <EM>outside</EM> of it. ]</P>
+</UL>
+<H3>2.4   Extended Grammar</H3>
+<P>With just the equivalents for the W3C selectors</P>
+<OL><LI><P><CODE>E[attr=val]</CODE>: Select rule if element <CODE>E</CODE> has the attribute <CODE>attr</CODE>
+with the value <CODE>val</CODE>;</P>
+<LI><P><CODE>E[attr]</CODE>: Select rule if element <CODE>E</CODE> has an attribute <CODE>attr</CODE>,
+regardless of the value of it.</P>
+</OL>
+<P>we have an elegant solution to our HTML problem:</P>
+<PRE><CODE>&lt;CM.HDR type=&quot;ordered&quot;&gt;   + &quot;&lt;OL&gt;&quot; &#47; &quot;&lt;&#47;OL&gt;&quot; +
+
+&lt;CM.HDR type=&quot;bullet&quot;&gt;    + &quot;&lt;UL&gt;&quot; &#47; &quot;&lt;&#47;UL&gt;&quot; +
+</CODE></PRE>
+<P>And we also have a solution for one problem which was not mentioned yet:
+how to deal with <EM>attribute substitutions</EM> where the attribute is not
+defined (in the current element)? The <EM>ASP Backend</EM> seems to terminate
+with an error, but using alternative rules with selectors:</P>
+<PRE><CODE>&lt;E&gt;               % General case.
+&lt;E attr&gt;          % Select if `E` *has* an attribute `attr`.
+&lt;E attr=&quot;1&quot;&gt;      % Rule for specific value no. 1
+&lt;E attr=&quot;2&quot;&gt;      % Rule for specific value no. 2
+% and so on ...
+</CODE></PRE>
+<P>we can fine-tune what to do in each case, and can always avoid
+running into an “undefined attribute” in a replacement text.</P>
+<P>Here is the syntax for the <EM>element tags replacement rule</EM>, which combines
+the <EM>start tag</EM> and <EM>end tag</EM> rules from the past:</P>
+<DIV class="hi">
+<P>[01] <EM>tag rule</EM> = <EM>tag</EM> , [ <EM>start-tag repl text</EM> | <EM><STRONG>absent</STRONG></EM> ] ,
+[ <EM><STRONG>sep</STRONG></EM> , ( <EM>end-tag repl text</EM> | <EM><STRONG>absent</STRONG></EM> ) ] ;</P>
+<P>[01] <EM>tag</EM> = ( <EM><STRONG>stago</STRONG></EM> | <EM><STRONG>etag</STRONG></EM> ) , <EM>name</EM> ,
+[ { <EM>S</EM> } - , { <EM>attr spec</EM> } ] ,  <EM><STRONG>tagc</STRONG></EM> ;</P>
+<P>[01] <EM>attr spec</EM> = <EM>name</EM> , { <EM>S</EM> } , <EM><STRONG>vi</STRONG></EM> , { <EM>S</EM> } ,
+<EM>attr val literal</EM> , { <EM>S</EM> } ;</P>
+<P>[01] <EM>attr val literal</EM> = <EM><STRONG>lit</STRONG></EM> ,
+{ <EM>attr val elem</EM> - ( <EM><STRONG>lit</STRONG></EM> ) } , <EM><STRONG>lit</STRONG></EM> ;</P>
+<P>[01] <EM>attr val literal</EM> = <EM><STRONG>lita</STRONG></EM> ,
+{ <EM>attr val elem</EM> - ( <EM><STRONG>lita</STRONG></EM> ) } , <EM><STRONG>lita</STRONG></EM> ;</P>
+<P>[01] <EM>attr val elem</EM> =  <EM>attr val char</EM> | <EM>escape</EM> ;</P>
+<P>[01] <EM>attr val char</EM> = <EM><STRONG>CHAR</STRONG></EM> - ( <EM><STRONG>esc</STRONG></EM> ) ;</P>
+<P>[01] <EM><STRONG>absent</STRONG></EM> = &quot;<CODE>-</CODE>&quot; ;</P>
+<P>[01] <EM><STRONG>sep</STRONG></EM> = &quot;<CODE>&#47;</CODE>&quot; ;</P>
+<P>[01] <EM><STRONG>vi</STRONG></EM> = &quot;<CODE>=</CODE>&quot; ;</P>
+<P>[01]</P>
+<P>[01]</P>
+</DIV>
+<P>[<STRONG>NOTE:</STRONG> This production allows the forms</P>
+<OL><LI><P><CODE>&lt;E&gt; &#47; &quot;repl text&quot;</CODE>   for an absent <EM>start tag repl text</EM>, and</P>
+<LI><P><CODE>&lt;E&gt; &quot;repl text&quot;</CODE>   for an absent <EM>end tag repl text</EM>.</P>
+</OL>
+<P>as a shorter variant style, but I prefer the more explicit style</P>
+<OL><LI><P><CODE>&lt;E&gt; - &#47; &quot;repl text&quot;</CODE>   for an absent <EM>start tag repl text</EM>, and</P>
+<LI><P><CODE>&lt;E&gt; &quot;repl text&quot; &#47; -</CODE>   for an absent <EM>end tag repl text</EM>.</P>
+</OL>
+<P>Remember that it is not only the <EM>replacement text</EM>  which is absent,
+but there will be <STRONG>no trace</STRONG> from the omitted tag in the output;
+and this fact should be easy to glimpse from the replacement rules
+in my opinion. ]</P>
+<H3>2.5   Extension: “Inheriting” Attribute Values</H3>
+<P>As soon as one can use <EM>element attribute values</EM> to substitute
+into the <EM>replacement text</EM>, ideas spring up <EM>what else</EM> could be
+inserted there.</P>
+<P>The YYYY-MM-DD date stamp below the title of this document is a
+good example—this is <STRONG>not</STRONG> a date I typed in, but the date
+when the HTML output was <EM>generated</EM> by <CODE>cm2doc</CODE>.</P>
+<P>This “current date” value (named “<CODE>DC.date</CODE>”) and other “pseudo-attributes”
+are used to represent “meta-data” (in a loose sense, but as we’ll see
+in a <EM>very strict</EM> sense too) about the document.</P>
+<P>Some of them are set up and initialized by the <CODE>cm2doc</CODE> program, but
+all of them (and arbitrary other “pseudo”-attributes) can be set
+in the first lines of the input <EM>CommonMark</EM> text.</P>
+<H4>2.5.1   An Extra Outer “Pseudo”-Element</H4>
+<P>“Pseudo”-Attributes like “<CODE>DC.date</CODE>” and other meta-data must be stored
+<EM>somewhere</EM>, and should not be treated fundamentally different than all
+the “real” attribute values belonging to the <EM>CommonMark</EM> nodes.</P>
+<P>And technically they <EM>are</EM> ordinary attributes, but not of any real
+<EM>CommonMark</EM> node (or element, so to say), but there is an <EM>extra</EM>
+“pseudo”-element <EM>outside</EM> the document tree, and the document root
+element (in the <EM>CommonMark</EM> case this is “<CODE>CM.DOC</CODE>” or “<CODE>document</CODE>”
+in the <EM>CommonMark</EM> XML DTD) is <EM>technically</EM> and <EM>internally</EM> not
+the root element any more, but the (only) child of this “universe”
+“pseudo”-element.</P>
+<P>This outer “pseudo”-element can’t be seen or adressed from the
+perspective of the <EM>Replacement Definition</EM> (it does not even have a
+name!)—but you can see it in the RAST output, lists it with the
+“pseudo”-name “<CODE>#0</CODE>”, and also provides the complete list of
+“pseudo”-attributes in it with their (no: not “pseudo”) values.</P>
+<P>But keep in mind that it is strictly an implementation decision to
+have this “pseudo”-element for the sole purpose of storing “pseudo”-
+attributes <EM>outside</EM> the source document’s proper ESIS.</P>
+<P>[<STRONG>NOTE:</STRONG> Of course “<CODE>#0</CODE>” is no valid <EM>generic identifier</EM> in the
+sense of ISO 8879:1986&#47;Cor.2:1999 (defining SGML) nor ISO 13673:2000
+(defining RAST and the ESIS); and the outer “pseudo”-element is really
+<STRONG>not</STRONG> part of the <EM>CommonMark</EM> ESIS anyway—so the RAST output should
+be mute about it unless specifically requested to output it too (in a
+non-conforming mode!). ]</P>
+<H4>2.5.2   Looking Outside the Document ESIS</H4>
+<P>In the <EM>Replacement Definition</EM> syntax, an <EM>attribute substitution</EM>
+refers (by name) to an attribute in the <EM>current</EM> element (ie the
+element for which the rule was selected). As a consequence, there
+is no way to access the attribute values (in a <EM>replacement text</EM>) of
+<EM>enclosing</EM> elements, let alone the <EM>all-enclosing</EM> outer “pseudo”-element
+where the meta-data live.</P>
+<P>This is <EM>per se</EM> perfectly justified insofar that the SGML&#47;XML document
+model has no concept of “inheriting” attributes from ancestor elements
+to children.</P>
+<P>What <EM>does</EM> have a similar concept is—again!—CSS, where it is called
+“the cascade”: for example, section “6.2 Inheritance” says:</P>
+<BLOCKQUOTE>
+<P>Some values are inherited by the children of an element in the
+document tree, as described above. Each property defines whether it is
+inherited or not.</P>
+<P>Suppose there is an H1 element with an emphasizing element (EM)
+inside:</P>
+<PRE><CODE>&lt;H1&gt;The headline &lt;EM&gt;is&lt;&#47;EM&gt; important!&lt;&#47;H1&gt;
+</CODE></PRE>
+<P>If no color has been assigned to the EM element, the emphasized “is”
+will inherit the color of the parent element, so if H1 has the color
+blue, the EM element will likewise be in blue.</P>
+<P>When inheritance occurs, elements inherit computed values. The
+computed value from the parent element becomes both the specified
+value and the computed value on the child.</P>
+</BLOCKQUOTE>
+<P>But note carefully that CSS deals with <STRONG>two different concepts</STRONG> here:
+what is “inherited” are CSS <STRONG>properties</STRONG>, and <STRONG>not attribute</STRONG> values
+in the HTML (or XML) document tree.</P>
+<P>Nevertheless, CSS was the inspiration for the final extension of the
+<EM>ASP Replacement File</EM> syntax discussed here:</P>
+<P>You can “inherit” or rather “access” the <EM>attribute values</EM> of <EM>enclosing
+elements</EM> by prefixing a FULL STOP “<CODE>.</CODE>” or a <STRONG>Digit</STRONG> from “<CODE>0</CODE>” to
+“<CODE>9</CODE>” to the <EM>attribute name</EM> in the <EM>attribute substitution</EM>:</P>
+<P>While in a <EM>replacement text</EM> the substitution</P>
+<PRE><CODE>... [own-attr] ...
+</CODE></PRE>
+<P>can only access an attribute (named “<CODE>own-attr</CODE>”) defined in the current
+element (the one for which the <EM>tag replacement rule</EM> was selected),
+the prefixed “name”</P>
+<PRE><CODE>... [.own-attr] ..
+</CODE></PRE>
+<P>will not only find the value of an “<CODE>own-attr</CODE>” in the <EM>current</EM>
+element, but in <STRONG>any</STRONG> element outside too (and use the value of
+the first defined attribute encountered on the “way to outside”).
+And this will eventually find the “pseudo”-attributes in the outermost,
+un-named, “pseudo”-element too.</P>
+<P>So the simple rule is: prefix a “<CODE>.</CODE>” in front of the “pseudo”-attribute’s
+name to access meta-data like “<CODE>.CM.date</CODE>” from inside the <EM>replacement text</EM>
+for <EM>any</EM> element tag.</P>
+<P>[<STRONG>NOTE:</STRONG> Because FULL STOP “<CODE>.</CODE>” and <STRONG>Digit</STRONG> are not in the
+<EM>name start character</EM> character class (but they <STRONG>are</STRONG> in the <EM>name
+character</EM> class), the result of prefixing one of these character to
+an <EM>attribute name</EM> is <STRONG>not</STRONG> a <EM>name</EM> (but still a <EM>name token</EM>).
+As a consequence, there is never an ambiguity whether an <EM>attribute
+substitution</EM> contains a regular <EM>attribute name</EM>, or an <EM>attribute
+name</EM> prefixed by “<CODE>.</CODE>” or <STRONG>Digit</STRONG>. – This holds for the SGML
+<EM>Reference Concrete Syntax</EM> as well as for any HTML variant and for XML.
+]</P>
+<P>You can prefix a “<CODE>.</CODE>” to <EM>any</EM> <EM>attribute name</EM> and get the same
+effect: the <EM>attribute value</EM> is looked up in the extended scope extending
+right to the outermost “pseudo”-element. Thus you can access the
+“<CODE>delim</CODE>” attribute in the <EM>CommonMark</EM> <CODE>CMARK_NODE_LIST</CODE> node in
+the <EM>replacement text</EM> for the <EM>list item start tag</EM> <CODE>&lt;CM.LI&gt;</CODE>:</P>
+<PRE><CODE>&lt;CM.LI&gt; &#39;&lt;LI class=&quot;[.delim]&quot;&gt;&#39;
+</CODE></PRE>
+<P>and “copy” it from the source <EM>CommonMark</EM> node to the result HTML
+<CODE>&lt;LI&gt;</CODE> element’s “<CODE>class</CODE>” attribute, and then refer to this attribute
+in the <CODE>&lt;LI&gt;</CODE> element in say a CSS (again!) syle sheet using a “class
+selector”:</P>
+<PRE><CODE>LI.paren  { ... }
+
+LI.period { ... }
+</CODE></PRE>
+<P>So after all—in a sense, but a real sense—we <STRONG>can</STRONG> “inherit”
+<EM>element attributes</EM>, and even <EM>across</EM> document types with the little
+“attribute lookup scope hack” we have here.</P>
+<H4>2.5.3   Predefined “Pseudo”-Attributes</H4>
+<P>Here is the list of currently provided “pseudo”-attributes, with
+their default values and how this default can be overwritten:</P>
+<UL><LI><P><CODE>DC.title</CODE> : The document title. Default “<CODE>Untitled Document</CODE>”.
+Can be set in the first “meta line” (see below), or using the
+command-line option argument <CODE>--title &quot;My Title&quot;</CODE> (alias `-t “My Title”).</P>
+<LI><P><CODE>DC.creator</CODE>: The document’s author. Default: the value of the
+<EM>environment variable</EM> <CODE>LOGNAME</CODE> or else <CODE>USERNAME</CODE>, or “<CODE>N.N.</CODE>” if
+both fail to provide a value. Can be set in the second “meta line”.</P>
+<LI><P><CODE>DC.date</CODE>: The local date in the ISO 8601:2004 format “YYYY-MM-DD”,
+when <CODE>cm2doc</CODE> was run. Can be set in the third “meta line”.</P>
+<LI><P><CODE>CM.ver</CODE>: The version string of the <EM>cmark</EM> reference implementation,
+which is used as the <EM>CommonMark</EM> parser.</P>
+<LI><P><CODE>CM.doc.v</CODE>: The version string of the <CODE>cm2doc</CODE> program.</P>
+<LI><P><CODE>CM.css</CODE>: The URL for the output (HTML or XML) document’s CSS (again!)
+style sheet. Default: “<CODE>default.css</CODE>”. Can be set using the
+command-line option argument <CODE>--css my_style.css</CODE> (alias <CODE>-c my_style.css</CODE>).</P>
+</UL>
+<H4>2.5.4   Document Meta-Data Lines</H4>
+<P>One can specify new “pseudo”-attributes as well as override any of
+the pre-defined default values in the first few lines at the beginning
+of (the first) <EM>CommonMark</EM> input file presented to <CODE>cm2doc</CODE>.</P>
+<P>The “syntax” (if it is worth the name) for this is inherited from <EM>pandoc</EM>,
+where it is called a “title block”:</P>
+<P>If the <EM>CommonMark</EM> input starts with lines having a PERCENT SIGN “<CODE>%</CODE>”
+in the leftmost column, the content of the <EM>first three</EM> such lines
+will be assigned to</P>
+<OL><LI><P><CODE>DC.title</CODE>,</P>
+<LI><P><CODE>DC.creator</CODE>,</P>
+<LI><P><CODE>DC.date</CODE></P>
+</OL>
+<P>in other words: the first three such line specify the document’s title,
+author, and date (presumably the “last changed date”).</P>
+<P>[<STRONG>NOTE:</STRONG> So far this is the same as in <EM>pandoc</EM>, with the exception
+that the <CODE>DC.creator</CODE> line will <STRONG>not</STRONG> be parsed and split at
+SEMICOLON into <EM>multiple</EM> author names—for now at least. ]</P>
+<P>If there are four or more such “metadata” lines, you must (beginning
+in the 4th line) specify <STRONG>both</STRONG> the “pseudo”-attribute’s name and
+value. You do this by placing a ( COLON , SPACE ) right after the
+attribute name:</P>
+<PRE><CODE>% The Title
+% A. U. Thor
+% 2015-11-14
+% DC.subject: example; mark-up language; plain text; Markdown
+% email: a.u.thor@example.org
+</CODE></PRE>
+<P>[<STRONG>NOTE:</STRONG> In case you wondered why the “author” metadata is called
+<CODE>DC.creator</CODE> and not simply <CODE>author</CODE>—look up <A href="[html-dc]:" title=""><EM>Dublin Core</EM></A>, look
+at <A href="http://dublincore.org/documents/dc-html/" title="">this website</A>, then look at this document’s [HTML <CODE>&lt;HEAD&gt;</CODE>
+element][html-dc]. ]</P>
+<H2>3   Example: Generating HTML Output</H2>
+<H2>4   Implementation notes</H2>
+<H2>5   Future work</H2>
+<H2>A   Replacement Definition Syntax</H2>
+<H2>B   Character Set and Encoding</H2>
+<H2>C   ISO&#47;IEC 13673:2000, ESIS, RAST and XML Information Set</H2>
+<H2>D   The <EM>CommonMark</EM> document type (DTD) used in <EM>cm2doc</EM></H2>
+<P>[cmdoc-dtd]:</P>
+<HR>
+<DIV class="badges">
+<TABLE summary="Badges and Copyright"><TBODY>
+<TR>
+  <TD><A href="http://validator.w3.org/check?uri=referer">
+     <IMG src="http://validator.w3.org/images/v15445"
+          alt="Valid ISO/IEC 15445:2000"></A>
+  <TD><A href="http://www.iso.org/iso/catalogue_detail.htm?csnumber=27688"
+      >ISO/IEC 15445:2000</A><BR><A
+         href="https://www.cs.tcd.ie/misc/15445/15445.html"
+      >HTML</A> by <A
+         href="https://github.com/tin-pot/cmark/tree/master/cm2doc"
+      ><EM>cm2doc</EM></A>
+  <TD>&emsp;
+    <A href="http://www.tin-pot.net">
+      <IMG src="http://www.tin-pot.net/logo_48.png"
+           alt="tin-pot Logo"></A>
+  <TD>&copy; 2015 <A href="mailto:mh@tin-pot.net"
+      ><EM>tin-pot.net</EM></A>&emsp;
+  <TD>
+     <A href="http://creativecommons.org/licenses/by-sa/4.0/">
+     <IMG src=
+"http://mirrors.creativecommons.org/presskit/buttons/88x31/svg/by-sa.svg"
+          alt="CC BY-SA 4.0 licenced"></A>
+  <TD><A href="http://creativecommons.org/licenses/by-sa/4.0/legalcode"
+      >CC BY-SA 4.0</a> licensed
+</TBODY></TABLE>
+<HR>
+<DIV class="center">
+</DIV></DIV>
+</HTML>

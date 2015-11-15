@@ -112,7 +112,7 @@ void syntax_error(const char *msg, ...);
 /*== ESIS API ========================================================*/
 
 /*
- * Callback function types for document tree traversal.
+ * Callback function types for document content transmittal.
  */
 
 /*
@@ -134,13 +134,32 @@ typedef void (ESIS_Start)(ESIS_UserData,               cmark_node_type);
 typedef void (ESIS_Cdata)(ESIS_UserData,          const char *, size_t);
 typedef void (ESIS_End)(ESIS_UserData,                 cmark_node_type);
 
-typedef struct ESIS_API_ {
+typedef struct ESIS_CB_ {
     ESIS_Attr	 *attr;
     ESIS_Start	 *start;
     ESIS_Cdata	 *cdata;
     ESIS_End	 *end;
-    ESIS_UserData ud;
-} ESIS_API;
+} ESIS_CB;
+
+typedef struct ESIS_Port_ {
+    const ESIS_CB *cb;
+    ESIS_UserData  ud;
+} ESIS_Port;
+
+int parse_cmark(FILE *from, ESIS_Port *to, cmark_option_t,
+                                                    const char *meta[]);
+                                   
+int parse_esis(FILE *from, ESIS_Port *to);
+ESIS_Port* generate_repl(FILE *to);
+ESIS_Port* generate_rast(FILE *to, unsigned options);
+#define RAST_ALL 1U /* The only RAST option right now. */
+ESIS_Port* generate_esis(FILE *to);
+ESIS_Port* filter_toc(ESIS_Port*to);
+
+#define DO_ATTR(N, V, L)   esis_cb->attr(esis_ud, N, V, L)
+#define DO_START(NT)       esis_cb->start(esis_ud, NT)
+#define DO_CDATA(D, L)     esis_cb->cdata(esis_ud, D, L)
+#define DO_END(NT)         esis_cb->end(esis_ud, NT)
 
 /*== Unicode UTF-8 handling ==========================================*/
 
@@ -724,7 +743,7 @@ void set_repl(struct taginfo_ *pti,
  * The output stream (right now, this is always stdout).
  */
 FILE *outfp;
-int outbol = 1;
+bool  outbol = true;
 
 #define PUTC(ch)							\
 do {									\
@@ -754,7 +773,7 @@ const char *put_subst(const char *p)
         for (k = 0U; val[k] != NUL; ++k)
     	PUTC(val[k]);
     } else
-	syntax_error("Undefined attribute '%s'\n", name);
+	error("Undefined attribute '%s'\n", name);
     
     return p+1U;
 }
@@ -867,19 +886,36 @@ void repl_End(ESIS_UserData ud, cmark_node_type nt)
     pop_atts();
 }
  
-static const struct ESIS_API_ repl_API = {
+static const struct ESIS_CB_ repl_CB = {
     repl_Attr,
     repl_Start,
     repl_Cdata,
     repl_End
 };
- 
+
+ESIS_Port* generate_repl(FILE *to)
+{
+    static struct ESIS_Port_ port = { &repl_CB, NULL };
+    
+    /*
+     * Only one output file at a time.
+     */
+    assert(port.ud == NULL);
+    port.ud = to;
+    outfp  = to;
+    outbol = true;
+    return &port;
+}
+
 /*== ESIS API for RAST Output Generator ==============================*/
+
 
 struct RAST_Param_ {
     FILE *outfp;
-    int stdrast;   /* Report only ESIS data (not "pseudo"-attributes) */
+    unsigned options;
 } rast_param;
+
+
 
 void rast_data(FILE *fp, const char *data, size_t len, char delim)
 {
@@ -968,7 +1004,7 @@ void rast_Start(ESIS_UserData ud, cmark_node_type nt)
     FILE *fp = rastp->outfp;
     size_t nattr = NATTR;
     
-    if (nt == 0 && rastp->stdrast) {
+    if (nt == 0 && !(rastp->options & RAST_ALL)) {
 	discard_atts();
 	return;
     }
@@ -1008,7 +1044,7 @@ void rast_End(ESIS_UserData ud, cmark_node_type nt)
     struct RAST_Param_* rastp = ud;
     FILE *fp = rastp->outfp;
     
-    if (nt == 0 && rastp->stdrast)
+    if (nt == 0 && !(rastp->options & RAST_ALL))
 	return;
     else {
 	const char *GI = nodename[nt];
@@ -1017,13 +1053,25 @@ void rast_End(ESIS_UserData ud, cmark_node_type nt)
     return;   
 }
 
-const struct ESIS_API_ rast_API = {
+const struct ESIS_CB_ rast_CB = {
     rast_Attr,
     rast_Start,
     rast_Cdata,
     rast_End,
-    &rast_param
 };
+
+
+ESIS_Port* generate_rast(FILE *to, unsigned options)
+{
+    static ESIS_Port rast_port = { &rast_CB, &rast_param, };
+    /*
+     * Only one output file at a time.
+     */
+    assert(rast_param.outfp == NULL);
+    rast_param.outfp   = to;
+    rast_param.options = options;
+    return &rast_port;
+}
 
 /*== CommonMark ESIS Renderer ========================================*/
 
@@ -1031,19 +1079,17 @@ const struct ESIS_API_ rast_API = {
  * Rendering into the ESIS API callbacks:
  */
  
-#define do_Attr(N, V, L)   api->attr(api->ud, N, V, L)
-#define do_Start(NT)       api->start(api->ud, NT)
-#define do_Cdata(D, L)     api->cdata(api->ud, D, L)
-#define do_End(NT)         api->end(api->ud, NT)
 
 static int S_render_node_esis(cmark_node *node,
                               cmark_event_type ev_type,
-                              const ESIS_API *api)
+                              ESIS_Port *to)
 {
   cmark_delim_type delim;
   bool entering = (ev_type == CMARK_EVENT_ENTER);
   char buffer[100];
-
+  
+  const ESIS_CB  *esis_cb = to->cb;
+  ESIS_UserData   esis_ud = to->ud;
 
   if (entering) {
     switch (node->type) {
@@ -1052,81 +1098,81 @@ static int S_render_node_esis(cmark_node *node,
     case NODE_HTML:
     case NODE_INLINE_HTML:
       if (node->type == NODE_HTML || node->type == NODE_INLINE_HTML) {
-	do_Attr("type", "text.html", NTS);
-	do_Attr("display", 
+	DO_ATTR("type", "html", NTS);
+	DO_ATTR("display", 
 	            node->type == NODE_HTML ? "block" : "inline", NTS);
       }
-      do_Start(node->type);
-      do_Cdata(node->as.literal.data, node->as.literal.len);
-      do_End(node->type);
+      DO_START(node->type);
+      DO_CDATA(node->as.literal.data, node->as.literal.len);
+      DO_END(node->type);
       break;
 
     case NODE_LIST:
       switch (cmark_node_get_list_type(node)) {
       case ORDERED_LIST:
-        do_Attr("type", "ordered", NTS); 
+        DO_ATTR("type", "ordered", NTS); 
         sprintf(buffer, "%d", cmark_node_get_list_start(node));
-        do_Attr("start", buffer, NTS);
+        DO_ATTR("start", buffer, NTS);
         delim = cmark_node_get_list_delim(node);
-        do_Attr("delim", (delim == PAREN_DELIM) ?
+        DO_ATTR("delim", (delim == PAREN_DELIM) ?
                               "paren" : "period", NTS);
         break;
       case CMARK_BULLET_LIST:
-        do_Attr("type", "bullet", NTS);
+        DO_ATTR("type", "bullet", NTS);
         break;
       default:
         break;
       }
-      do_Attr("tight", cmark_node_get_list_tight(node) ?
+      DO_ATTR("tight", cmark_node_get_list_tight(node) ?
                                             "true" : "false", NTS);
-      do_Start(node->type);
+      DO_START(node->type);
       break;
 
     case NODE_HEADER:
       sprintf(buffer, "%d", node->as.header.level);
-      do_Attr("level", buffer, NTS);
-      do_Start(node->type);
+      DO_ATTR("level", buffer, NTS);
+      DO_START(node->type);
       break;
 
     case NODE_CODE_BLOCK:
       if (node->as.code.info.len > 0U)
-        do_Attr("info", 
+        DO_ATTR("info", 
 		       node->as.code.info.data, node->as.code.info.len);
-      do_Start(node->type);
-      do_Cdata(
+      DO_START(node->type);
+      DO_CDATA(
 	         node->as.code.literal.data, node->as.code.literal.len);
-      do_End(node->type);
+      DO_END(node->type);
       break;
 
     case NODE_LINK:
     case NODE_IMAGE:
-      do_Attr("destination",
+      DO_ATTR("destination",
 	                 node->as.link.url.data, node->as.link.url.len);
-      do_Attr("title", node->as.link.title.data,
+      DO_ATTR("title", node->as.link.title.data,
                                                node->as.link.title.len);
-      do_Start(node->type);
+      DO_START(node->type);
       break;
 
     case NODE_HRULE:
     case NODE_SOFTBREAK:
     case NODE_LINEBREAK:
-      do_Start(node->type);
-      do_End(node->type);
+      DO_START(node->type);
+      DO_END(node->type);
       break;
 
     case NODE_DOCUMENT:
     default:
-      do_Start(node->type);
+      DO_START(node->type);
       break;
     } /* entering switch */
   } else if (node->first_child) { /* NOT entering */
-    do_End(node->type);
+    DO_END(node->type);
   }
 
   return 1;
 }
 
-char *cmark_render_esis(cmark_node *root, const ESIS_API *api)
+char *cmark_render_esis(cmark_node *root, ESIS_Port *to)
 {
   cmark_event_type ev_type;
   cmark_node *cur;
@@ -1134,7 +1180,7 @@ char *cmark_render_esis(cmark_node *root, const ESIS_API *api)
 
   while ((ev_type = cmark_iter_next(iter)) != CMARK_EVENT_DONE) {
     cur = cmark_iter_get_node(iter);
-    S_render_node_esis(cur, ev_type, api);
+    S_render_node_esis(cur, ev_type, to);
   }
   cmark_iter_free(iter);
   return NULL;
@@ -1147,7 +1193,7 @@ char *cmark_render_esis(cmark_node *root, const ESIS_API *api)
  * do_meta_lines -- Set meta-data attributes from pandoc-style header.
  */
  
-size_t do_meta_lines(char *buffer, size_t nbuf, const ESIS_API *api)
+size_t do_meta_lines(char *buffer, size_t nbuf, const ESIS_Port *to)
 {
     size_t ibol, nused;
     unsigned dc_count = 0U;
@@ -1158,14 +1204,16 @@ size_t do_meta_lines(char *buffer, size_t nbuf, const ESIS_API *api)
 	NULL,
     };
     char version[1024];
+    const ESIS_CB *esis_cb = to->cb;
+    ESIS_UserData  esis_ud = to->ud;
 		
 
     ibol = 0U;
     nused = 0U;
     
-    do_Attr(META_DC_TITLE,   DEFAULT_DC_TITLE,   NTS);
-    do_Attr(META_DC_CREATOR, DEFAULT_DC_CREATOR, NTS);
-    do_Attr(META_DC_DATE,    DEFAULT_DC_DATE,    NTS);
+    to->cb->attr(to->ud, META_DC_TITLE,   DEFAULT_DC_TITLE,   NTS);
+    to->cb->attr(to->ud, META_DC_CREATOR, DEFAULT_DC_CREATOR, NTS);
+    to->cb->attr(to->ud, META_DC_DATE,    DEFAULT_DC_DATE,    NTS);
     
     sprintf(version, "            %s;\n"
 		     "            date: %s;\n"
@@ -1174,8 +1222,8 @@ size_t do_meta_lines(char *buffer, size_t nbuf, const ESIS_API *api)
 	    cmark_repourl,
 	    __DATE__ ", " __TIME__,
 	    cmark_gitident);
-    do_Attr("CM.doc.v", version, NTS);
-    do_Attr("CM.ver", CMARK_VERSION_STRING, NTS);
+    DO_ATTR("CM.doc.v", version, NTS);
+    DO_ATTR("CM.ver", CMARK_VERSION_STRING, NTS);
 		
     for (ibol = 0U; buffer[ibol] == '%'; ) {
 	size_t len;
@@ -1207,7 +1255,7 @@ size_t do_meta_lines(char *buffer, size_t nbuf, const ESIS_API *api)
         len = ibol - ifield - 1U;
         if (len > 1U) {
 	    if (dc_name[dc_count] != NULL)
-		do_Attr(dc_name[dc_count++], buffer+ifield, len);
+		DO_ATTR(dc_name[dc_count++], buffer+ifield, len);
 	    else {
 		const char *colon, *val;
 		char name[NAMELEN+1];
@@ -1227,7 +1275,7 @@ size_t do_meta_lines(char *buffer, size_t nbuf, const ESIS_API *api)
 		    while (val[nval] != EOL)
 			++nval;
 		    
-		    do_Attr(name, val, nval);
+		    DO_ATTR(name, val, nval);
 		} else
 		    fprintf(stderr, "Meta line \"%% %.*s\" ignored: "
 		                           "No ': ' delimiter found.\n",
@@ -1725,7 +1773,6 @@ int P_repl_defs(int ch)
     return ch;
 }
 
-static unsigned    repl_filecount = 0U;
 static const char *repl_dir = NULL;
 static const char *repl_default = NULL;
     
@@ -1755,7 +1802,7 @@ void load_repl_defs(FILE *fp)
 {
     int ch;
     
-    assert(fp != NULL);
+    if (fp == NULL) return;
     
     replfp = fp;
     
@@ -1778,27 +1825,37 @@ void load_repl_defs(FILE *fp)
     replfp = NULL;
 }
 
-void load_repl_file(const char *repl_filename)
+FILE *find_repl_file(const char *repl_filename, FILE *verbose)
 {
     FILE *fp;
     
     if (repl_dir == NULL)     repl_dir = getenv(REPL_DIR_VAR);
     if (repl_default == NULL) repl_default = getenv(REPL_DEFAULT_VAR);
     
+    if (verbose) {
+	putc(EOL, verbose);
+	fprintf(verbose, "%s =\n\t\"%s\"\n", REPL_DIR_VAR,
+		(repl_dir) ? repl_dir : "<not set>");
+	fprintf(verbose, "%s =\n\t\"%s\"\n", REPL_DEFAULT_VAR,
+		(repl_default) ? repl_default : "<not set>");
+    }
     /*
      * Passing in NULL means: use the default replacement definition.
      */
-    if (repl_filename == NULL) {
-	repl_filename = repl_default;
-	if (repl_filename == NULL)
-	    return;
-    }
+    if (repl_filename == NULL && (repl_filename = repl_default) == NULL)
+	if (verbose)
+	    fprintf(verbose, "No default replacement file!\n");
+	else
+	    error("No replacement definition file specified, "
+	          "nor a default - giving up!\n");
 	
     /*
      * First try the given filename literally.
      */
     filename = repl_filename;
+    if (verbose) fprintf(verbose, "Trying \"%s\" ... ", filename);
     fp = fopen(filename, "r");
+    if (verbose) fprintf(verbose, "%s.\n", (fp) ? "ok" : "failed");
     
     /*
      * Otherwise, try a *relative* pathname with the REPL_DIR_VAR
@@ -1816,7 +1873,11 @@ void load_repl_file(const char *repl_filename)
 	    pathname = malloc(rdlen + !trailsep + fnlen + 16);
 	    sprintf(pathname, "%s%s%s",
 		repl_dir, dirsep+trailsep, filename);
+	    if (verbose) fprintf(verbose, "Trying \"%s\" ... ",
+	                                                      pathname);
 	    fp = fopen(pathname, "r");
+	    if (verbose) fprintf(verbose, "%s.\n",
+	                                (fp == NULL) ? "failed" : "ok");
 	    if (fp != NULL) filename = pathname;
 	    else free(pathname);
 	}
@@ -1827,12 +1888,13 @@ void load_repl_file(const char *repl_filename)
      * time to give up.
      */
     if (fp == NULL) {
-	error("Can't open replacement file \"%s\": %s.", filename,
+	if (verbose) fprintf(verbose, "Can't open \"%s\": !\n",
+	                                     filename, strerror(errno));
+	else
+	    error("Can't open replacement file \"%s\": %s.", filename,
 	                                               strerror(errno));
-    } else {
-	load_repl_defs(fp);
-	++repl_filecount;
     }
+    return fp;
 }
 
 /*====================================================================*/
@@ -1850,24 +1912,88 @@ void load_repl_file(const char *repl_filename)
  
 static void gen_document(cmark_node *document,
                          cmark_option_t options,
-                         const ESIS_API *api)
+                         ESIS_Port *to)
 {
+    const ESIS_CB *esis_cb = to->cb;
+    ESIS_UserData  esis_ud = to->ud;
     int bol[2];
     const cmark_node_type none = CMARK_NODE_NONE;
     
-    do_Start(CMARK_NODE_NONE);
+    DO_START(CMARK_NODE_NONE);
     bol[0] = bol[1] = 0;
     
     if (rn_repl[RN_PROLOG] != NULL) {
 	put_repl(rn_repl[RN_PROLOG]);
     }
 
-    cmark_render_esis(document, api);
+    cmark_render_esis(document, to);
 
     if (rn_repl[RN_EPILOG] != NULL) {
 	put_repl(rn_repl[RN_EPILOG]);
     }
-    do_End(CMARK_NODE_NONE);
+    DO_END(CMARK_NODE_NONE);
+}
+
+int parse_cmark(FILE *from, ESIS_Port *to, cmark_option_t options,
+                                                     const char *meta[])
+{
+    static cmark_parser *parser = NULL;
+    
+    static bool in_header = true;
+    static char buffer[16*BUFSIZ];
+    
+    size_t bytes;
+    
+    if (parser == NULL)
+	parser = cmark_parser_new(options);
+    
+    if (from != NULL) while ((bytes = fread(buffer,
+                                        1U, sizeof buffer, from)) > 0) {
+	/*
+	 * Read and parse the input file block by block.
+	 */
+	size_t hbytes = 0U;
+
+	if (in_header) {
+	    int imeta;
+            const ESIS_CB *cb = to->cb;
+            ESIS_UserData  ud = to->ud;
+	    
+	    hbytes = do_meta_lines(buffer, sizeof buffer, to);
+
+	    /*
+	    * Override meta-data from meta-lines with meta-data
+	    * given in command-line option arguments, eg `--title`.
+	    */
+	    if (meta != NULL)
+		for (imeta = 0; meta[2*imeta] != NULL; ++imeta)
+		    cb->attr(ud, meta[2*imeta+0], meta[2*imeta+1], NTS);
+
+	    in_header = false;
+	}
+
+	if (hbytes < bytes)
+	    cmark_parser_feed(parser, buffer + hbytes, bytes - hbytes);
+
+	if (bytes < sizeof(buffer)) {
+	    break;
+	}
+    } else {
+	/*
+	 * Finished parsing, generate document content into
+	 * ESIS port.
+	 */
+        cmark_node   *document;
+        
+	document = cmark_parser_finish(parser);
+	cmark_parser_free(parser); parser = NULL;
+
+	gen_document(document, options, to);
+
+	cmark_node_free(document);
+    }
+    
+    return 0;
 }
 
 /*== Main function ===================================================*/
@@ -1888,29 +2014,31 @@ void usage()
                                               "(ISO/IEC 13673:2000)\n");
     printf("  --help, -h       Print usage information\n");
     printf("  --version        Print version\n");
+    
+    printf("\nReplacement files:\n");
+    find_repl_file(NULL, stdout);
 }
 
 
 int main(int argc, char *argv[])
 {
-    FILE *fp;
-    bool in_header;
+    const char *username         = "N.N.";
+    const char *title_arg        = NULL;
+    const char *css_arg          = NULL;
 
-    int argi;
-    char buffer[16*BUFSIZ];
-    size_t bytes;
+    cmark_option_t cmark_options = CMARK_OPT_DEFAULT;
+    unsigned       rast_options  = 0U;
+    bool doing_rast              = false;
+    unsigned repl_filecount      = 0U;
+    
+    ESIS_Port *port   = NULL;
+    FILE      *infp   = stdin;
+    FILE      *outfp  = stdout;
+    FILE      *replfp = NULL;
+    
+    const char *meta[42], **pmeta = meta;
     time_t now;
-    const char *username;
-    const char *title_arg = NULL, *css_arg = NULL;
-    
-    cmark_parser  *parser;
-    cmark_node    *document;
-    cmark_option_t options = CMARK_OPT_DEFAULT;
-
-    const ESIS_API *api;
-    int doing_rast = 0;
-    
-    rast_param.outfp = stdout;
+    int argi;
     
     if ( (username = getenv("LOGNAME"))   != NULL ||
          (username = getenv("USERNAME"))  != NULL )
@@ -1919,7 +2047,7 @@ int main(int argc, char *argv[])
     time(&now);
     strftime(default_date, sizeof default_date, "%Y-%m-%d",
                                                           gmtime(&now));
-    
+	    
     for (argi = 1; argi < argc && argv[argi][0] == '-'; ++argi) {
 	if (strcmp(argv[argi], "--version") == 0) {
 	    printf("cmark %s", CMARK_VERSION_STRING
@@ -1931,17 +2059,12 @@ int main(int argc, char *argv[])
 	} else if ((strcmp(argv[argi], "--repl") == 0) ||
 	    (strcmp(argv[argi], "-r") == 0)) {
 	    const char *filename = argv[++argi];
-	    if (doing_rast) {
-		fprintf(stderr, "--rast can't use --repl!\n");
-		exit(EXIT_FAILURE);
-	    }
-	    load_repl_file(filename);
+	    load_repl_defs(find_repl_file(filename, NULL));
 	} else if (strcmp(argv[argi], "--rast") == 0) {
-	    doing_rast = 1;
-	    rast_param.stdrast = 1;
+	    doing_rast = true;
 	} else if (strcmp(argv[argi], "--rasta") == 0) {
-	    doing_rast = 1;
-	    rast_param.stdrast = 0;
+	    doing_rast = true;
+	    rast_options |= RAST_ALL;
 	} else if ((strcmp(argv[argi], "--title") == 0) ||
 	    (strcmp(argv[argi], "-t") == 0)) {
 		title_arg = argv[++argi];
@@ -1949,17 +2072,17 @@ int main(int argc, char *argv[])
 	    (strcmp(argv[argi], "-c") == 0)) {
 		css_arg = argv[++argi];
 	} else if (strcmp(argv[argi], "--sourcepos") == 0) {
-	    options |= CMARK_OPT_SOURCEPOS;
+	    cmark_options |= CMARK_OPT_SOURCEPOS;
 	} else if (strcmp(argv[argi], "--hardbreaks") == 0) {
-	    options |= CMARK_OPT_HARDBREAKS;
+	    cmark_options |= CMARK_OPT_HARDBREAKS;
 	} else if (strcmp(argv[argi], "--smart") == 0) {
-	    options |= CMARK_OPT_SMART;
+	    cmark_options |= CMARK_OPT_SMART;
 	} else if (strcmp(argv[argi], "--safe") == 0) {
-	    options |= CMARK_OPT_SAFE;
+	    cmark_options |= CMARK_OPT_SAFE;
 	} else if (strcmp(argv[argi], "--normalize") == 0) {
-	    options |= CMARK_OPT_NORMALIZE;
+	    cmark_options |= CMARK_OPT_NORMALIZE;
 	} else if (strcmp(argv[argi], "--validate-utf8") == 0) {
-	    options |= CMARK_OPT_VALIDATE_UTF8;
+	    cmark_options |= CMARK_OPT_VALIDATE_UTF8;
 	} else if ((strcmp(argv[argi], "--help") == 0) ||
 	    (strcmp(argv[argi], "-h") == 0)) {
 		usage();
@@ -1978,66 +2101,39 @@ int main(int argc, char *argv[])
      * try using the default replacement file given in the
      * environment.
      */
-    if (repl_filecount == 0U && !doing_rast)
-	load_repl_file(NULL);
-
-    parser = cmark_parser_new(options);
-
-    fp        = stdin;
-    outfp     = stdout;
-    in_header = true;
-    api       = (doing_rast) ? &rast_API : &repl_API;
+    if (repl_filecount == 0U)
+	if (!doing_rast) 
+	    load_repl_defs(find_repl_file(NULL, NULL));
+	else
+	    error("No replacement file.\n");
+    else if (doing_rast)
+	error("Can't use RAST with replacement files.\n");
     
+    if (title_arg != NULL) {
+	*pmeta++ = META_DC_TITLE;
+	*pmeta++ = title_arg;
+    }
+    *pmeta++ = META_CSS;
+    *pmeta++ = (css_arg) ? css_arg : DEFAULT_CSS;
+    *pmeta = NULL;
+    
+    port = (doing_rast) ? generate_rast(outfp, rast_options) :
+                          generate_repl(outfp);
 
     /*
-     * Loop through the input files; process meta lines from the
-     * first one.
+     * Loop through the input files.
      */
     switch (argc - argi) do {
     default:
-	if ((fp = freopen(argv[argi], "r", stdin)) == NULL)
+	if ((outfp = freopen(argv[argi], "r", stdin)) == NULL)
 	    error("Can't open \"%s\": %s\n", argv[argi],
 	                                               strerror(errno));
-	    
     case 0:
-	while ((bytes = fread(buffer, 1U, sizeof buffer, fp)) > 0) {
-	    size_t hbytes = 0U;
-
-	    if (in_header) {
-		hbytes = do_meta_lines(buffer, sizeof buffer, api);
-		
-		/*
-		 * Override meta-data from meta-lines with meta-data
-		 * given in command-line option arguments:
-		 *
-		 *     --title "Overrule Title"
-		 *     --css   "overrule_css_url.css"
-		 */
-		if (title_arg != NULL)
-		    do_Attr(META_DC_TITLE, title_arg, NTS);
-		    
-		do_Attr(META_CSS, css_arg ? css_arg : DEFAULT_CSS, NTS);
-		
-		
-		in_header = false;
-	    }
-
-	    if (hbytes < bytes)
-		cmark_parser_feed(parser, 
-		                       buffer + hbytes, bytes - hbytes);
-
-	    if (bytes < sizeof(buffer)) {
-		break;
-	    }
-	}
+	parse_cmark(outfp, port, cmark_options, meta);
     } while (++argi < argc);
+    
+    parse_cmark(NULL, port, 0U, NULL);
 
-    document = cmark_parser_finish(parser);
-    cmark_parser_free(parser);
-
-    gen_document(document, options, api);
-
-    cmark_node_free(document);
 
     return EXIT_SUCCESS;
 }
