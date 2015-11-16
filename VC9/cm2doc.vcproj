@@ -43,7 +43,7 @@
 				Name="VCCLCompilerTool"
 				Optimization="0"
 				AdditionalIncludeDirectories="&quot;$(ProjectDir)&quot;;&quot;$(SolutionDir)cm2doc&quot;;&quot;$(ProjectDir)..\src&quot;;&quot;$(SolutionDir)..\libesis&quot;"
-				PreprocessorDefinitions="WITH_GITIDENT=1"
+				PreprocessorDefinitions="WITH_GITIDENT=1; _MBCS=1"
 				MinimalRebuild="true"
 				BasicRuntimeChecks="3"
 				RuntimeLibrary="3"

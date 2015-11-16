@@ -81,7 +81,12 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 *=====================================================================*/
 
+#if !defined(NDEBUG) && defined(_MSC_VER)
+#include <CrtDbg.h>
+#define BREAK() _CrtDbgBreak()
+#endif
 #include <assert.h>
+
 #include <ctype.h> /* toupper() */
 #include <errno.h>
 #include <stdarg.h>
@@ -99,7 +104,10 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include "node.h"
 #include "buffer.h"
 #include "houdini.h"
-#include "utf8.h"
+
+#ifndef NDEBUG
+#include "utf8.h" /* Compare with cmark utf8 lib functions. */
+#endif
 
 #define NUL  0
 
@@ -124,7 +132,10 @@ void syntax_error(const char *msg, ...);
  * `data` is a NUL-terminated (byte) string aka NTBS, so the *callee*
  * can determine the correct value for `len` from `data`.
  */
-#define NTS (~0U)
+#ifndef SIZE_MAX /* C99: in <stdint.h> (but in <limits.h> in MSC!) */
+#define SIZE_MAX (~(size_t)0U)
+#endif
+#define NTS SIZE_MAX
 
 typedef void *ESIS_UserData;
 
@@ -171,116 +182,239 @@ ESIS_Port* filter_toc(ESIS_Port*to,              unsigned options);
 
 /*== Unicode UTF-8 handling ==========================================*/
 
-#define U(X)                    ((ucs_t)(0x ## X ##L))
+typedef uint_least32_t utf32_t;
+typedef uint_least16_t utf16_t;
+typedef struct u8state_ { 
+    utf32_t  ucp;	    /* Accum. code point so far. */
+    unsigned acc, req;      /* Number octets accumulated, number of
+                               octets required to complete UCS char. */
+} u8state_t;
+
+#define U(X)                    ((utf32_t)(0x ## X ##UL))
+#define BMP(X)                  ((utf32_t)((X) & 0xFFFFUL))
+
 #define UCS_REPLACEMENT         U(FFFD)
-#define UTF_IS_CONTIN(c) (((c) & '\xC0') == '\x80')         /* 80..BF */
 
-typedef uint32_t ucs_t;
+size_t u8len(const char *s, size_t n, u8state_t *ps);
+size_t u8toc32(utf32_t *pc32, const char *s, size_t n, u8state_t *ps);
+
+#define U8_TAIL(B)    ( ((B) &  0xC0U) == 0x80U )         /* 80..BF */
+#define U8_HEAD(B, L) (  (B) & (0xFFU  >> (L)) )
+#define U8_LEN(B)     ( u8_tab[(((B) & 0xFFU) >> 3) & 0x1FU] )
+
+static const size_t u8_tab[32] = {
+    1, 1, 1, 1, 1, 1, 1, 1,   1, 1, 1, 1, 1, 1, 1, 1,
+    0, 0, 0, 0, 0, 0, 0, 0,   2, 2, 2, 2, 3, 3, 4, 5,
+};
 
 /*
- * utf8len -
- *	Determine length and check validity of a supposed 
- *	UTF-8 sequence.
- *
- * Return:
- * 
- *   m > 0 : A valid m-byte long seqence is in buf[0..m-1].
- *
- *   m < 0 : Either the (-m)-byte long sequence is invalid,
- *           or the size allowed by parameter len is too low.
- *
- * NOTE: There *is* an equivalent function `utf8proc_charlen()` in
- *       `utf8.c` in the _cmark_ library -- but for reasons unknown
- *       that function has *file scope*!
- *
- *       So here is our own version.
+    u8len - Emulate mbrlen (C95, <wchar.h>) for UTF-8.
+
+        #include <c95_wchar.h>
+        size_t u8len(const char *s, size_t n, u8state_t *ps);
+
+    Description
+
+    The mbrlen function is equivalent to the call:
+
+        mbrtowc(NULL, s, n, ps != NULL ? ps : &internal)
+
+    where internal is the mbstate_t object for the mbrlen function,
+    except that the expression designated by ps is evaluated only once.
+
+    Returns
+
+    The mbrlen function returns a value between zero and n, inclusive,
+    (size_t)(-2), or (size_t)(-1).
  */
 
-int utf8len(const char buf[4], size_t len)
+
+size_t u8len(const char *s, size_t n, u8state_t *ps)
 {
-    static int utf8tab[32] = {
-	1, 1, 1, 1, 1, 1, 1, 1,   1, 1, 1, 1, 1, 1, 1, 1,
-	0, 0, 0, 0, 0, 0, 0, 0,   2, 2, 2, 2, 3, 3, 4, 5,
-    };
+    static u8state_t internal = { 0U, 0U, 0U };
     
-    unsigned byte = buf[0] & 0xFFU;
-    unsigned idx = (byte >> 3) & 0x1FU;
-    int u8len = utf8tab[idx];
+    return u8toc32(NULL, s, n, ps == NULL ? &internal : ps);
+}
+
+
+/*
+    u8toc32 - Emulate mbtoc32 (C11, <uchar.h>)
+
+        #include <c11_uchar.h>
+        size_t u8toc32(utf32_t *pc32, const char *s, size_t n, 
+                       u8state_t *ps);
+
+    Description
+
+    If `s` is a null pointer, the `mbrtoc32` function is equivalent to
+    the call:
+
+        mbrtoc32(NULL, "", 1, ps)
+
+    In this case, the values of the parameters `pc32` and `n` are
+    ignored.
+
+    If `s` is not a null pointer, the `mbrtoc32` function inspects
+    at most `n` bytes beginning with the byte pointed to by `s` to
+    determine the number of bytes needed to complete the next multibyte
+    character (including any shift sequences). If the function
+    determines that the next multibyte character is complete and valid,
+    it determines the values of the corresponding wide characters and
+    then, if `pc32` is not a null pointer, stores the value of the
+    first (or only) such character in the object pointed to by `pc32`.
+    Subsequent calls will store successive wide characters without
+    consuming any additional input until all the characters have been
+    stored. If the corresponding wide character is the null wide
+    character, the resulting state described is the initial conversion
+    state.
+
+    Returns
+
+    The `mbrtoc32` function returns the first of the following that
+    applies (given the current conversion state):
+
+    0
+        if the next `n` or fewer bytes complete the multibyte character
+        that corresponds to the null wide character (which is the value
+        stored).
+
+    Between 1 and `n` inclusive   
+        if the next `n` or fewer bytes complete a valid multibyte
+        character (which is the value stored); the value returned is the
+        number of bytes that complete the multibyte character.
+
+    (size_t)(-3)
+        if the next character resulting from a previous call has been
+        stored (no bytes from the input have been consumed by this
+        call).
+
+    (size_t)(-2)
+        if the next `n` bytes contribute to an incomplete (but
+        potentially valid) multibyte character, and all `n` bytes have
+        been processed (no value is stored). 325)
+
+    (size_t)(-1)
+        if an encoding error occurs, in which case the next `n` or
+        fewer bytes do not contribute to a complete and valid multibyte
+        character (no value is stored); the value of the macro `EILSEQ`
+        is stored in `errno`, and the conversion state is unspecified.
+ */
+
+size_t u8toc32(utf32_t *pc32, const char *s, size_t n, u8state_t *ps)
+{
+    int st;
+    size_t u8_req, u8_use;
+    const char *p = s;
+    utf32_t c32;
+#ifndef NDEBUG
+    utf32_t c32dbg;
+#endif
+
+    /*
+     * No octets provided? - we need as many as indicated in `*ps`.
+     */
+    if (s == NULL) return ps->req;
     
-    switch (u8len) {
-    case 0: return 0; /* UTF-8 trailing octet */
-    case 1: return ( u8len <= (int)len ) ? u8len : -u8len;
-    case 2: return ( u8len <= (int)len && UTF_IS_CONTIN(buf[1]) ) ?
-                                                         u8len : -u8len;
-    case 3: return ( u8len <= (int)len && UTF_IS_CONTIN(buf[1])
-                                       && UTF_IS_CONTIN(buf[2]) ) ?
-                                                         u8len : -u8len;
-    case 4: return ( u8len <= (int)len && UTF_IS_CONTIN(buf[1])
-                                       && UTF_IS_CONTIN(buf[2])
-                                       && UTF_IS_CONTIN(buf[3]) ) ?
-                                                         u8len : -u8len;
-    default:
-	    return -u8len;
+    /*
+       Tail octets provided, but not expected?
+       Or head octet provided, but tail octets required?
+       
+       In other words: exactly one of u8_req and ps->req must be
+       zero.
+     */
+    if (((u8_req = U8_LEN(*s)) == 0) != (ps->req > 0U))
+	goto ilseq;
+	
+    /*
+       Because only one of the two `u8_req` and `ps->req` is non-zero,
+       we get the number of actually required octets here: either
+       `u8_req` or `ps->req`.
+     */
+    u8_req += ps->req;
+    
+    /*
+       We can only use what is provided to us (`n`). If this is zero
+       octets, we return the number of octets still required to complete
+       the accumulated code point in `ps->acc`.
+     */
+    if ((u8_use = (u8_req > n) ? n : u8_req) == 0)
+	return n;
+    
+    /*
+     * At least one octet is provided, we get the *value* in it first.
+     * This either starts a new code point (if `ps->acc` == 0U), or
+     * adds 6 bits from a U8_TAIL byte to the accumulated code point
+     * `ps->ucp`.
+     */
+    if (ps->acc == 0U)
+        c32 = U8_HEAD(*p++, (u8_req > 1 ? u8_req + 1 : u8_req));
+    else
+        c32 = (ps->ucp << 6) | U8_TAIL(*p++);
+    
+    switch (u8_use) {
+    case 5:
+	if (!U8_TAIL(*p)) goto ilseq;
+	c32 = (c32 << 6) | (*p++ & 0x3FU);
+    case 4:
+	if (!U8_TAIL(*p)) goto ilseq;
+	c32 = (c32 << 6) | (*p++ & 0x3FU);
+    case 3:
+	if (!U8_TAIL(*p)) goto ilseq;
+	c32 = (c32 << 6) | (*p++ & 0x3FU);
+    case 2:
+	if (!U8_TAIL(*p)) goto ilseq;
+	c32 = (c32 << 6) | (*p++ & 0x3FU);
+    case 1:
+	break;
+    case 0: ilseq:
+	errno = EILSEQ;
+	return (size_t)-1;
     }
+    
+    /*
+     * If the code point is still incomplete, store it in the state,
+     * return the indicator `(size_t)-2` for this situation.
+     */
+    if (u8_use < u8_req) {
+        ps->ucp = c32;
+        ps->acc += u8_use;
+        ps->req  = u8_req - u8_use;
+        return (size_t)-2;
+    }
+
+    /*
+     * We have a complete code point - reset the state ...
+     */
+    ps->ucp = U(0000);
+    ps->acc = ps->req = 0U;
+
+    /*
+     * ... and check the code point.
+     */
+    if (U(D800) <= c32 && c32 < U(E000) || U(10FFFF) < c32) {
+	errno = EILSEQ;
+	return (size_t)-1;
+    }
+
+#if !defined(NDEBUG)
+    /* Compare our result with that of _cmark_'s UTF-8 component. */
+    st = cmark_utf8proc_iterate((uint8_t*)s, n, &c32dbg);
+    assert(st >= 0);
+    assert(u8_use > 0U);
+    assert(st == u8_use || u8_use < u8_req);
+    assert(c32dbg == c32 || u8_use < u8_req);
+#endif
+
+    if (pc32 != NULL) *pc32 = c32;
+    return (c32 == U(0000)) ? 0U : u8_use;
 }
 
-/*
- * utf8decode -- Convert UTF-8 to UCS
- *
- * Return UCS_REPLACEMENT if 
- *
- *   - buf[] is not a valid UTF-8 sequence, or
- *
- *   - len is too short.
- *
- * NOTE: The `cmark_utf8proc_iterate()` seems to do the same --
- *       but I could *never* guess this from the function's name ...
- */
-ucs_t utf8decode(const char buf[4], size_t len)
-{
-    ucs_t ucs;
-    int st = cmark_utf8proc_iterate((uint8_t*)buf, len, &ucs);
-    return (st < 0) ? UCS_REPLACEMENT : ucs;
-}
-
-/*
- * utf8encode - Convert UCS to UTF-8, storing up to 4 octets 
- *              and a terminating NUL character in buf[].
- *
- * Return: Number of UTF-8 octets generated (not including the NUL).
- *
- * NOTE: For reasons unknown and unfathomable, the "utf8.h" function
- *       `cmark_utf8proc_encode_char()` **forces** the caller to 
- *       receive the (up to 5 bytes!) NTBS in a `cmark_strbuf` "dynamic
- *       string buffer".
- *
- *       Anyway, we already #include "buffer.h", so we're using a
- *       `cmark_strbuf()` for this sole purpose here, but in a *very*
- *       static and *very* assert()ive way ... -- So there! ;-) 
- */
-size_t utf8encode(char buf[5], ucs_t ucs)
-{
-    static char bufbytes[8];
-    static cmark_strbuf strbuf = { bufbytes, sizeof bufbytes - 1U, 0U };
-    size_t n;
-    
-    assert(strbuf.ptr   == bufbytes);
-    assert(strbuf.asize == sizeof bufbytes - 1U);
-    assert(strbuf.size  == 0U);
-    
-    memset(bufbytes, 0, sizeof bufbytes);
-    cmark_utf8proc_encode_char(ucs, &strbuf);
-    
-    assert(strbuf.ptr == bufbytes);
-    assert(strbuf.asize == sizeof bufbytes - 1U);
-    assert(strbuf.size == strlen(bufbytes));
-    
-    n = strbuf.size;
-    memcpy(buf, bufbytes, n+1U);
-    strbuf.size = 0U;
-    
-    return n;
-}
+#define char32_t utf32_t
+#define char16_t utf16_t
+#define mbtoc32  u8toc32
+#define c32tomb  c32tou8
+#define mbtoc16  u8toc16
+#define c16tomb  c16tou8
 
 /*== cmark_strbuf_dup() ==============================================*/
 
@@ -956,10 +1090,10 @@ void rast_data(FILE *fp, const char *data, size_t len, char delim)
 	    }
 	    if (128 < ch) {
 		size_t n = len - k;
-		int i = utf8len(&data[k], n);
+		char32_t c32;
+		int i = mbtoc32(&c32, &data[k], n, NULL);
 		if (i > 0) {
-		    ucs_t ucs = utf8decode(&data[k], n);
-		    fprintf(fp, "#%lu\n", ucs);
+		    fprintf(fp, "#%lu\n", c32);
 		    k += i-1;
 		} else {
 		    unsigned m;
@@ -1221,7 +1355,6 @@ size_t do_meta_lines(char *buffer, size_t nbuf, const ESIS_Port *to)
     const ESIS_CB *esis_cb = to->cb;
     ESIS_UserData  esis_ud = to->ud;
 		
-
     ibol = 0U;
     nused = 0U;
     
@@ -2174,7 +2307,7 @@ int main(int argc, char *argv[])
 	*pmeta++ = META_CSS;
 	*pmeta++ = (css_arg) ? css_arg : DEFAULT_CSS;
 	*pmeta++ = "lang";
-	*pmeta++ = "en";
+	*pmeta++ = "en"; /* TODO command-line option "--lang" */
 	*pmeta = NULL;
 	
 	port = generate_repl(outfp, 0U);
