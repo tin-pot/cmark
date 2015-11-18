@@ -1806,7 +1806,7 @@ FILE *open_repl_file(const char *repl_filename, FILE *verbose)
     is_rel = is_relpath(filename);
     
     if (verbose) fprintf(verbose, "Trying\t\"%s%s\" ... ",
-                         is_rel ? ".\\" : "" , filename);
+                         is_rel ? "." DIRSEP : "" , filename);
     fp = fopen(filename, "r");
     if (verbose) fprintf(verbose, "%s.\n", (fp) ? "ok" : "failed");
 
