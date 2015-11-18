@@ -1740,7 +1740,7 @@ static const char *repl_default = NULL;
 #endif
 static const char dirsep[] = DIRSEP;
 
-int is_relpath(const char *pathname)
+bool is_relpath(const char *pathname)
 {
     if (pathname[0] == dirsep[0])
 	return 0;
@@ -1774,6 +1774,7 @@ int is_relpath(const char *pathname)
 FILE *open_repl_file(const char *repl_filename, FILE *verbose)
 {
     FILE *fp;
+    bool is_rel;
     
     if (repl_dir == NULL)     repl_dir = getenv(REPL_DIR_VAR);
     if (repl_default == NULL) repl_default = getenv(REPL_DEFAULT_VAR);
@@ -1784,6 +1785,7 @@ FILE *open_repl_file(const char *repl_filename, FILE *verbose)
 		(repl_dir) ? repl_dir : "<not set>");
 	fprintf(verbose, "%s =\n\t\"%s\"\n", REPL_DEFAULT_VAR,
 		(repl_default) ? repl_default : "<not set>");
+	putc(EOL, verbose);
     }
     /*
      * Passing in NULL means: use the default replacement definition.
@@ -1801,8 +1803,10 @@ FILE *open_repl_file(const char *repl_filename, FILE *verbose)
      */
     filename = repl_filename;
     assert(filename != NULL);
+    is_rel = is_relpath(filename);
     
-    if (verbose) fprintf(verbose, "Trying \"%s\" ... ", filename);
+    if (verbose) fprintf(verbose, "Trying\t\"%s%s\" ... ",
+                         is_rel ? ".\\" : "" , filename);
     fp = fopen(filename, "r");
     if (verbose) fprintf(verbose, "%s.\n", (fp) ? "ok" : "failed");
 
@@ -1824,7 +1828,7 @@ FILE *open_repl_file(const char *repl_filename, FILE *verbose)
 	    sprintf(pathname, "%s%s%s",
 		repl_dir, dirsep+trailsep, filename);
 		
-	    if (verbose) fprintf(verbose, "Trying \"%s\" ... ",
+	    if (verbose) fprintf(verbose, "Trying\t\"%s\" ... ",
 	                                                      pathname);
 	    fp = fopen(pathname, "r");
 	    if (verbose) fprintf(verbose, "%s.\n",
@@ -1840,7 +1844,7 @@ FILE *open_repl_file(const char *repl_filename, FILE *verbose)
      * time to give up.
      */
     if (fp == NULL) {
-	if (verbose) fprintf(verbose, "Can't open \"%s\": !\n",
+	if (verbose) fprintf(verbose, "Can't open \"%s\": %s.\n",
 	                                     filename, strerror(errno));
 	else
 	    error("Can't open replacement file \"%s\": %s.", filename,
