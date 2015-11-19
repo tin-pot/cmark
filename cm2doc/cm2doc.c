@@ -460,8 +460,13 @@ static const char *rn_repl[RN_NUM]; /* Replacement texts for RNs. */
  * it.
  */
  
+#if 0
 #define NOTA_DELIM_0 '\xC2' /* UTF-8[0] of U+00B4 ACUTE ACCENT (180) */
 #define NOTA_DELIM_1 '\xB4' /* UTF-8[1] of U+00B4 ACUTE ACCENT (180) */
+#else
+#define NOTA_DELIM_0 '|'
+#define NOTA_DELIM_1 NUL
+#endif
 
 /*== Replacement Definitions =========================================*/
 
@@ -486,8 +491,9 @@ struct taginfo_ {
 
 struct repl_ {
     struct taginfo_ taginfo;
-    const char *repl[2];
-    struct repl_ *next;
+    const char     *repl[2];
+    bool            is_cdata;
+    struct repl_   *next;
 };
 
 /*
@@ -668,7 +674,8 @@ const char* att_val(const char *name, unsigned depth)
  * Set the replacement text for a node type.
  */
 void set_repl(struct taginfo_ *pti,
-              const char *repl_text[2])
+              const char *repl_text[2],
+              bool is_cdata)
 {
     cmark_node_type nt = pti->nt;
     struct repl_ *rp = malloc(sizeof *rp);
@@ -676,11 +683,12 @@ void set_repl(struct taginfo_ *pti,
     assert(0 <= nt);
     assert(nt < NODE_NUM);
     
-    rp->repl[0] = repl_text[0];
-    rp->repl[1] = repl_text[1];
-    rp->taginfo = *pti;
+    rp->repl[0]  = repl_text[0];
+    rp->repl[1]  = repl_text[1];
+    rp->taginfo  = *pti;
+    rp->is_cdata = is_cdata;
+    rp->next     = repl_tab[nt];
     
-    rp->next = repl_tab[nt];
     repl_tab[nt] = rp;
 }
 
@@ -886,41 +894,58 @@ void repl_Start(ESIS_UserData ud, cmark_node_type nt)
 
 void repl_Cdata(ESIS_UserData ud, const char *cdata, size_t len)
 {
-    cmark_node_type nt = current_nt();
-    static cmark_strbuf houdini;
-    static int houdini_init = 0;
-    size_t k;
+    static cmark_strbuf houdini = { 0 };
+    static int          houdini_init = 0;
+    
+    cmark_node_type     nt = current_nt();
+    const struct repl_ *rp = repl_tab[nt];
+    
+    size_t      k;
     const char *p;
     
+    bool is_cdata;
     
-    if (!houdini_init) {
-	cmark_strbuf_init(&houdini, 1024);
-	houdini_init = 1;
-    }
+    
     
     if (len == NTS) len = strlen(cdata);
+    p = cdata;
+    
+    is_cdata = rp == NULL || rp->is_cdata;
+    if (nt == NODE_TEXT && rp == NULL) is_cdata = false;
     
 /*
  * The *first* CDATA line in a CommonMark "HTML" element would contain
  * the MDO right at the start -- and the "HTML" element is just
  * a *notation declaration* in disguise ... 
  */
-    if (nt == NODE_HTML || nt == NODE_INLINE_HTML || 
-                                                    nt == NODE_MARKUP) {
-	p = cdata;
+    switch (nt) case NODE_HTML: case NODE_INLINE_HTML: case NODE_MARKUP:
 	if (watch_notation) {
 	    check_notation(p, len);
 	    watch_notation = false;
 	}
-    } else {
+    
+    if (!is_cdata) {
+        if (!houdini_init) {
+    	    cmark_strbuf_init(&houdini, 1024);
+    	    houdini_init = 1;
+        }
+        
 	houdini_escape_html(&houdini, (uint8_t*)cdata, len);
-	p = cmark_strbuf_cstr(&houdini);
+	p   = cmark_strbuf_cstr(&houdini);
 	len = cmark_strbuf_len(&houdini);
+	
+	for (k = 0U; k < len; ++k)
+	    PUTC(p[k]);
+    } else if (rp != NULL || nt == NODE_HTML ||
+                             nt == NODE_INLINE_HTML) {
+	for (k = 0U; k < len; ++k)
+	    PUTC(p[k]);
+    } else {
+	fputs("<![CDATA[", outfp);
+	fwrite(p, 1U, len, outfp);
+	fputs("]]>", outfp);
+	outbol = false;
     }
-	
-	
-    for (k = 0U; k < len; ++k)
-	PUTC(p[k]);
 	
     cmark_strbuf_clear(&houdini);
 }
@@ -1196,69 +1221,78 @@ static int S_render_node_esis(cmark_node *node,
     case NODE_CODE_BLOCK:
       {
 	cmark_node_type nt = node->type;
-	const char     *info, *data;
-	size_t          len = 0U, nmlen = 0U;
+	const char     *info, *data, *name;
+	size_t          ilen,  dlen,  nmlen = 0U;
 	
 	switch (nt) {
 	case NODE_CODE_BLOCK:
 	    data  = node->as.code.literal.data;
-	    len   = node->as.code.literal.len;
+	    dlen  = node->as.code.literal.len;
 	    info  = node->as.code.info.data;
-	    nmlen = node->as.code.info.len;
+	    ilen  = node->as.code.info.len;
 	    break;
 	                      
 	case NODE_CODE:
 	    data  = node->as.code.info.data;
-	    len   = node->as.code.info.len;
+	    dlen  = node->as.code.info.len;
 	    info  = data;
-	    nmlen = len;
+	    ilen  = dlen;
 	    break;
 	    
         default:
 	    assert(!"Can't happen!");
         }
         
-	assert(info != NULL || len == 0U);
-	assert(len < 0xFFFFU);
+	assert(info != NULL || ilen == 0U);
+	assert(data != NULL || dlen == 0U);
+	assert(dlen < 0xFFFFU);
+	assert(ilen < 0xFFFFU);
 
-	if (nmlen > 0U) {
+	if (ilen > 0U) {
 	    static const char  stop[] = { NOTA_DELIM_0, 
 		CR, LF, SP, HT, NUL };
+	    const size_t delimlen = 1U + !!(NOTA_DELIM_1);
 	    size_t k;
 
-	    for (k = 0U; k < nmlen; ++k) {
+	    for (k = 0U; k < ilen; ++k) {
 		char ch = info[k];
 		const char *p = strchr(stop, info[k]);
 		if (p != NULL)
 		    break;
 	    }
 
-	    if (k > 0U && k < nmlen + 1) {
-	        if (nt == NODE_CODE)
-		    if (info[k+0U] == NOTA_DELIM_0 &&
-		        info[k+1U] == NOTA_DELIM_1) {
+	    if (k > 0U && k < ilen + 1) {
+	        if (nt == NODE_CODE || nt == NODE_CODE_BLOCK)
+		    if (info[k+0U] == NOTA_DELIM_0
+#                     if NOTA_DELIM_1
+		        && info[k+1U] == NOTA_DELIM_1
+#		      endif
+                                                 ) {
 			nmlen = k;
+			name  = info;
 			if (data == info) {
-			    data += nmlen + 2U;
-			    len  -= nmlen + 2U;
+			    data += nmlen + delimlen;
+			    dlen -= nmlen + delimlen;
+			    ilen  = 0U;
+			} else {
+			    info += nmlen + delimlen;
+			    ilen -= nmlen + delimlen;
 			}
-		    } else
-			nmlen = 0U;
+		    }
 		
-		if (nmlen > 0U && is_notation(info, nmlen)) {
+		if (nmlen > 0U && is_notation(name, nmlen)) {
 		    const char *display = (nt == NODE_CODE) ?
 			"inline" : "block";
 		    nt = NODE_MARKUP;
-		    DO_ATTR("notation",  info,    nmlen);
-		    DO_ATTR("display", display, NTS);
-		    nmlen = 0U;
+		    DO_ATTR("notation", name,    nmlen);
+		    DO_ATTR("display",  display, NTS);
 		}
 	    }
 	}
-	if (nmlen > 0U)
-	    DO_ATTR("info", info, nmlen);
+	if (ilen > 0U)
+	    DO_ATTR("info", info, ilen);
 	DO_START(nt);
-	DO_CDATA(data, len);
+	DO_CDATA(data, dlen);
 	DO_END(nt);
       }
       break;
@@ -1569,16 +1603,19 @@ int P_attr_subst(int ch, cmark_strbuf *pbuf, const char lit)
     return ch;
 }
 
-#define P_repl_string(CH, P, L)  P_string((CH), (P), (L), 1)
-#define P_attr_val_lit(CH, P, L)  P_string((CH), (P), (L), 0)
+#define P_repl_string(CH, P, L, LCP)  P_string((CH), (P), (L), 1, LCP)
+#define P_attr_val_lit(CH, P, L)  P_string((CH), (P), (L), 0, NULL)
 
-int P_string(int ch, cmark_strbuf *pbuf, const char lit, int is_repl)
+int P_string(int ch, cmark_strbuf *pbuf, const char lit, int is_repl,
+                                                         char *lastchrp)
 {
+    char last = NUL;
+    
     assert(ch == lit);
     assert(ch == '"' || ch == '\'');
     
     ch = GETC(ch);
-    while (ch != lit) {
+    while (ch != lit && (last = ch) != NUL) {
 	if (ch == MSSCHAR) {
 	
 	    switch (ch = GETC(ch)) {
@@ -1594,7 +1631,7 @@ int P_string(int ch, cmark_strbuf *pbuf, const char lit, int is_repl)
 	    }
 	    if (ch != EOF)
 		cmark_strbuf_putc(pbuf, ch);
-	    ch = GETC(ch);
+	    last = ch, ch = GETC(ch);
 	    
 	} else if (ch == DSO[0] && is_repl) {
 	
@@ -1602,22 +1639,23 @@ int P_string(int ch, cmark_strbuf *pbuf, const char lit, int is_repl)
 	    
 	} else if (ch == EOL) {
 	    cmark_strbuf_putc(pbuf, ch);
-	    ch = GETC(ch);
+	    last = ch, ch = GETC(ch);
 	} else {
 	    cmark_strbuf_putc(pbuf, ch);
-	    ch = GETC(ch);
+	    last = ch, ch = GETC(ch);
 	}
     }    
     if (!is_repl)
 	cmark_strbuf_putc(pbuf, NUL);
     
     assert(ch == lit);
+    if (lastchrp != NULL) *lastchrp = last;
     ch = GETC(ch);
     return ch;
 }
 
 
-int P_repl_text(int ch, char *repl_text[1])
+int P_repl_text(int ch, char *repl_text[1], char *lastchrp)
 {
     static cmark_strbuf repl = { NULL, 0, 0 };
     unsigned nstrings = 0U;
@@ -1636,9 +1674,9 @@ int P_repl_text(int ch, char *repl_text[1])
 	P_S(ch);
 	
 	if (ch == LIT[0])
-	    ch = P_repl_string(ch, &repl, LIT[0]);
+	    ch = P_repl_string(ch, &repl, LIT[0], lastchrp);
 	else if (ch == LITA[0])
-	    ch = P_repl_string(ch, &repl, LITA[0]);
+	    ch = P_repl_string(ch, &repl, LITA[0], lastchrp);
 	else
 	    break;
 	++nstrings;
@@ -1664,7 +1702,7 @@ int P_repl_text(int ch, char *repl_text[1])
     }
 }
 
-int P_repl_text_pair(int ch, char *repl_text[2])
+int P_repl_text_pair(int ch, char *repl_text[2], char *lastchrp)
 {
     repl_text[0] = repl_text[1] = NULL;
     
@@ -1673,7 +1711,7 @@ int P_repl_text_pair(int ch, char *repl_text[2])
     } else if (ch == '/') {
 	;
     } else {
-	ch = P_repl_text(ch, repl_text+0);
+	ch = P_repl_text(ch, repl_text+0, lastchrp);
     }
     
     P_S(ch);
@@ -1684,7 +1722,7 @@ int P_repl_text_pair(int ch, char *repl_text[2])
 	if (ch == '-') {
 	    ch = GETC(ch);
 	} else {
-	    ch = P_repl_text(ch, repl_text+1);
+	    ch = P_repl_text(ch, repl_text+1, NULL);
 	}
     }
     
@@ -1818,14 +1856,16 @@ int P_tag_rule(int ch)
 {
     struct taginfo_ taginfo[1];
     char *repl_texts[2];
-    
+    char lastch;
+
     assert(ch == STAGO[0]);
-    
+
     ch = P_tag(ch, taginfo);
     P_S(ch);
-    ch = P_repl_text_pair(ch, repl_texts);
-    
-    set_repl(taginfo, repl_texts);
+    ch = P_repl_text_pair(ch, repl_texts, &lastch);
+
+    set_repl(taginfo, repl_texts, lastch == '[');
+
     return ch;
 }
 
@@ -1839,7 +1879,7 @@ int P_rn_rule(int ch)
     
     ch = P_rni_name(ch, &rn, name);
     
-    ch = P_repl_text(ch, repl_text);
+    ch = P_repl_text(ch, repl_text, NULL);
     rn_repl[rn] = repl_text[0];
     return ch;
 }

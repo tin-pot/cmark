@@ -100,6 +100,14 @@ CommonMark node types:
 </DIV></DIV>
 </HTML>\n'
 
+--======= MARK-UP ====================================================--
+
+<MARKUP> '<MARKUP display="[display]" notation="[notation]">
+<!\[CDATA\[' / ']]></MARKUP>'
+
+<MARKUP notation="Z"> '<MARKUP display="[display]" notation="Z-email">
+<!\[CDATA\[' / ']]></MARKUP>'
+
 --===== CM.DOC =======================================================--
 -- CM.DOC - Maps to HTML <BODY> --
 
@@ -161,9 +169,17 @@ CommonMark node types:
 <CM.LI> "<LI>" / -
 
 --===== CM.COD-B =====================================================--
-
-<CM.COD-B> + "<PRE><CODE>" / "</CODE></PRE>" +
-
+<CM.COD-B>      + '<PRE><CODE>'                / '</CODE></PRE>' +
+--
+<CM.COD-B info> + '<PRE><CODE class="[info]">' / '</CODE></PRE>' +
+<CM.COD-B notation> + '<PRE><CODE class="[notation]">' / '</CODE></PRE>' +
+--
+--======= CM.COD =====================================================--
+<CM.COD>          '<CODE>' / '</CODE>'
+--
+<CM.COD info>     '<CODE class="[info]">' / '</CODE>'
+<CM.COD notation> '<CODE class="[notation]">' / '</CODE>'
+--
 --===== CM.PAR =======================================================--
 
 <CM.PAR> "<P>" / "</P>" +
@@ -190,9 +206,6 @@ CommonMark node types:
 
 <CM.LN-BR> "<BR>" / - 
 
---======= CM.COD =====================================================--
-
-<CM.COD> "<CODE>" / "</CODE>"
 
 --======= CM.EMPH ====================================================--
 
@@ -213,7 +226,4 @@ CommonMark node types:
 -- Maps to <IMG> element with 'src' for URL; EMPTY. --
 
 <CM.IMG> "<IMG src=\"[url]\" title=\"[title]\">" / -
-
---======= MARK-UP ====================================================--
-
 
