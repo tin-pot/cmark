@@ -97,7 +97,7 @@ CommonMark node types:
 
 <CM.DOC> +
 '<BODY class="article" lang="[lang]">
-<H1 class="title" id="dc.title">[.DC.title]</H2>
+<H1 class="title" id="dc.title">[.DC.title]</H1>
 <DIV class="center">
 <P class="note"><A href="mailto:[.DC.creator]">[.DC.creator]</A><BR>
 [.DC.date]</DIV>
@@ -120,9 +120,32 @@ CommonMark node types:
 --===== CM.LIST ======================================================--
 -- CM.LIST - Maps to <OL> or <UL>. --
 
-<CM.LIST type="bullet"> + "<UL>" / "</UL>" +
+-- Classes for UL: class=  1. "tight"
+                           2. "loose"
 
-<CM.LIST type="ordered"> + "<OL>" / "</OL>" +
+           for OL: class=  1. "tight alf paren"
+	                   2. "tight num period"
+			   3. "loose alf paren"
+			   4. "loose num period"
+--
+
+<CM.LIST type="bullet"  tight="true"> 
+    + '<UL class="tight">' / '</UL>' +
+
+<CM.LIST type="bullet"  tight="false">
+    + '<UL class="loose">' / '</UL>' +
+
+<CM.LIST type="ordered" tight="true"  delim="period">
+    + '<OL title="[start]" class="tight num period">' / '</OL>' +
+
+<CM.LIST type="ordered" tight="false" delim="period">
+    + '<OL title="[start]" class="loose num period">' / '</OL>' +
+
+<CM.LIST type="ordered" tight="true"  delim="paren" >
+    + '<OL title="[start]" class="tight alf paren" >' / '</OL>' +
+
+<CM.LIST type="ordered" tight="false" delim="paren" >
+    + '<OL title="[start]" class="loose alf paren" >' / '</OL>' +
 
 --======= CM.LI ======================================================--
 -- CM.LI - Maps to <LI>, but </LI> can be omitted. --
