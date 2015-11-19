@@ -1582,6 +1582,8 @@ int P_tag(int ch, struct taginfo_ taginfo[1])
 	bufsize_t name_idx = 0, val_idx = 0;
 	
 	P_S(ch);
+	if (ch == TAGC[0])
+	    break;
 	ch = P_name(ch, NULL, name, 0);
 	P_S(ch);
 	if (ch == VI[0]) {
