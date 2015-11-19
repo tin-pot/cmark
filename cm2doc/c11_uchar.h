@@ -17,14 +17,16 @@ typedef struct u8state_ {
 
 size_t u8len(const char *, size_t, mbstate_t *);
 size_t u8toc32(utf32_t *, const char *, size_t, mbstate_t *);
+size_t c32tou8(char *, utf32_t, mbstate_t *);
 
 #if USE_UCHAR_STD_NAMES
 
 #define char32_t utf32_t
 #define char16_t utf16_t
 
-#define mbtoc32(PC_, S_, N_, PS_)      u8toc32((PC_), (S_), (N_), (PS_))
+#define mbrtoc32(PC_, S_, N_, PS_)     u8toc32((PC_), (S_), (N_), (PS_))
 #define mbrlen(S_, N_, PS_)            u8len((S_), (N_), (PS_))
+#define c32rtomb(S_, C_, PS_)          c32tou8((S_), (C_), (PS_))
 
 #endif /* USE_UCHAR_STD_NAMES */
 

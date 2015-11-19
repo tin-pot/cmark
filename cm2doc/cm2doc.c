@@ -1032,7 +1032,7 @@ void rast_data(FILE *fp, const char *data, size_t len, char delim)
 	    if (128 < ch) {
 		size_t n = len - k;
 		char32_t c32;
-		int i = mbtoc32(&c32, &data[k], n, NULL);
+		int i = mbrtoc32(&c32, &data[k], n, NULL);
 		if (i > 0) {
 		    fprintf(fp, "#%lu\n", c32);
 		    k += i-1;
@@ -1045,7 +1045,8 @@ void rast_data(FILE *fp, const char *data, size_t len, char delim)
 			fprintf(fp, "#X%02X\n", 0xFFU & data[k+m]);
 		    }
 		    k = k + m - 1;
-		    fprintf(stderr, "Invalid UTF-8 sequence in data line!\n");
+		    fprintf(stderr,
+		              "Invalid UTF-8 sequence in data line!\n");
 		}
 	    } else {
 		switch (ch) {
@@ -2146,6 +2147,132 @@ static void gen_document(cmark_node *document,
     DO_END(CMARK_NODE_NONE);
 }
 
+
+/*====================================================================*/
+
+/*
+ * Preprocessor.
+ */
+
+#define NDIGRAPH 1000
+
+struct dig_ {
+    char ch[2];
+    unsigned short  octidx;
+};
+
+int cmpdig(const void *lhs, const void *rhs)
+{
+    const struct dig_ *const ldig = (struct dig_*)lhs;
+    const struct dig_ *const rdig = (struct dig_*)rhs;
+    int d;
+    
+    (d = ldig->ch[0] - rdig->ch[0]) || 
+    (d = ldig->ch[1] - rdig->ch[1]);
+    return d;
+}
+
+struct digraphs_ {
+    size_t          ndig;
+    struct dig_    *dig;
+    char           *octets;
+} digraphs;
+
+size_t read_digraphs(FILE *infp)
+{
+    cmark_strbuf   dig_buf;
+    cmark_strbuf   octets_buf;
+    char           ch[2];
+    unsigned long  cp;
+    size_t         ndig = 0U;
+    mbstate_t      mbs;
+    
+    infp = fopen("/Projects/Scratch/cmark/cm2doc/doc/digraphs.txt", "r");
+    if (infp == NULL)
+	return 0U;
+	
+    cmark_strbuf_init(&dig_buf,    sizeof(struct dig_)*NDIGRAPH);
+    cmark_strbuf_init(&octets_buf, 2*NDIGRAPH);
+    memset(&mbs, 0, sizeof mbs);
+    
+    while (fscanf(infp, " %c%c %lx %*[^\n]", ch+0, ch+1, &cp) == 3) {
+	char32_t       c32;
+	char           u8[5];
+        size_t         nu8;
+	fprintf(stderr, "%c%c --> U+%06lX\n", ch[0], ch[1], cp);
+	
+	c32 = cp;
+	nu8 = c32rtomb(u8, c32, &mbs);
+	if (nu8 == (size_t)-1) {
+	    /* Ilse Q. */
+	    error("Invalid UCS code point: %06lX\n", c32);
+	    c32rtomb(NULL, L'0', &mbs);
+	} else {
+	    unsigned short octidx = octets_buf.size;
+	    struct dig_ dig;
+#ifndef NDEBUG
+	    char32_t u32;
+	    size_t s32 = mbrtoc32(&u32, u8, nu8, NULL);
+	    assert (s32 < 5U);
+	    assert(u32 == c32);
+#endif
+	    
+	    cmark_strbuf_put(&octets_buf, (unsigned char*)u8, nu8);
+	    dig.ch[0] = ch[0];
+	    dig.ch[1] = ch[1];
+	    dig.octidx = octidx;
+	    cmark_strbuf_put(&dig_buf, (void*)&dig, sizeof dig);
+	}
+	++ndig;
+    }
+    
+    digraphs.ndig   = ndig;
+    digraphs.dig    = (void*)cmark_strbuf_detach(&dig_buf);
+    digraphs.octets = (void*)cmark_strbuf_detach(&octets_buf);
+    qsort(digraphs.dig, ndig, sizeof *digraphs.dig, cmpdig);
+    
+    fclose(infp);
+    
+    return ndig;
+}
+
+size_t expand_digraph(char buf[5], const char ch[2])
+{
+    struct dig_ dig, *pdig;
+    const char *u8;
+    size_t nu8;
+    
+    dig.ch[0] = ch[0];
+    dig.ch[1] = ch[1];
+    
+    pdig = bsearch(&dig, digraphs.dig, sizeof digraphs.dig[0], 
+                   digraphs.ndig, cmpdig);
+                   
+    if (pdig == NULL)
+	return 0U;
+	
+    u8  = digraphs.octets + pdig->octidx;
+    nu8 = u8len(u8, 5U, NULL);
+    
+    if (0U < nu8 && nu8 <= MB_LEN_MAX) {
+	memcpy(buf, u8, nu8);
+	return nu8;
+    }
+    return 0U;
+}
+
+size_t preprocess(char buffer[], size_t nbuffer, FILE *infp)
+{
+    static fbuffer[24*BUFSIZ];
+    static size_t nf = 0U, fpos = 0U;
+
+    if (nbuffer > sizeof fbuffer) nbuffer = sizeof nbuffer;
+    nf = fread(fbuffer, 1U, nbuffer, infp);
+    if (nf > 0U)
+	memcpy(buffer, fbuffer, nf);
+    return nf;
+}
+
 int parse_cmark(FILE *from, ESIS_Port *to, cmark_option_t options,
                                                      const char *meta[])
 {
@@ -2159,8 +2286,8 @@ int parse_cmark(FILE *from, ESIS_Port *to, cmark_option_t options,
     if (parser == NULL)
 	parser = cmark_parser_new(options);
     
-    if (from != NULL) while ((bytes = fread(buffer,
-                                        1U, sizeof buffer, from)) > 0) {
+    if (from != NULL)
+	while ((bytes = preprocess(buffer, sizeof buffer,from)) > 0) {
 	/*
 	 * Read and parse the input file block by block.
 	 */
@@ -2252,6 +2379,8 @@ int main(int argc, char *argv[])
     time_t now;
     int argi;
     
+read_digraphs(NULL);
+
     meta[0] = NULL;
     
     if ( (username = getenv("LOGNAME"))   != NULL ||
@@ -2336,7 +2465,7 @@ int main(int argc, char *argv[])
 	    port = generate_rast(outfp, rast_options);
     else {
 	if (repl_file_count == 0U)
-	    /* Success or die. */
+	    /* Succeed or die. */
 	    load_repl_defs(open_repl_file(NULL, NULL));
 	    
 	if (title_arg != NULL) {

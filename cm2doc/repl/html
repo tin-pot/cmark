@@ -55,7 +55,7 @@ CommonMark node types:
     <!ELEMENT  MARKUP - - CDATA >
 
     <!ATTLIST  MARKUP
-      notation NOTATION (Z|EBNF) #REQUIRED
+      notation NOTATION (HTML|Z|EBNF|VDM|C90|C11|ASN.1|Ada95) #REQUIRED
       display  (inline|block)    #REQUIRED> ] >
 
 <HTML><HEAD>
@@ -201,4 +201,6 @@ CommonMark node types:
 <MARKUP notation info display="block">
       '<DIV class="markup [notation]" title="[info]"><!\[CDATA\['
     / ']]></DIV>'
-      
+
+<MARKUP notation="HTML" display="inline">
+      - / -

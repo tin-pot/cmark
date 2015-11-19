@@ -286,3 +286,58 @@ size_t u8toc32(utf32_t *pc32, const char *s, size_t n, mbstate_t *ps_)
 }
 
 
+size_t c32tou8(char *s, utf32_t c32, mbstate_t *ps_)
+{
+    mbstate_t int_st = { 0 };
+    unsigned char u8_idx;
+    char *p = s;
+    u8state_t *ps;
+    
+    *(unsigned char*)&int_st = U8LEN_INT_IDX;
+    
+    ps = (ps_ != NULL) ? U8_STATE(ps_) : U8_STATE(&int_st);
+
+    u8_idx = (unsigned)(ps - u8_state) + 1U;
+    assert(u8_idx == (unsigned)(ps - u8_state) + 1U);
+    
+    if (s == NULL) {
+	memset(ps, 0, sizeof *ps);
+	return 0U;
+    }
+
+    if (U(D800) <= c32 && c32 < U(E000))
+	return errno = EILSEQ, (size_t)-1; /* Surrogate, not a valid scalar. */
+    if (U(10FFFF) < c32)
+	return errno = EILSEQ, (size_t)-1; /* Out of range. */
+	
+    if (c32 <= U(007F))
+	*p++ = (char)c32;
+    else if (c32 <= U(07FF)) {
+	unsigned oct_1 = ((c32 >>  6) & U(001F)) | U(00C0);
+	unsigned oct_2 = ((c32 >>  0) & U(003F)) | U(0080);
+	
+	*p++ = (char)oct_1;
+	*p++ = (char)oct_2;
+    } else if (c32 < U(FFFF)) {
+	unsigned oct_1 = ((c32 >> 12) & U(000F)) | U(00E0);
+	unsigned oct_2 = ((c32 >>  6) & U(003F)) | U(0080);
+	unsigned oct_3 = ((c32 >>  0) & U(003F)) | U(0080);
+	
+	*p++ = (char)oct_1;
+	*p++ = (char)oct_2;
+	*p++ = (char)oct_3;
+    } else if (c32 < U(110000)) {
+	unsigned oct_1 = ((c32 >> 18) & U(0007)) | U(00F0);
+	unsigned oct_2 = ((c32 >> 12) & U(003F)) | U(0080);
+	unsigned oct_3 = ((c32 >>  6) & U(003F)) | U(0080);
+	unsigned oct_4 = ((c32 >>  0) & U(003F)) | U(0080);
+	
+	*p++ = (char)oct_1;
+	*p++ = (char)oct_2;
+	*p++ = (char)oct_3;
+	*p++ = (char)oct_4;
+    } else
+	return errno = EILSEQ, (size_t)-1;
+
+    return (size_t)(p - s);
+}
