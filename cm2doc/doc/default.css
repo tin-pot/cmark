@@ -21,6 +21,7 @@
 
 /*
  * Basic page layout: BODY
+ *
  */
 
 BODY {
@@ -29,7 +30,34 @@ BODY {
   margin-top:		0em;
   margin-bottom:	4em;
 
-  font-family:		"Helvetica LT Std", Arimo, Arial, sans-serif;
+  /* 
+   * Sans Serif font stack --
+   *
+   * Adjust the *monospace* family too, if you make changes here!
+   *
+   * See  http://www.cssfontstack.com/ on font stacks ...
+   *
+   * TODO:
+   *	On *print* media, I would prefer "Helvetica LT Std" and
+   *	"Courier" or "Courier New" (or some other font with
+   *	PDF 14 font metrics ...) -- mh
+   */
+  font-family:
+  	"Droid Sans",      /* Preferred font - if installed. */
+
+	"Liberation Sans", /* - is default-installed on 
+	                          * Fedora,
+				  * Ubuntu,
+	                          * OpenSUSE,
+				  * Mandriva,
+                                and comes with OpenOffice.org:
+				this should work on *ix. */
+
+	"Lucida Grande",   /* - works on 100.00% of Mac */
+
+	"Arial",           /* - works on  99.85% of Win */
+
+  	sans-serif;
   font-size:		12pt;
 }
 
@@ -83,9 +111,6 @@ DIV.hi {
   padding-bottom:	1ex;
 }
 
-.small {
-  text-size: 75%;
-}
 
 .center { 
   text-align:		center;
@@ -166,65 +191,43 @@ DIV.badges TABLE TBODY TR TD {
  * the labels.
  */
 
-DD, OL, UL,
-OL.num, OL.num-p, OL.num-d,
-OL.alf, OL.alf-p, OL.alf-d {
-  position:		relative;
-  padding-left:		2em;
-  counter-reset:	value 0;
+DL, OL, UL {
+  /*position:		relative;
+  padding-left:		2em;*/
+  counter-reset:	itemno 0;
 }
 
-OL,
-OL.num, OL.num-p, OL.num-d,
-OL.alf, OL.alf-p, OL.alf-d {
+OL {
   list-style-type:	none;
+  list-style-position:  outside;
 }
-
-/*
- * A  `<OL><LI>...</OL>`                         list has "1." labels.
- * A  `<OL type="1"><LI>...</OL>`                list has "1." labels.
- * A  `<OL type="a"><LI>...</OL>`                list has "a)" labels.
- */
 
 OL > LI {
-  display:		block;
-  counter-increment:	value;
+  counter-increment: itemno;
 }
 
-OL > LI:before {
-  position:		absolute;
-  left:			0.0em;
-  width:		1.5em;	/* Let 0.5em space between label box and text. */
-  text-align:		right;
-/*
-  background-color:	yellow;
- */
-  content:		counter(value, decimal) ".";
+OL > LI > *:first-child {
+    text-indent: -1.0cm;
 }
 
-OL[type="1"] > LI:before,
-OL.num > LI:before,
-OL.num-d > LI:before {
-  content:		counter(value, decimal) ".";
+OL.num.period > LI > *:first-child:before {
+  display: inline-block;
+  position: relative;
+  right: 0.0cm;
+  width: 1.0cm;
+  content: counter(itemno, decimal) ".\2002";
+  text-align: right;
 }
 
-OL.alf-d > LI:before {
-  content:		counter(value, lower-alpha) ".";
+OL.alf.paren > LI > *:first-child:before {
+  display: inline-block;
+  position: relative;
+  right: 0.0cm;
+  width: 1.0cm;
+  content: counter(itemno, lower-alpha) ")\2002";
+  text-align: right;
 }
 
-/* Now the OL.paren style - add parenthesis. */
-
-OL.num-p > LI:before {
-  content:		counter(value, decimal) ")";
-}
-
-OL[type="a"] > LI:before,
-OL.alf > LI:before,
-OL.alf-p > LI:before {
-  content:		counter(value, lower-alpha) ")";
-}
-
-  
 /*
  * Block level elements: DL
  */
@@ -288,7 +291,6 @@ PRE {
   padding-bottom:	1.0ex;
 
   white-space:		pre;
-  font-family:		monospace;
   overflow:		auto;
 
   background-color:	#FBEDBB;
@@ -299,15 +301,19 @@ PRE {
 /*
  * Block level elements: H1, ..., H6
  *
- * Headers all have a common special color. The top level
- * header is centered.
+ * Headers all have a common special color. The document title
+ * (the *first* <H1> in the body, or a <H1> with class="title")
+ * is centered.
  */
 
-H1 {
+H1.title,
+H1:first-child {
   text-align:		center;
+  font-size:  225%;
 }
 
 H1,H2,H3,H4,H5,H6 {
+  text-align: left;
   color:		#E68A00; /*#F90;*/
 }
 
@@ -531,11 +537,27 @@ A:focus {
 
 
 CODE, SPAN.code {
-  font-family:		"Courier New", "Courier", monospace;
-  font-size:            105%;
-/*color:		#FF9900;	/* (Header text color).       */
+  font-size: 105%; /* This makes Courier New acceptable big, but
+                      does not make the other fonts *too big*. */
+  font-family:		
+  	"Droid Sans Mono",	/* Preferred font - if installed. */
+
+	"Liberation Mono",	/* - is default-installed on 
+	                               * Fedora,
+				       * Ubuntu,
+	                               * OpenSUSE,
+				       * Mandriva,
+                                     and comes with OpenOffice.org:
+				     this should work on *ix. */
+
+	"Lucida Sans Typewriter", /* - works on 99.64% of Mac */
+
+	"Lucida Console",         /* - works on  99.18% of Win */
+
+  	monospace;
+  color:		#F90;		/* (Header text color).       */
 /*color:		#784800;	/* (Header text color) * 1/2. */
-  color:		#B46C00;	/* (Header text color) * 3/4. */
+/*color:		#B46C00;	/* (Header text color) * 3/4. */
 /*color:		#997;		/* ??                         */
 /*color:		#FBEDBB;	/*  (Code block bg-color).    */
 /*color:		#7D5F5D;	/*  (CB bg-color) * 1/2.      */
@@ -552,12 +574,9 @@ CODE, SPAN.code {
  */
 SPAN.hi:after,
 SPAN.hi:before {
-  content: "\2009"; /* U+2009 THIN SPACE (&thinsp;) _around_ hi. */
+  content: "\A0";		/* A single NBSP.             */
 }
 
-EM:after {
-  content: "\200A"; /* U+200A HAIR SPACE (&hairsp;) _after_ italics. */
-}
 /*
  * ... but not if embedded in a title or anchor. Code inside a PRE
  * gets it color from there.
