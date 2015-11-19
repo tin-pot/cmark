@@ -1,0 +1,203 @@
+/* jtc1.css  Style sheet for a JTC1 document.
+   Copyright (C) 2000-2003 Roger Price.
+
+   This style sheet is free software; you can redistribute it and/or
+   modify it under the terms of the GNU General Public License
+   as published by the Free Software Foundation; either version 2
+   of the License, or (at your option) any later version.
+
+   This program is distributed in the hope that it will be useful,
+   but WITHOUT ANY WARRANTY; without even the implied warranty of
+   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+   GNU General Public License for more details.
+
+   You should have received a copy of the GNU General Public License
+   along with this program; if not, write to the Free Software
+   Foundation, Inc., 59 Temple Place - Suite 330, 
+   Boston, MA  02111-1307, USA.
+
+   See http://www.w3.org/Style/CSS/ for a definition of the
+   Cascading Style Sheet language and a validation service.
+*/
+
+/* All block elements are inset to reduce line 
+   length on 800x600 full screen windows */
+BODY.contrib
+   {font-family: sans-serif;
+    color: black;
+    background-color: white;
+    margin-left: 50mm; 
+    margin-right: 20mm}
+BODY.IS 
+   {font-family: sans-serif;
+    color: black;
+    background-color: white;
+    margin-left: 50mm; 
+    margin-right: 20mm}
+.UG
+   {color: #C04000}
+H1 
+   {text-align: center;
+    margin-left: -30mm}
+H1.refnum 
+   {text-align: right;
+    margin-left: -30mm}
+H2, H3, H4
+   {margin-left: -30mm}
+.fullwidth
+   {margin-left: -30mm}
+.fullwidth-UG
+   {margin-left: -30mm;
+    color: #C04000}
+.edition 
+   {text-align: right;
+    font-weight: bold} 
+.author 
+   {text-align: right;
+    font-weight: bold} 
+.author-UG
+   {text-align: right;
+    font-weight: bold;
+    color: #C04000} 
+H2.clauseInAnnex     /* H2 plays role of H1.  This imitation of the printed
+                        standard is ugly on-screen and needs rethinking. */
+   {text-align: center;
+    margin-left: -0mm} 
+P.normativeAnnex             /* Used for (normative) in annex */
+   {font-size: large;
+    text-align: center;
+    margin-left: -30mm} 
+PRE.SGML 
+   {margin-left: -30mm;
+    font-family: monospace, courier}
+BLOCKQUOTE
+   {font-style: italic}
+ADDRESS
+   {font-family: sans-serif;
+    font-style: normal}
+OL 
+   {list-style-type: lower-alpha}
+OL OL 
+   {list-style-type: decimal}
+OL OL OL 
+   {list-style-type: upper-alpha}
+OL OL OL OL 
+   {list-style-type: decimal}
+A:link    
+   {color: red }    /* unvisited links */
+A:visited 
+   {color: blue }   /* visited links   */
+ABBR
+   {font-style: roman}
+/* The table rendering in Netscape Navigator 4.x is broken.
+   So for the time being, by default, tables will be ugly.
+   All TABLE, CAPTION, THEAD, TBODY and TFOOT elements require a 
+   class attribute which should have value "broken" or "ok".
+   Try each table in turn with the class "ok".  If it works,
+   so much the better. */
+TABLE.ok
+   {font-family: sans-serif;
+    border-collapse: collapse;
+    empty-cells: hide}
+TABLE.broken   /* Workaround for a broken Netscape Navigator 4.x */
+   {empty-cells: hide}
+CAPTION.ok 
+   {font-family: sans-serif;
+    background: #e0e0e0}
+CAPTION.broken  /* Workaround for a broken Netscape Navigator 4.x */
+   {background: #e0e0e0}
+THEAD.ok, TBODY.ok, TFOOT.ok
+   {font-family: sans-serif}
+TH, TD
+   {background: #e0e0e0}
+CODE
+   {font-family: courier, monospace}
+.quote 
+   {font-style: italic}     
+.fr 
+   {font-style: italic}
+.figure, .caption 
+   {text-align: center}
+.figure-UG, .caption-UG 
+   {text-align: center;
+    color: #C04000}
+.leadTenthEM
+   {margin: 0.2em 0 0 0}     /* Margin above a list element */
+.note 
+   {font-size: small;
+    margin-top: 0}           /* Attach note to previous list item */
+.note-UG 
+   {font-size: small;
+    margin-top: 0;
+    color: #C04000}          /* Attach note to previous list item */
+.announce 
+   {font-size: larger;
+    text-align: center;
+    margin-left: 0mm}
+.subtitle
+   {text-align: center;
+    margin-left: 0mm}
+.example 
+   {font-family: courier, monospace}
+.change
+   {background: #c0ffff}
+.new
+   {background: #ffc0ff}
+.TC1                         /* Distinctive colour for first corrigendum */
+   {background: #ffff80;     /* yellow + white */
+    border-color: #ffff80}
+.TC1-UG                      /* Distinctive colour for first corrigendum */
+   {background: #ffff80;
+    border-color: #ffff80;
+    color: #C04000}
+.TC1note
+   {background: #ffff80;
+    border-color: #ffff80;
+    font-size: small;
+    margin-top: 0}           /* Attach note to previous list item */
+.TC1note-UG
+   {background: #ffff80;
+    border-color: yellow;
+    font-size: small;
+    margin-top: 0;
+    color: #C04000}          /* Attach note to previous list item */
+.TC2                         /* Distinctive colour for second corrigendum */
+   {background: #80ffff;     /* cyan + white */
+    border-color: #80ffff}
+.TC2-UG                      /* Distinctive colour for second corrigendum */
+   {background: #80ffff;
+    border-color: #80ffff;
+    color: #C04000}
+.TC2note
+   {background: #80ffff;
+    border-color: #80ffff;
+    font-size: small;
+    margin-top: 0}           /* Attach note to previous list item */
+.TC2note-UG
+   {background: #80ffff;
+    border-color: #80ffff;
+    font-size: small;
+    margin-top: 0;
+    color: #C04000}          /* Attach note to previous list item */
+.TC3                         /* Distinctive colour for third corrigendum */
+   {background: #ffc0ff;     /* magenta + white */ 
+    border-color: #ffc0ff}
+.TC3-UG                      /* Distinctive colour for third corrigendum */
+   {background: #ffc0ff;
+    border-color: #ffc0ff;
+    color: #C04000}
+.TC3note
+   {background: #ffc0ff;
+    border-color: #ffc0ff;
+    font-size: small;
+    margin-top: 0}           /* Attach note to previous list item */
+.TC3note-UG
+   {background: #ffc0ff;
+    border-color: #ffc0ff;
+    font-size: small;
+    margin-top: 0;
+    color: #C04000}          /* Attach note to previous list item */
+
+@page 
+   {size:210mm 297mm;               /* A4 paper */
+    margin: 34mm 18mm 20mm 12mm }   /* Model was ISO 8859-1 */
