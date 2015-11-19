@@ -738,6 +738,7 @@ void put_repl(const char *repl)
     const char *p = repl;
     char ch;
     
+    assert(repl != NULL);
     while ((ch = *p++) != NUL) {
 	if (ch == VT) {
 	    if (!outbol)
@@ -766,9 +767,12 @@ struct repl_ *select_rule(cmark_node_type nt)
 	    if (atts[2*i+1] != NULLIDX) {
 		sel_val = text_buf.ptr + atts[2*i+1];
 	    }
-	    if (sel_val != NULL &&
-		     (cur_val == NULL || strcmp(cur_val, sel_val) != 0))
-		break;
+	    if (sel_val == NULL && cur_val == NULL)
+		break; /* Attribute existence mismatch. */
+		
+	    if (sel_val != NULL && (cur_val == NULL ||
+		             strcmp(cur_val, sel_val) != 0))
+		break; /* Attribute value mismatched. */
 	}
 	if (atts[2*i] == NULLIDX)
 	    return rp; /* Matched all attribute selectors. */
@@ -803,6 +807,7 @@ void register_notation(const char *nmtoken, size_t len)
     size_t k;
     
     assert(nmtoken != NULL);
+    if (len == NTS) len = strlen(nmtoken);
     assert(len > 0U);
     
     for (k = 0U; k < len; ++k) {
@@ -1223,24 +1228,18 @@ static int S_render_node_esis(cmark_node *node,
 	cmark_node_type nt = node->type;
 	const char     *info, *data, *name;
 	size_t          ilen,  dlen,  nmlen = 0U;
+	const bool      is_inline = (nt == NODE_CODE);
 	
-	switch (nt) {
-	case NODE_CODE_BLOCK:
-	    data  = node->as.code.literal.data;
-	    dlen  = node->as.code.literal.len;
-	    info  = node->as.code.info.data;
-	    ilen  = node->as.code.info.len;
-	    break;
-	                      
-	case NODE_CODE:
+	if (is_inline) {
 	    data  = node->as.code.info.data;
 	    dlen  = node->as.code.info.len;
 	    info  = data;
 	    ilen  = dlen;
-	    break;
-	    
-        default:
-	    assert(!"Can't happen!");
+	} else {
+	    data  = node->as.code.literal.data;
+	    dlen  = node->as.code.literal.len;
+	    info  = node->as.code.info.data;
+	    ilen  = node->as.code.info.len;
         }
         
 	assert(info != NULL || ilen == 0U);
@@ -1262,23 +1261,29 @@ static int S_render_node_esis(cmark_node *node,
 	    }
 
 	    if (k > 0U && k < ilen + 1) {
-	        if (nt == NODE_CODE || nt == NODE_CODE_BLOCK)
-		    if (info[k+0U] == NOTA_DELIM_0
+		const char *suf    = "";
+		size_t      suflen = 0U;
+		if (   info[k+0U] == NOTA_DELIM_0
 #                     if NOTA_DELIM_1
-		        && info[k+1U] == NOTA_DELIM_1
+		    && info[k+1U] == NOTA_DELIM_1
 #		      endif
-                                                 ) {
-			nmlen = k;
-			name  = info;
-			if (data == info) {
-			    data += nmlen + delimlen;
-			    dlen -= nmlen + delimlen;
-			    ilen  = 0U;
-			} else {
-			    info += nmlen + delimlen;
-			    ilen -= nmlen + delimlen;
-			}
+		   ) {
+		    nmlen = k;
+		    name  = info;
+		    if (is_inline) {
+			data  += nmlen + delimlen;
+			dlen  -= nmlen + delimlen;
+		    } else {
+		        suf    = info + nmlen + delimlen;
+		        suflen = ilen - nmlen - delimlen;
 		    }
+		} else if (is_inline) {
+		    nmlen = 0U;
+		    name  = "";
+		} else {
+		    nmlen = ilen;
+		    name  = info;
+		}
 		
 		if (nmlen > 0U && is_notation(name, nmlen)) {
 		    const char *display = (nt == NODE_CODE) ?
@@ -1286,6 +1291,11 @@ static int S_render_node_esis(cmark_node *node,
 		    nt = NODE_MARKUP;
 		    DO_ATTR("notation", name,    nmlen);
 		    DO_ATTR("display",  display, NTS);
+		    info = suf;
+		    ilen = suflen;
+		} else if (is_inline) {
+		    info = name;
+		    ilen = nmlen;
 		}
 	    }
 	}
@@ -1820,12 +1830,10 @@ int P_tag(int ch, struct taginfo_ taginfo[1])
     ch = P_name(ch, &nt, name, fold);
     taginfo->nt = nt;
     
-    while (ISSPACE(ch)) {
+    P_S(ch);
+    while (ch != TAGC[0]) {
 	bufsize_t name_idx = 0, val_idx = 0;
 	
-	P_S(ch);
-	if (ch == TAGC[0])
-	    break;
 	ch = P_name(ch, NULL, name, 0);
 	P_S(ch);
 	if (ch == VI[0]) {
@@ -1836,6 +1844,8 @@ int P_tag(int ch, struct taginfo_ taginfo[1])
 		ch = P_attr_val_lit(ch, &text_buf, ch);
 	    }   
 	}
+	P_S(ch);
+	
 	name_idx = text_buf.size;
 	cmark_strbuf_puts(&text_buf, name);
 	cmark_strbuf_putc(&text_buf, NUL);
@@ -2299,6 +2309,18 @@ int main(int argc, char *argv[])
 	    usage();
 	    error("\"%s\": Invalid option.\n", argv[argi]);
 	}
+    }
+    
+    {
+	static const char *const notations[] = {
+	    "HTML",	"Z",    "EBNF",	    "VDM",
+	    "C90",	"C11",	"ASN.1",    "Ada95",
+	    NULL
+	};
+	int i;
+	
+	for (i = 0; notations[i] != NULL; ++i)
+	    register_notation(notations[i], NTS);
     }
     
     /*

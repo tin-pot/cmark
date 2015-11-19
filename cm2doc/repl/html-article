@@ -112,7 +112,7 @@ CommonMark node types:
 -- CM.DOC - Maps to HTML <BODY> --
 
 <CM.DOC> +
-'<BODY class="article" lang="[lang]">
+'<BODY class="article" lang="[.lang]">
 <H1 class="title" id="dc.title">[.DC.title]</H1>
 <DIV class="center">
 <P class="note"><A href="mailto:[.DC.creator]">[.DC.creator]</A><BR>
@@ -169,17 +169,24 @@ CommonMark node types:
 <CM.LI> "<LI>" / -
 
 --===== CM.COD-B =====================================================--
-<CM.COD-B>      + '<PRE><CODE>'                / '</CODE></PRE>' +
---
-<CM.COD-B info> + '<PRE><CODE class="[info]">' / '</CODE></PRE>' +
-<CM.COD-B notation> + '<PRE><CODE class="[notation]">' / '</CODE></PRE>' +
+<CM.COD-B>          '<PRE><CODE>'
+                                  / '</CODE></PRE>'
+<CM.COD-B info>     '<PRE><CODE info="[info]">'
+                                  / '</CODE></PRE>'
+<CM.COD-B notation> '<PRE><CODE notation="[notation]">'
+                                  / '</CODE></PRE>'
+<CM.COD-B info notation> 
+                    '<PRE><CODE notation="[notation] info="[info]">'
+                                  / '</CODE></PRE>'
 --
 --======= CM.COD =====================================================--
-<CM.COD>          '<CODE>' / '</CODE>'
---
-<CM.COD info>     '<CODE class="[info]">' / '</CODE>'
-<CM.COD notation> '<CODE class="[notation]">' / '</CODE>'
---
+
+<CM.COD>          '<CODE>'                       / '</CODE>'
+<CM.COD info>     '<CODE info="[info]">'         / '</CODE>'
+<CM.COD notation> '<CODE notation="[notation]">' / '</CODE>'
+<CM.COD info notation> '<CODE notation="[notation] info="[info]">'
+                                                 / '</CODE>'
+                                                             
 --===== CM.PAR =======================================================--
 
 <CM.PAR> "<P>" / "</P>" +
