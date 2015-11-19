@@ -327,7 +327,7 @@ static const char* const nodename[NODE_NUM] = {
     "CM.LIST",
     "CM.LI",
     "CM.COD-B",
-    "MARK-UP", /* Block HTML/SGML/XHTML/XML fragment: literal output. */
+    "MARKUP",  /* NOTATION container: literal output. */
     "CM.PAR",
     "CM.HDR",
     "CM.HR",
@@ -335,7 +335,7 @@ static const char* const nodename[NODE_NUM] = {
     "CM.SF-BR",
     "CM.LN-BR",
     "CM.COD",
-    "MARK-UP",   /* Inline HTML/SGML/XHTML/XML fragment: literal output. */
+    "MARKUP", /* NOTATION container: literal output. */
     "CM.EMPH",
     "CM.STRN",
     "CM.LNK",
@@ -732,6 +732,78 @@ struct repl_ *select_rule(cmark_node_type nt)
 
 /*== ESIS API for the Replacement Backend ============================*/
 
+struct notation_name_ {
+    const char *name;
+    struct notation_name_ *next;
+} *notations = NULL;
+
+bool is_notation(const char *nmtoken, size_t len)
+{
+    const struct notation_name_ *pn;
+    
+    if (nmtoken == NULL || len == 0U)
+	return false;
+	
+    for (pn = notations; pn != NULL; pn = pn->next)
+	if (strncmp(pn->name, nmtoken, len) == 0)
+	    return true;
+    return false;
+}
+
+void register_notation(const char *nmtoken, size_t len)
+{
+    struct notation_name_ *pn = malloc(sizeof *pn);
+    char *name = malloc(len + 1);
+    
+    memcpy(name, nmtoken, len);
+    name[len] = NUL;
+    pn->name = name;
+    pn->next = notations;
+    notations = pn;
+}
+
+void check_notation(const char *data, size_t len)
+{
+    static const char mdo[]      = "<!";
+    static const size_t mdolen   = sizeof mdo - 1U;
+    static const char nword[]    = "NOTATION";
+    static const size_t nwordlen = sizeof nword - 1U;
+    
+    size_t k;
+    const char *nmtoken;
+    
+    if (len < mdolen || strncmp(data, mdo, mdolen) != 0)
+	return;
+	
+    for (k = mdolen; k < len; ++k)
+	if (ISSPACE(data[k]))
+	    continue;
+	else if (k + nwordlen >= len || strncmp(data+k, nword,
+	                                                 nwordlen) != 0)
+	    return;
+	else
+	    break;
+
+    if (k + nwordlen >= len)
+	return;
+	
+    for (k += nwordlen; k < len; ++k)
+	if (!ISSPACE(data[k]))
+	    break;
+	    
+    if (k >= len)
+	return;
+	
+    nmtoken = data+k;
+    for ( ; k < len; ++k)
+	if (ISSPACE(data[k]))
+	    break;
+    
+    register_notation(nmtoken, k - (size_t)(nmtoken - data));
+}
+
+bool watch_notation = false;
+
 void repl_Attr(ESIS_UserData ud,
                           const char *name, const char *val, size_t len)
 {
@@ -743,7 +815,9 @@ void repl_Start(ESIS_UserData ud, cmark_node_type nt)
     const struct repl_ *rp;
     
     close_atts(nt);
-    
+
+    watch_notation = (nt == NODE_HTML || nt == NODE_INLINE_HTML);
+
     if (nt != CMARK_NODE_NONE && (rp = select_rule(nt)) != NULL) {
 	if (rp->repl[0] != NULL) {
 	    put_repl(rp->repl[0]);
@@ -770,6 +844,10 @@ void repl_Cdata(ESIS_UserData ud, const char *cdata, size_t len)
     
     if (nt == NODE_HTML || nt == NODE_INLINE_HTML) {
 	p = cdata;
+	if (watch_notation) {
+	    check_notation(p, len);
+	    watch_notation = false;
+	}
     } else {
 	houdini_escape_html(&houdini, (uint8_t*)cdata, len);
 	p = cmark_strbuf_cstr(&houdini);
@@ -1050,13 +1128,24 @@ static int S_render_node_esis(cmark_node *node,
       break;
 
     case NODE_CODE_BLOCK:
-      if (node->as.code.info.len > 0U)
-        DO_ATTR("info", 
-		       node->as.code.info.data, node->as.code.info.len);
-      DO_START(node->type);
-      DO_CDATA(
+      {
+	size_t len;
+	cmark_node_type nt = node->type;
+	
+        if ((len = node->as.code.info.len) > 0U) {
+	    const char *info = node->as.code.info.data;
+	    
+	    if (is_notation(info, len)) {
+    		nt = NODE_HTML;
+    		DO_ATTR("syntax", info, len);
+    		DO_ATTR("display" , "block", 5U);
+    	    }
+	}
+	DO_START(nt);
+	DO_CDATA(
 	         node->as.code.literal.data, node->as.code.literal.len);
-      DO_END(node->type);
+	DO_END(nt);
+      }
       break;
 
     case NODE_LINK:

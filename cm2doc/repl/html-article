@@ -206,3 +206,7 @@ CommonMark node types:
 
 <CM.IMG> "<IMG src=\"[url]\" title=\"[title]\">" / -
 
+--======= MARK-UP ====================================================--
+
+<MARKUP syntax="EBNF"> '<P>EBNF:</P><MARKUP syntax="EBNF" display="[display]">' / '</MARKUP>' 
+
