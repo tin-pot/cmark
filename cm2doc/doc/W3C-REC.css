@@ -71,6 +71,41 @@ ul.toc, ol.toc {
   list-style: none;
 }
 
+dl, ol, ul {
+  counter-reset:	itemno 0;
+}
+
+ol {
+  list-style-type:	none;
+  list-style-position:  outside;
+}
+
+ol > li {
+  counter-increment: itemno;
+}
+
+ol > li > *:first-child {
+    text-indent: -1.0cm;
+}
+
+ol.num.period > li > *:first-child:before {
+  display: inline-block;
+  position: relative;
+  right: 0.0cm;
+  width: 1.0cm;
+  content: counter(itemno, decimal) ".\2002";
+  text-align: right;
+}
+
+ol.alf.paren > li > *:first-child:before {
+  display: inline-block;
+  position: relative;
+  right: 0.0cm;
+  width: 1.0cm;
+  content: counter(itemno, lower-alpha) ")\2002";
+  text-align: right;
+}
+
 @media speech {
  h1, h2, h3 { voice-stress: moderate; }
  .hide { speak: none; }

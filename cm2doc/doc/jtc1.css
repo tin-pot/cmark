@@ -75,14 +75,46 @@ BLOCKQUOTE
 ADDRESS
    {font-family: sans-serif;
     font-style: normal}
-OL 
-   {list-style-type: lower-alpha}
-OL OL 
-   {list-style-type: decimal}
-OL OL OL 
-   {list-style-type: upper-alpha}
-OL OL OL OL 
-   {list-style-type: decimal}
+
+DL, OL, UL {
+  counter-reset:	itemno 0;
+}
+
+OL {
+  list-style-type:	none;
+  list-style-position:  outside;
+}
+
+OL > LI {
+  counter-increment: itemno;
+}
+
+OL > LI > *:first-child {
+    text-indent: -1.0cm;
+}
+
+OL.num.period > LI > *:first-child:before {
+  display: inline-block;
+  position: relative;
+  right: 0.0cm;
+  width: 1.0cm;
+  content: counter(itemno, decimal) ".\2002";
+  text-align: right;
+}
+
+OL.alf.paren > LI > *:first-child:before {
+  display: inline-block;
+  position: relative;
+  right: 0.0cm;
+  width: 1.0cm;
+  content: counter(itemno, lower-alpha) ")\2002";
+  text-align: right;
+}
+
+
+
+
+
 A:link    
    {color: red }    /* unvisited links */
 A:visited 
