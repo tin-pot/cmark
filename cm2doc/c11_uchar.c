@@ -25,6 +25,13 @@ typedef unsigned c11_uchar_check_utf16_t[sizeof(utf16_t) == 2];
 
 /*== Unicode state keeping ===========================================*/
 
+/*
+ * The tail elements are used for the "internal" state of 
+ * `u8len()`, `u8toc32()` etc.
+ */
+#define U8LEN_INT_IDX   255
+#define U8TOC32_INT_IDX 254
+
 u8state_t     u8_state[256];
 unsigned char u8_map[256];
 u8state_t    *u8_state_new(void);
@@ -80,10 +87,10 @@ static const size_t u8_tab[32] = {
 
 size_t u8len(const char *s, size_t n, mbstate_t *ps)
 {
-    static u8state_t internal = { 0U, 0U, 0U };
+    mbstate_t int_st = { 0 };
+    *(unsigned char*)&int_st = U8LEN_INT_IDX;
     
-    return u8toc32(NULL, s, n, ps != NULL ?
-                                           ps : (mbstate_t *)&internal);
+    return u8toc32(NULL, s, n, ps != NULL ? ps : &int_st);
 }
 
 
@@ -152,16 +159,20 @@ size_t u8len(const char *s, size_t n, mbstate_t *ps)
 
 size_t u8toc32(utf32_t *pc32, const char *s, size_t n, mbstate_t *ps_)
 {
+    mbstate_t int_st = { 0 };
     int st;
     size_t u8_req, u8_use;
     unsigned char u8_idx;
     const char *p = s;
-    u8state_t *ps = U8_STATE(ps_);
+    u8state_t *ps;
     utf32_t c32;
     
 #ifndef NDEBUG /* Compare our result with `cmark_utf8proc_iterate()` */
     utf32_t c32cmark;
 #endif
+    *(unsigned char*)&int_st = U8LEN_INT_IDX;
+    
+    ps = (ps_ != NULL) ? U8_STATE(ps_) : U8_STATE(&int_st);
 
     u8_idx = (unsigned)(ps - u8_state) + 1U;
     assert(u8_idx == (unsigned)(ps - u8_state) + 1U);
