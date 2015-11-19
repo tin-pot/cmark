@@ -316,10 +316,11 @@ static char default_creator[81] = "N.N.";
 #define ISLCNMCHAR(C) ( ISLCNMSTRT(C) || (C) == '-' || (C) == '.' )
 
 /* How many node types there are, and what the name length limit is. */
-#define NODE_NUM       (CMARK_NODE_LAST_INLINE+1)
-#define NODENAME_LEN   NAMELEN
+#define NODE_NUM       (CMARK_NODE_LAST_INLINE+2)
+#define NODE_MARKUP     CMARK_NODE_LAST_INLINE+1
+#define NODENAME_LEN    NAMELEN
 
-static const char* const nodename[NODE_NUM] = {
+static const char* const nodename[NODE_NUM+1] = {
      NULL,	/* The "none" type (enum const 0) is invalid! */
    /*12345678*/
     "CM.DOC",
@@ -327,7 +328,7 @@ static const char* const nodename[NODE_NUM] = {
     "CM.LIST",
     "CM.LI",
     "CM.COD-B",
-    "MARKUP",  /* NOTATION container: literal output. */
+    "CM.HTM-B",
     "CM.PAR",
     "CM.HDR",
     "CM.HR",
@@ -335,11 +336,12 @@ static const char* const nodename[NODE_NUM] = {
     "CM.SF-BR",
     "CM.LN-BR",
     "CM.COD",
-    "MARKUP", /* NOTATION container: literal output. */
+    "CM.HTM",
     "CM.EMPH",
     "CM.STRN",
     "CM.LNK",
     "CM.IMG",
+    "MARKUP"
 };
 
 
@@ -424,6 +426,42 @@ static const char *rn_repl[RN_NUM]; /* Replacement texts for RNs. */
 #define ISNMSTART(C) ( ISDIGIT(C) || ISUCNMSTRT(C) || ISLCNMSTRT(C) )
 #define ISNMCHAR(C)  ( ISNMSTART(C) || (C) == '-' || (C) == '.' )
 
+/*
+ * NOTATION_DELIM is (currently pre-defined to be) 
+ *
+ *     U+00B4 ACUTE ACCENT (decimal 180)
+ *
+ * It is used to put an "info string" into an *inline* code span
+ * like this:
+ *
+ *     dolor sit amet, `ZÂ´x %e %N` consectetuer adipiscing elit. 
+ *
+ * The ACUTE ACCENT was chosen to match the GRAVE ACCENT, as the
+ * "backtick" is officially called, and to make for a relatively
+ * unobtrusive syntax.
+ *
+ * This *inline* "info string" has the exact same meaning as the
+ * standard "info string" on a code block fence:
+ *
+ *     ~~~ Z
+ *     x %e %N
+ *     ~~~
+ *
+ * Both examples produce (in the HTML output file):
+ *
+ *     <MARKUP notation="Z" ...>x %e %N</MARKUP>
+ *
+ * but the *inline* code span produces the attribute `display="inline"`,
+ * while the fenced code *block* gives `display="block"` as the second
+ * attribute in the `<MARKUP>` element.
+ *
+ * NOTE: A convenient way to enter ACUTE ACCENT using an US keyboard
+ * layout in Vim is to enter the *digraph* ( Ctrl-K , "'" , "'" ) for
+ * it.
+ */
+ 
+#define NOTA_DELIM_0 '\xC2' /* UTF-8[0] of U+00B4 ACUTE ACCENT (180) */
+#define NOTA_DELIM_1 '\xB4' /* UTF-8[1] of U+00B4 ACUTE ACCENT (180) */
 
 /*== Replacement Definitions =========================================*/
 
@@ -754,7 +792,16 @@ void register_notation(const char *nmtoken, size_t len)
 {
     struct notation_name_ *pn = malloc(sizeof *pn);
     char *name = malloc(len + 1);
+    size_t k;
     
+    assert(nmtoken != NULL);
+    assert(len > 0U);
+    
+    for (k = 0U; k < len; ++k) {
+	if (!ISNMCHAR(nmtoken[k]))
+	    error("\"%*.s\": Invalid NOTATION name.\n", (int)len,
+                                                               nmtoken);
+    }
     memcpy(name, nmtoken, len);
     name[len] = NUL;
     pn->name = name;
@@ -816,12 +863,23 @@ void repl_Start(ESIS_UserData ud, cmark_node_type nt)
     
     close_atts(nt);
 
+/* Check if this is in reality a <!NOTATION markup declaration */
     watch_notation = (nt == NODE_HTML || nt == NODE_INLINE_HTML);
 
     if (nt != CMARK_NODE_NONE && (rp = select_rule(nt)) != NULL) {
 	if (rp->repl[0] != NULL) {
 	    put_repl(rp->repl[0]);
-	}
+	} 
+    }
+    
+    if (nt == NODE_MARKUP && rp == NULL) {
+	const char *notation = att_val("notation", 1);
+	const char *display  = att_val("display", 1);
+        
+	assert(notation  != NULL);
+	assert(display != NULL);
+	fprintf(outfp, "<MARKUP notation=\"%s\" display=\"%s\">",
+						  notation, display);
     }
 }
 
@@ -842,7 +900,13 @@ void repl_Cdata(ESIS_UserData ud, const char *cdata, size_t len)
     
     if (len == NTS) len = strlen(cdata);
     
-    if (nt == NODE_HTML || nt == NODE_INLINE_HTML) {
+/*
+ * The *first* CDATA line in a CommonMark "HTML" element would contain
+ * the MDO right at the start -- and the "HTML" element is just
+ * a *notation declaration* in disguise ... 
+ */
+    if (nt == NODE_HTML || nt == NODE_INLINE_HTML || 
+                                                    nt == NODE_MARKUP) {
 	p = cdata;
 	if (watch_notation) {
 	    check_notation(p, len);
@@ -853,6 +917,7 @@ void repl_Cdata(ESIS_UserData ud, const char *cdata, size_t len)
 	p = cmark_strbuf_cstr(&houdini);
 	len = cmark_strbuf_len(&houdini);
     }
+	
 	
     for (k = 0U; k < len; ++k)
 	PUTC(p[k]);
@@ -868,7 +933,8 @@ void repl_End(ESIS_UserData ud, cmark_node_type nt)
 	if (rp->repl[1] != NULL) {
 	    put_repl(rp->repl[1]);
 	}
-    }
+    } else if (nt == NODE_MARKUP)
+	fprintf(outfp, "</MARKUP>");
 	
     pop_atts();
 }
@@ -1087,11 +1153,10 @@ static int S_render_node_esis(cmark_node *node,
   if (entering) {
     switch (node->type) {
     case NODE_TEXT:
-    case NODE_CODE:
     case NODE_HTML:
     case NODE_INLINE_HTML:
       if (node->type == NODE_HTML || node->type == NODE_INLINE_HTML) {
-	DO_ATTR("type", "html", NTS);
+	DO_ATTR("type", "HTML", NTS);
 	DO_ATTR("display", 
 	            node->type == NODE_HTML ? "block" : "inline", NTS);
       }
@@ -1127,23 +1192,73 @@ static int S_render_node_esis(cmark_node *node,
       DO_START(node->type);
       break;
 
+    case NODE_CODE:
     case NODE_CODE_BLOCK:
       {
-	size_t len;
 	cmark_node_type nt = node->type;
+	const char     *info, *data;
+	size_t          len = 0U, nmlen = 0U;
 	
-        if ((len = node->as.code.info.len) > 0U) {
-	    const char *info = node->as.code.info.data;
+	switch (nt) {
+	case NODE_CODE_BLOCK:
+	    data  = node->as.code.literal.data;
+	    len   = node->as.code.literal.len;
+	    info  = node->as.code.info.data;
+	    nmlen = node->as.code.info.len;
+	    break;
+	                      
+	case NODE_CODE:
+	    data  = node->as.code.info.data;
+	    len   = node->as.code.info.len;
+	    info  = data;
+	    nmlen = len;
+	    break;
 	    
-	    if (is_notation(info, len)) {
-    		nt = NODE_HTML;
-    		DO_ATTR("syntax", info, len);
-    		DO_ATTR("display" , "block", 5U);
-    	    }
+        default:
+	    assert(!"Can't happen!");
+        }
+        
+	assert(info != NULL || len == 0U);
+	assert(len < 0xFFFFU);
+
+	if (nmlen > 0U) {
+	    static const char  stop[] = { NOTA_DELIM_0, 
+		CR, LF, SP, HT, NUL };
+	    size_t k;
+
+	    for (k = 0U; k < nmlen; ++k) {
+		char ch = info[k];
+		const char *p = strchr(stop, info[k]);
+		if (p != NULL)
+		    break;
+	    }
+
+	    if (k > 0U && k < nmlen + 1) {
+	        if (nt == NODE_CODE)
+		    if (info[k+0U] == NOTA_DELIM_0 &&
+		        info[k+1U] == NOTA_DELIM_1) {
+			nmlen = k;
+			if (data == info) {
+			    data += nmlen + 2U;
+			    len  -= nmlen + 2U;
+			}
+		    } else
+			nmlen = 0U;
+		
+		if (nmlen > 0U && is_notation(info, nmlen)) {
+		    const char *display = (nt == NODE_CODE) ?
+			"inline" : "block";
+		    nt = NODE_MARKUP;
+		    DO_ATTR("notation",  info,    nmlen);
+		    DO_ATTR("display", display, NTS);
+		    nmlen = 0U;
+		}
+	    }
 	}
+	if (nmlen > 0U)
+	    DO_ATTR("info", info, nmlen);
 	DO_START(nt);
-	DO_CDATA(
-	         node->as.code.literal.data, node->as.code.literal.len);
+	DO_CDATA(data, len);
 	DO_END(nt);
       }
       break;

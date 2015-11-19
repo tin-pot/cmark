@@ -8,10 +8,18 @@ Result document type:
 
 CommonMark node types:
 
-  CM.DOC	CM.QUO-B	CM.LIST		CM.LI
-  CM.COD-B	CM.PAR		CM.HDR		CM.HR
-  CM.TXT	CM.SF-BR 	CM.LN-BR	CM.COD
-  CM.EMPH	CM.STRN		CM.LNK		CM.IMG
+ 1. Block:
+	CM.DOC	    CM.QUO-B    CM.LIST	    CM.LI
+	CM.COD-B    CM.HTM-B	CM.PAR	    CM.HDR
+	CM.HR		
+  
+ 2. Inline 
+	CM.TXT	    CM.SF-BR 	CM.LN-BR    CM.COD
+	CM.EMPH	    CM.STRN	CM.LNK	
+	CM.IMG	    CM.HTM
+  
+ 3. Special
+	MARKUP
 
 --
 
@@ -208,5 +216,4 @@ CommonMark node types:
 
 --======= MARK-UP ====================================================--
 
-<MARKUP syntax="EBNF"> '<P>EBNF:</P><MARKUP syntax="EBNF" display="[display]">' / '</MARKUP>' 
 
