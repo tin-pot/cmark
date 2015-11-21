@@ -2178,33 +2178,36 @@ struct digraphs_ {
     char           *octets;
 } digraphs;
 
+#define DIG_FILE "/Projects/Scratch/cmark/cm2doc/doc/digraphs.txt"
+
 size_t read_digraphs(FILE *infp)
 {
     cmark_strbuf   dig_buf;
     cmark_strbuf   octets_buf;
-    char           ch[2];
-    unsigned long  cp;
-    size_t         ndig = 0U;
     mbstate_t      mbs;
     
-    infp = fopen("/Projects/Scratch/cmark/cm2doc/doc/digraphs.txt", "r");
-    if (infp == NULL)
+    char           ch[2];
+    unsigned long  ucs;
+    size_t         ndig = 0U;
+
+    if ((infp = fopen(DIG_FILE, "r")) == NULL)
 	return 0U;
 	
     cmark_strbuf_init(&dig_buf,    sizeof(struct dig_)*NDIGRAPH);
     cmark_strbuf_init(&octets_buf, 2*NDIGRAPH);
     memset(&mbs, 0, sizeof mbs);
     
-    while (fscanf(infp, " %c%c %lx %*[^\n]", ch+0, ch+1, &cp) == 3) {
+    while (fscanf(infp, " %c%c %lx %*[^\n]", ch+0, ch+1, &ucs) == 3) {
 	char32_t       c32;
-	char           u8[5];
+	char           u8[MB_LEN_MAX];
         size_t         nu8;
-	fprintf(stderr, "%c%c --> U+%06lX\n", ch[0], ch[1], cp);
+        
+	fprintf(stderr, "%c%c\tU+%06lX\n", ch[0], ch[1], ucs);
 	
-	c32 = cp;
+	c32 = ucs;
 	nu8 = c32rtomb(u8, c32, &mbs);
+	
 	if (nu8 == (size_t)-1) {
-	    /* Ilse Q. */
 	    error("Invalid UCS code point: %06lX\n", c32);
 	    c32rtomb(NULL, L'0', &mbs);
 	} else {
@@ -2213,7 +2216,7 @@ size_t read_digraphs(FILE *infp)
 #ifndef NDEBUG
 	    char32_t u32;
 	    size_t s32 = mbrtoc32(&u32, u8, nu8, NULL);
-	    assert (s32 < 5U);
+	    assert(s32 < MB_LEN_MAX);
 	    assert(u32 == c32);
 #endif
 	    
@@ -2236,7 +2239,7 @@ size_t read_digraphs(FILE *infp)
     return ndig;
 }
 
-size_t expand_digraph(char buf[5], const char ch[2])
+size_t expand_digraph(char buf[MB_LEN_MAX], const char ch[2])
 {
     struct dig_ dig, *pdig;
     const char *u8;
@@ -2252,7 +2255,7 @@ size_t expand_digraph(char buf[5], const char ch[2])
 	return 0U;
 	
     u8  = digraphs.octets + pdig->octidx;
-    nu8 = u8len(u8, 5U, NULL);
+    nu8 = u8len(u8, MB_LEN_MAX, NULL);
     
     if (0U < nu8 && nu8 <= MB_LEN_MAX) {
 	memcpy(buf, u8, nu8);
@@ -2263,7 +2266,7 @@ size_t expand_digraph(char buf[5], const char ch[2])
 
 size_t preprocess(char buffer[], size_t nbuffer, FILE *infp)
 {
-    static fbuffer[24*BUFSIZ];
+    static fbuffer[12*BUFSIZ];
     static size_t nf = 0U, fpos = 0U;
 
     if (nbuffer > sizeof fbuffer) nbuffer = sizeof nbuffer;
@@ -2279,7 +2282,7 @@ int parse_cmark(FILE *from, ESIS_Port *to, cmark_option_t options,
     static cmark_parser *parser = NULL;
     
     static bool in_header = true;
-    static char buffer[16*BUFSIZ];
+    static char buffer[8*BUFSIZ];
     
     size_t bytes;
     
@@ -2288,36 +2291,38 @@ int parse_cmark(FILE *from, ESIS_Port *to, cmark_option_t options,
     
     if (from != NULL)
 	while ((bytes = preprocess(buffer, sizeof buffer,from)) > 0) {
-	/*
-	 * Read and parse the input file block by block.
-	 */
-	size_t hbytes = 0U;
-
-	if (in_header) {
-	    int imeta;
-            const ESIS_CB *cb = to->cb;
-            ESIS_UserData  ud = to->ud;
-	    
-	    hbytes = do_meta_lines(buffer, sizeof buffer, to);
-
 	    /*
-	    * Override meta-data from meta-lines with meta-data
-	    * given in command-line option arguments, eg `--title`.
+	    * Read and parse the input file block by block.
 	    */
-	    if (meta != NULL)
-		for (imeta = 0; meta[2*imeta] != NULL; ++imeta)
-		    cb->attr(ud, meta[2*imeta+0], meta[2*imeta+1], NTS);
+	    size_t hbytes = 0U;
 
-	    in_header = false;
+	    if (in_header) {
+		int imeta;
+		const ESIS_CB *cb = to->cb;
+		ESIS_UserData  ud = to->ud;
+
+		hbytes = do_meta_lines(buffer, sizeof buffer, to);
+
+		/*
+		* Override meta-data from meta-lines with meta-data
+		* given in command-line option arguments, eg `--title`.
+		*/
+		if (meta != NULL)
+		    for (imeta = 0; meta[2*imeta] != NULL; ++imeta)
+			cb->attr(ud, meta[2*imeta+0], meta[2*imeta+1],
+			                                           NTS);
+
+		in_header = false;
+	    }
+
+	    if (hbytes < bytes)
+		cmark_parser_feed(parser, buffer + hbytes, 
+		                                        bytes - hbytes);
+
+	    if (bytes < sizeof(buffer))
+		break;
 	}
-
-	if (hbytes < bytes)
-	    cmark_parser_feed(parser, buffer + hbytes, bytes - hbytes);
-
-	if (bytes < sizeof(buffer)) {
-	    break;
-	}
-    } else {
+    else {
 	/*
 	 * Finished parsing, generate document content into
 	 * ESIS port.
@@ -2379,7 +2384,9 @@ int main(int argc, char *argv[])
     time_t now;
     int argi;
     
+#ifndef NDEBUG
 read_digraphs(NULL);
+#endif
 
     meta[0] = NULL;
     
