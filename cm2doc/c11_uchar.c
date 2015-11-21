@@ -15,10 +15,6 @@
 
 
 #define U(X)                    ((utf32_t)(0x ## X ##UL))
-#define BMP(X)                  ((utf32_t)((X) & 0xFFFFUL))
-
-#define UCS_REPLACEMENT         U(FFFD)
-
 
 typedef unsigned c11_uchar_check_utf32_t[sizeof(utf32_t) == 4];
 typedef unsigned c11_uchar_check_utf16_t[sizeof(utf16_t) == 2];
