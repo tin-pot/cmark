@@ -116,17 +116,7 @@ CommonMark node types:
 <H1 class="title" id="dc.title">[.DC.title]</H1>
 <DIV class="center">
 <P class="note"><A href="mailto:[.DC.creator]">[.DC.creator]</A><BR>
-[.DC.date]</DIV>
-<HR class="fullwidth">
-<H2 class="contents">Contents</H2>
-<UL>
-<!-- CONTENTS -->
-<LI><A title="Text of Foreword" href="#foreword">Foreword</A>
-<LI><A title="Text of Introduction" href="#intro">Introduction</A>
-<LI><A title="Text of section 1" href="#sec-1">1&emsp;Section 1</A>
-<!-- /CONTENTS -->
-</UL>
-<HR class="fullwidth">' +
+[.DC.date]</DIV>' +
 / -
 
 --===== CM.QUO-B =====================================================--
