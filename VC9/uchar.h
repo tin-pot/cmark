@@ -1,8 +1,8 @@
 /* uchar.h */
 
-#ifndef USE_UCHAR_STD_NAMES
-#define USE_UCHAR_STD_NAMES 1
+#ifndef U8_NAMES
+#define U8_NAMES U8_C32_FOR_U
 #endif
 
-#include "c11_uchar.h"
+#include "xchar.h"
 
