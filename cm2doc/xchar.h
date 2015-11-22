@@ -17,7 +17,7 @@ Standard library headers.
 #define U8_WW_FOR_U  4
 
 #ifndef U8_NAMES
-#define U8_NAMES U8_WW_FOR_U
+#define U8_NAMES U8_X_FOR_U
 #endif
 
 #if U8_NAMES != U8_C32_FOR_U
@@ -71,6 +71,7 @@ size_t u8fc32(char *, U8_CHAR_32);
 
 #if U8_NAMES == U8_X_FOR_U
 
+#   define XEOF ((xchar_t)-1)
 #   define xchar_t U8_CHAR_32
 #   define xint_t  U8_INT_32
 
@@ -110,8 +111,8 @@ size_t u8fc32(char *, U8_CHAR_32);
 #   define wwchar_t U8_CHAR_32
 
 #   define mblen(PC_, N_)          u8len((PC_), (N_))
-#   define mbtoww(PC_, S_, N_)     u8tc32((PC_), (S_), (N_))
-#   define wwtomb(S_, C_)          u8fc32((S_), (C_))
+#   define mbtowwc(PC_, S_, N_)    u8tc32((PC_), (S_), (N_))
+#   define wwctomb(S_, C_)         u8fc32((S_), (C_))
 
 #else /* No disguise. */
 #endif

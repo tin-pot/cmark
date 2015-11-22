@@ -20,7 +20,7 @@
 #include <string.h>
 #include <stdint.h>
 
-#include <xchar.h>
+#include "xchar.h"
 
 #include "octetbuf.h"
 
@@ -93,7 +93,7 @@
 char ESCAPE = '\\';
 
 static const char INVC[]   = " !\"%&\'()*+,-./:;<=>?^_";
-static const char CMARKC[] = "!&)*+-.<";
+static const char CMARKC[] = "&<";
 static const char NMSTRT[] = ":_";
 static const char NMCHAR[] = ":_";
 
@@ -208,17 +208,17 @@ int esc_define(esc_state *esp, const char ch[2], const long ucsdef[])
     char        u8seq[U8_LEN_MAX];
     size_t      u8nseq;
     
-    u8nseq = wwtomb(u8seq, ucsdef[0]);
+    u8nseq = xctomb(u8seq, ucsdef[0]);
     if (u8nseq == (size_t)-1) {
 	assert(errno == EILSEQ);
 	error(ESC_ERR_UCS, "Invalid UCS code point: %06lX\n", ucsdef[0]);
-	wwtomb(NULL, L'0');
+	xctomb(NULL, L'0');
 	return -1;
     }
 #ifndef NDEBUG
     {
-    wwchar_t u32;
-    size_t s32 = mbtoww(&u32, u8seq, u8nseq);
+    xchar_t u32;
+    size_t s32 = mbtoxc(&u32, u8seq, u8nseq);
     assert (s32 < 5U);
     assert(u32 == ucsdef[0]);
     }
@@ -237,7 +237,7 @@ int esc_define(esc_state *esp, const char ch[2], const long ucsdef[])
     return 0;
 }
 
-int readline(esc_state *esp, FILE *infp, char dgr[2], wwchar_t *ucs)
+int readline(esc_state *esp, FILE *infp, char dgr[2], xchar_t *ucs)
 {
     int ch1, ch;
     bool valid = false;
@@ -278,7 +278,7 @@ esc_state *esc_create(FILE *infp)
     es.nmchar  = NMCHAR;
     
     if (infp == NULL)
-	return 0U;
+	goto create;
 	
     while (readline(esp, infp, ch, cp) != EOF) {
 #if !defined(NDEBUG)
@@ -298,6 +298,7 @@ esc_state *esc_create(FILE *infp)
 #ifndef NDEBUG
     fprintf(stderr, "%s: %u digraphs defined.\n", PRG, es.ndgr);
 #endif
+create:
     esp = malloc(sizeof es);
     if (esp != NULL)
 	memcpy(esp, &es, sizeof es);
@@ -322,7 +323,7 @@ size_t esc_expand(esc_state *esp, char buf[5], const char ch[2])
     u8seq  = esp->defs + IDX(pdgr->oi);
     nuc = LEN(pdgr->oi);
     assert(nuc == 1U);
-    u8nseq = u8len(u8seq, MB_LEN_MAX);
+    u8nseq = u8len(u8seq, U8_LEN_MAX);
     
     if (u8nseq > 0U)
 	memcpy(buf, u8seq, u8nseq);
@@ -338,7 +339,7 @@ size_t esc_bsubst(esc_state *esp, octetbuf *dst, octetbuf *src)
 	ST_UNI,       ST_DGR,      ST_CODE,   ST_SUBST,	    ST_INVALID
     } st = ST_OUTSIDE;
     
-    char          seq[SEQMAX], u8seq1[MB_LEN_MAX], u8seq2[MB_LEN_MAX];
+    char          seq[SEQMAX], u8seq1[U8_LEN_MAX], u8seq2[U8_LEN_MAX];
     unsigned      nseq = 0U, u8nseq1 = 0U, u8nseq2 = 0U;
     char          dgr[2];
     unsigned      iseq;
@@ -456,8 +457,8 @@ size_t esc_bsubst(esc_state *esp, octetbuf *dst, octetbuf *src)
 	}
 	
 	if (st == ST_CODE) {
-	    wwchar_t ucs;
-	    int sn, d = MB_LEN_MAX;
+	    xchar_t ucs;
+	    int sn, d = U8_LEN_MAX;
 	    size_t u8n;
 	    octet *op;
 	    
@@ -467,9 +468,9 @@ size_t esc_bsubst(esc_state *esp, octetbuf *dst, octetbuf *src)
 	    assert(sn == 1);
 	    op = octetbuf_extend(dst, d);
 	    errno = 0;
-	    u8n = wwtomb(op, ucs);
-	    assert(u8n <= MB_LEN_MAX || errno == EILSEQ);
-	    if (u8n <= MB_LEN_MAX)
+	    u8n = xctomb(op, ucs);
+	    assert(u8n <= U8_LEN_MAX || errno == EILSEQ);
+	    if (u8n <= U8_LEN_MAX)
 		d -= u8n;
 	    if (errno == EILSEQ)
 		st = ST_INVALID;

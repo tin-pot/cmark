@@ -250,15 +250,27 @@
 			UniqueIdentifier="{4FC737F1-C7A5-4376-A066-2A32D752A2FF}"
 			>
 			<File
-				RelativePath="..\cm2doc\c11_uchar.c"
-				>
-			</File>
-			<File
 				RelativePath="..\cm2doc\cm2doc.c"
 				>
 			</File>
 			<File
+				RelativePath="..\cm2doc\escape.c"
+				>
+			</File>
+			<File
 				RelativePath="..\src\gitident.c"
+				>
+			</File>
+			<File
+				RelativePath="..\cm2doc\octetbuf.c"
+				>
+			</File>
+			<File
+				RelativePath="..\cm2doc\ucs_fc32.c"
+				>
+			</File>
+			<File
+				RelativePath="..\cm2doc\ucs_tc32.c"
 				>
 			</File>
 		</Filter>
@@ -268,7 +280,15 @@
 			UniqueIdentifier="{93995380-89BD-4b04-88EB-625FBE52EBFB}"
 			>
 			<File
-				RelativePath="..\cm2doc\c11_uchar.h"
+				RelativePath="..\cm2doc\escape.h"
+				>
+			</File>
+			<File
+				RelativePath="..\cm2doc\octetbuf.h"
+				>
+			</File>
+			<File
+				RelativePath="..\cm2doc\xchar.h"
 				>
 			</File>
 		</Filter>

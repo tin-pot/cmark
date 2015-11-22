@@ -91,10 +91,16 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include <errno.h>
 #include <stdarg.h>
 #include <stdio.h>
+#ifdef _MSC_VER
+#define snprintf _snprintf
+#endif
 #include <stdlib.h>
 #include <string.h>
 #include <time.h>  /* strftime(), gmtime(), time() */
-#include <uchar.h> /* C 2011: Unicode utilities - UTF-8 conversion. */
+
+#include "octetbuf.h"
+#include "escape.h"
+#include "xchar.h" /* Unicode utilities - UTF-8 conversion. */
 
 /*
  * CommonMark library
@@ -109,8 +115,8 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 #define NUL  0
 
-#define U(X)                    ((char32_t)(0x ## X ##UL))
-#define BMP(X)                  ((char32_t)((X) & 0xFFFFUL))
+#define U(X)                    ((xchar_t)(0x ## X ##UL))
+#define BMP(X)                  ((xchar_t)((X) & 0xFFFFUL))
 
 /*
  * Prototypes here, because of ubiquituous use.
@@ -136,7 +142,9 @@ void syntax_error(const char *msg, ...);
 #ifndef SIZE_MAX /* C99: in <stdint.h> (but in <limits.h> in MSC!) */
 #define SIZE_MAX    (~(size_t)0U)
 #endif
+#ifndef NTS
 #define NTS SIZE_MAX
+#endif
 
 typedef void *ESIS_UserData;
 
@@ -1031,8 +1039,8 @@ void rast_data(FILE *fp, const char *data, size_t len, char delim)
 	    }
 	    if (128 < ch) {
 		size_t n = len - k;
-		char32_t c32;
-		int i = mbrtoc32(&c32, &data[k], n, NULL);
+		xchar_t c32;
+		int i = mbtoxc(&c32, &data[k], n);
 		if (i > 0) {
 		    fprintf(fp, "#%lu\n", c32);
 		    k += i-1;
@@ -2154,127 +2162,72 @@ static void gen_document(cmark_node *document,
  * Preprocessor.
  */
 
-#define NDIGRAPH 1000
+esc_state *esp;
 
-struct dig_ {
-    char ch[2];
-    unsigned short  octidx;
-};
-
-int cmpdig(const void *lhs, const void *rhs)
+const char *prep_cb(const char *arg)
 {
-    const struct dig_ *const ldig = (struct dig_*)lhs;
-    const struct dig_ *const rdig = (struct dig_*)rhs;
-    int d;
+    static octetbuf chars = { 0 };
+    static octetbuf strings = { 0 };
+    static char id[128];
+    size_t n, k;
+    bool isref = strncmp(arg, "ref(", 4) == 0;
+    bool isdef = strncmp(arg, "def(", 4) == 0;
     
-    (d = ldig->ch[0] - rdig->ch[0]) || 
-    (d = ldig->ch[1] - rdig->ch[1]);
-    return d;
-}
-
-struct digraphs_ {
-    size_t          ndig;
-    struct dig_    *dig;
-    char           *octets;
-} digraphs;
-
-#define DIG_FILE "/Projects/Scratch/cmark/cm2doc/doc/digraphs.txt"
-
-size_t read_digraphs(FILE *infp)
-{
-    cmark_strbuf   dig_buf;
-    cmark_strbuf   octets_buf;
-    mbstate_t      mbs;
+    if (!isref && !isdef) return arg;
+    if (strlen(arg) >= sizeof id - 1U) return arg;
     
-    char           ch[2];
-    unsigned long  ucs;
-    size_t         ndig = 0U;
-
-    if ((infp = fopen(DIG_FILE, "r")) == NULL)
-	return 0U;
-	
-    cmark_strbuf_init(&dig_buf,    sizeof(struct dig_)*NDIGRAPH);
-    cmark_strbuf_init(&octets_buf, 2*NDIGRAPH);
-    memset(&mbs, 0, sizeof mbs);
+    strcpy(id, arg += 4);
+    for (k = 0; id[k] != NUL; ++k)
+	if (id[k] == ')')
+	    id[k] = NUL;
     
-    while (fscanf(infp, " %c%c %lx %*[^\n]", ch+0, ch+1, &ucs) == 3) {
-	char32_t       c32;
-	char           u8[MB_LEN_MAX];
-        size_t         nu8;
-        
-	fprintf(stderr, "%c%c\tU+%06lX\n", ch[0], ch[1], ucs);
-	
-	c32 = ucs;
-	nu8 = c32rtomb(u8, c32, &mbs);
-	
-	if (nu8 == (size_t)-1) {
-	    error("Invalid UCS code point: %06lX\n", c32);
-	    c32rtomb(NULL, L'0', &mbs);
-	} else {
-	    unsigned short octidx = octets_buf.size;
-	    struct dig_ dig;
-#ifndef NDEBUG
-	    char32_t u32;
-	    size_t s32 = mbrtoc32(&u32, u8, nu8, NULL);
-	    assert(s32 < MB_LEN_MAX);
-	    assert(u32 == c32);
-#endif
-	    
-	    cmark_strbuf_put(&octets_buf, (unsigned char*)u8, nu8);
-	    dig.ch[0] = ch[0];
-	    dig.ch[1] = ch[1];
-	    dig.octidx = octidx;
-	    cmark_strbuf_put(&dig_buf, (void*)&dig, sizeof dig);
-	}
-	++ndig;
+    n = octetbuf_size(&strings)/sizeof(char *);
+    for (k = 0; k < n; ++k) {
+	const char **pp = octetbuf_elem_at(&strings, k, sizeof *pp);
+	const char *p = *pp;
+	if (strcmp(p, id) == 0)
+	    break;
     }
-    
-    digraphs.ndig   = ndig;
-    digraphs.dig    = (void*)cmark_strbuf_detach(&dig_buf);
-    digraphs.octets = (void*)cmark_strbuf_detach(&octets_buf);
-    qsort(digraphs.dig, ndig, sizeof *digraphs.dig, cmpdig);
-    
-    fclose(infp);
-    
-    return ndig;
-}
-
-size_t expand_digraph(char buf[MB_LEN_MAX], const char ch[2])
-{
-    struct dig_ dig, *pdig;
-    const char *u8;
-    size_t nu8;
-    
-    dig.ch[0] = ch[0];
-    dig.ch[1] = ch[1];
-    
-    pdig = bsearch(&dig, digraphs.dig, sizeof digraphs.dig[0], 
-                   digraphs.ndig, cmpdig);
-                   
-    if (pdig == NULL)
-	return 0U;
-	
-    u8  = digraphs.octets + pdig->octidx;
-    nu8 = u8len(u8, MB_LEN_MAX, NULL);
-    
-    if (0U < nu8 && nu8 <= MB_LEN_MAX) {
-	memcpy(buf, u8, nu8);
-	return nu8;
+    if (k == n) {
+	octetidx_t i = octetbuf_push_s(&chars, id);
+	const char *s = octetbuf_at(&chars, i);
+	octetbuf_push_c(&chars, NUL);
+	octetbuf_push_back(&strings, &s, sizeof s);
     }
-    return 0U;
+    if (isref)
+	snprintf(id, sizeof id, "#ref%002u", (unsigned)k);
+    else
+	snprintf(id, sizeof id,
+	    "<a name=\"ref%03u\" id=\"ref%03u\"></a>",
+	                                      (unsigned)k, (unsigned)k);
+    return id;
 }
 
-size_t preprocess(char buffer[], size_t nbuffer, FILE *infp)
+
+int prep_init(const char *dgrfile)
 {
-    static fbuffer[12*BUFSIZ];
-    static size_t nf = 0U, fpos = 0U;
+    FILE *fp = NULL;
+    
+    if (dgrfile == NULL)
+	dgrfile = getenv("CM2DOC_DIGRAPHS");
 
-    if (nbuffer > sizeof fbuffer) nbuffer = sizeof nbuffer;
-    nf = fread(fbuffer, 1U, nbuffer, infp);
-    if (nf > 0U)
-	memcpy(buffer, fbuffer, nf);
-    return nf;
+    if (dgrfile != NULL && (fp = fopen(dgrfile, "r")) == NULL)
+	error("Can't open \"%s\": %s\n.", dgrfile, strerror(errno));
+	
+    esp = esc_create(fp);
+    fclose(fp);
+    
+    esc_callback(esp, prep_cb);
+    esc_escape(esp, '\\');
+    return 0;
 }
+
+size_t prep(char *p, size_t n, FILE *fp)
+{
+    return esc_fsubst(esp, p, n, fp);
+}
+
+/*====================================================================*/
 
 int parse_cmark(FILE *from, ESIS_Port *to, cmark_option_t options,
                                                      const char *meta[])
@@ -2290,7 +2243,7 @@ int parse_cmark(FILE *from, ESIS_Port *to, cmark_option_t options,
 	parser = cmark_parser_new(options);
     
     if (from != NULL)
-	while ((bytes = preprocess(buffer, sizeof buffer,from)) > 0) {
+	while ((bytes = prep(buffer, sizeof buffer,from)) > 0) {
 	    /*
 	    * Read and parse the input file block by block.
 	    */
@@ -2369,6 +2322,7 @@ int main(int argc, char *argv[])
     const char *username         = "N.N.";
     const char *title_arg        = NULL;
     const char *css_arg          = NULL;
+    const char *dgr_arg          = NULL;
 
     cmark_option_t cmark_options = CMARK_OPT_DEFAULT;
     unsigned       rast_options  = 0U;
@@ -2384,10 +2338,6 @@ int main(int argc, char *argv[])
     time_t now;
     int argi;
     
-#ifndef NDEBUG
-read_digraphs(NULL);
-#endif
-
     meta[0] = NULL;
     
     if ( (username = getenv("LOGNAME"))   != NULL ||
@@ -2422,6 +2372,9 @@ read_digraphs(NULL);
 	} else if ((strcmp(argv[argi], "--css") == 0) ||
 	    (strcmp(argv[argi], "-c") == 0)) {
 		css_arg = argv[++argi];
+	} else if ((strcmp(argv[argi], "--digr") == 0) ||
+	    (strcmp(argv[argi], "-d") == 0)) {
+		dgr_arg = argv[++argi];
 	} else if (strcmp(argv[argi], "--sourcepos") == 0) {
 	    cmark_options |= CMARK_OPT_SOURCEPOS;
 	} else if (strcmp(argv[argi], "--hardbreaks") == 0) {
@@ -2446,6 +2399,8 @@ read_digraphs(NULL);
 	    error("\"%s\": Invalid option.\n", argv[argi]);
 	}
     }
+    
+    prep_init(dgr_arg);
     
     {
 	static const char *const notations[] = {
