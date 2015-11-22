@@ -2173,7 +2173,8 @@ const char *prep_cb(const char *arg)
     bool isref = strncmp(arg, "ref(", 4) == 0;
     bool isdef = strncmp(arg, "def(", 4) == 0;
     
-    if (!isref && !isdef) return arg;
+    if (!isref && !isdef) return NULL;
+
     if (strlen(arg) >= sizeof id - 1U) return arg;
     
     strcpy(id, arg += 4);
@@ -2218,7 +2219,8 @@ int prep_init(const char *dgrfile)
     fclose(fp);
     
     esc_callback(esp, prep_cb);
-    esc_escape(esp, '\\');
+    esc_set_escape(esp, '\\');
+    esc_set_subst(esp,  '$');
     return 0;
 }
 

@@ -82,7 +82,6 @@
 #define ESC_BMP  'u'
 #define ESC_UCS  'U'
 #define ESC_DGR  '^'
-#define ESC_SUB  '$'
 #define ESC_GRPO '{'
 #define ESC_GRPC '}'
 #define ESC_PARO '('
@@ -91,9 +90,10 @@
 #define SEQMAX    64 /* ( "\{1234578" , SEP , NUL ) */
 
 char ESCAPE = '\\';
+char SUBST  =  '$';
 
 static const char INVC[]   = " !\"%&\'()*+,-./:;<=>?^_";
-static const char CMARKC[] = "&<";
+static const char CMARKC[] = "";
 static const char NMSTRT[] = ":_";
 static const char NMCHAR[] = ":_";
 
@@ -150,7 +150,8 @@ struct esc_state_ {
     unsigned        ndgr;
     struct dgr_    *dgrs;
     char           *defs;
-    char            esc;
+    char            escape;
+    char            subst;
     esc_cb          cb;
     
     unsigned        lno;
@@ -161,15 +162,23 @@ struct esc_state_ {
     octetbuf octs_buf; /* = {0}; */
 };
 
-int esc_escape(esc_state *esp, int ch)
+int esc_set_escape(esc_state *esp, int ch)
 {
-    if (NUL < ch && ch < 128)
-	esp->esc = ch;
+    if (NUL < ch && ch < 128 && ch != esp->subst)
+	esp->escape = ch;
     else if (ch != NUL)
 	return EOF;
-    return esp->esc;
+    return esp->escape;
 }
 
+int esc_set_subst(esc_state *esp, int ch)
+{
+    if (NUL < ch && ch < 128 && ch != esp->escape)
+	esp->subst = ch;
+    else if (ch != NUL)
+	return EOF;
+    return esp->subst;
+}
 esc_cb esc_callback(esc_state *esp, esc_cb cb)
 {
     esc_cb oldcb = esp->cb;
@@ -276,6 +285,8 @@ esc_state *esc_create(FILE *infp)
     
     es.nmstart = NMSTRT;
     es.nmchar  = NMCHAR;
+    es.escape  = ESCAPE;
+    es.subst   = SUBST;
     
     if (infp == NULL)
 	goto create;
@@ -283,8 +294,8 @@ esc_state *esc_create(FILE *infp)
     while (readline(esp, infp, ch, cp) != EOF) {
 #if !defined(NDEBUG)
 	/* fprintf(stderr, "%c%c --> U+%06lX\n", ch[0], ch[1], cp); */
-	assert(IS646INV(ch[0]));
-	assert(IS646INV(ch[1]) || ch[1] == NUL);
+	assert(IS646INV(ch[0]) || ch[0] == SP);
+	assert(IS646INV(ch[1]) || ch[1] == SP);
 #endif
 	cp[1] = 0U;
 	esc_define(&es, ch, cp);
@@ -334,15 +345,17 @@ size_t esc_bsubst(esc_state *esp, octetbuf *dst, octetbuf *src)
 {
     const unsigned char *p, *begin, *end;
     enum { 
-	ST_OUTSIDE,   ST_ESCAPE,   ST_BMP,    ST_UCS,	    ST_SUB,
+	ST_OUTSIDE,   ST_ESCAPE,   ST_BMP,    ST_UCS,	    ST_SUBST,
 	ST_SUB_GRP,   ST_SUB_PAR,
-	ST_UNI,       ST_DGR,      ST_CODE,   ST_SUBST,	    ST_INVALID
+	ST_UNI,       ST_DGR0,	   ST_DGR,    ST_CODE,      ST_CALLBACK,
+	ST_INVALID
     } st = ST_OUTSIDE;
     
     char          seq[SEQMAX], u8seq1[U8_LEN_MAX], u8seq2[U8_LEN_MAX];
     unsigned      nseq = 0U, u8nseq1 = 0U, u8nseq2 = 0U;
     char          dgr[2];
-    unsigned      iseq;
+    const char    escape = esp->escape;
+    const char    subst  = esp->subst;
     
     begin = octetbuf_begin(src);
     end   = octetbuf_end(src);
@@ -351,20 +364,21 @@ size_t esc_bsubst(esc_state *esp, octetbuf *dst, octetbuf *src)
 	
 	switch (st) {
 	    case ST_OUTSIDE:
-		if (ch == ESCAPE)
+		if (ch == escape)
 		    st = ST_ESCAPE, seq[nseq++] = ch;
+		else if (ch == subst)
+		    st = ST_SUBST, seq[nseq++] = ch;
 		break;   
 	    case ST_ESCAPE:
 		switch (ch) {
 		    case ESC_BMP:  st = ST_BMP; break;
 		    case ESC_UCS:  st = ST_UCS; break;
-		    case ESC_SUB:  st = ST_SUB; break;
 		    case ESC_GRPO: st = ST_UNI; break;
-		    case ESC_DGR:  st = ST_DGR; break;
+		    case ESC_DGR:  st = ST_DGR0; break;
 		    default:
-			if (ch == ESCAPE)
+			if (ch == escape)
 			    st = ST_OUTSIDE;
-			else if (IS646INV(ch) && !ISCMARK(ch))
+			else if ((IS646INV(ch) || ch == SP) && !ISCMARK(ch))
 			    st = ST_DGR;
 		}
 		if (st == ST_ESCAPE)
@@ -388,35 +402,6 @@ size_t esc_bsubst(esc_state *esp, octetbuf *dst, octetbuf *src)
 		if (nseq == 8)
 		    st = ST_CODE;
 		break;
-	    case ST_SUB:
-		if (seq[nseq-1] == ESC_SUB && ISNMSTRT(esp, ch) ||
-		    seq[nseq-1] != ESC_SUB && ISNMCHAR(esp, ch))
-		    seq[nseq++] = ch;
-		else if (ch == ESC_GRPO && nseq == 2)
-		    st = ST_SUB_GRP;
-		else if (ch == ESC_PARO)
-		    seq[nseq++] = ch, st = ST_SUB_PAR;
-		else if (nseq > 2 && esp->cb != NULL)
-		    st = ST_SUBST;
-		else
-		    st = ST_INVALID;
-		break;
-	    case ST_SUB_GRP:
-		if (ch == ESC_GRPC)
-		    st = ST_SUBST;
-		else if (nseq + 1 >= SEQMAX)
-		    st = ST_INVALID;
-		else 
-		    seq[nseq++] = ch;
-		break;
-	    case ST_SUB_PAR:
-		if (ch == ESC_PARC && nseq < SEQMAX)
-		    seq[nseq++] = ch, st = ST_SUBST;
-		else if (nseq + 1 >= SEQMAX)
-		    st = ST_INVALID;
-		else 
-		    seq[nseq++] = ch;
-		break;
 	    case ST_UNI:
 		if (isxdigit(ch))
 		    seq[nseq++] = ch;
@@ -425,16 +410,50 @@ size_t esc_bsubst(esc_state *esp, octetbuf *dst, octetbuf *src)
 		else if (nseq == 10)
 		    st = ST_INVALID;
 		break;
+	    case ST_SUBST:
+		if (nseq == 1 && ISNMSTRT(esp, ch) ||
+		    nseq  > 1 && ISNMCHAR(esp, ch))
+		    seq[nseq++] = ch;
+		else if (nseq == 1 && ch == subst)
+		    st = ST_OUTSIDE;
+		else if (nseq == 2 && ch == ESC_GRPO)
+		    st = ST_SUB_GRP;
+		else if (nseq > 2 && ch == ESC_PARO)
+		    seq[nseq++] = ch, st = ST_SUB_PAR;
+		else if (nseq > 2 && esp->cb != NULL)
+		    st = ST_CALLBACK;
+		else
+		    st = ST_INVALID;
+		break;
+	    case ST_SUB_GRP:
+		if (ch == ESC_GRPC)
+		    st = ST_CALLBACK;
+		else if (nseq + 1 >= SEQMAX)
+		    st = ST_INVALID;
+		else 
+		    seq[nseq++] = ch;
+		break;
+	    case ST_SUB_PAR:
+		if (ch == ESC_PARC && nseq < SEQMAX)
+		    seq[nseq++] = ch, st = ST_CALLBACK;
+		else if (nseq + 1 >= SEQMAX)
+		    st = ST_INVALID;
+		else 
+		    seq[nseq++] = ch;
+		break;
+	    case ST_DGR0:
+		if (IS646INV(ch) || ch == SP)
+		    seq[nseq++] = ch, st = ST_DGR;
+		else
+		    st = ST_INVALID;
+		break;
 	    case ST_DGR:
-		assert (nseq > 1 && seq[1] != ESC_DGR ||
-		    nseq > 2 && seq[1] == ESC_DGR);
-		seq[nseq] = NUL;
-		if ((iseq = 1U, dgr[0] = seq[iseq++]) == ESC_DGR)
-		    dgr[0] = seq[iseq++];
-		dgr[1] = seq[iseq++];
+		assert (nseq > 2 && seq[1] == ESC_DGR ||
+		        nseq > 1 && seq[1] != ESC_DGR);
+		dgr[0] = seq[nseq-1];
+		dgr[1] = seq[nseq] = NUL;
 
-		assert(IS646INV(dgr[0]));
-		assert(dgr[1] == NUL);
+		assert(IS646INV(dgr[0]) || dgr[0] == SP);
 		u8nseq1 = esc_expand(esp, u8seq1, dgr);
 
 		if (IS646INV(ch)) {
@@ -445,7 +464,7 @@ size_t esc_bsubst(esc_state *esp, octetbuf *dst, octetbuf *src)
 		}
 		st = ST_OUTSIDE;
 		if (u8nseq2 != -1)
-		    octetbuf_push_back(dst, u8seq2, u8nseq2);
+		    ch = NUL, octetbuf_push_back(dst, u8seq2, u8nseq2);
 		else if (u8nseq1 != -1)
 		    octetbuf_push_back(dst, u8seq1, u8nseq1);
 		else
@@ -477,11 +496,12 @@ size_t esc_bsubst(esc_state *esp, octetbuf *dst, octetbuf *src)
 	    else
 		ch = NUL;
 	    octetbuf_extend(dst, -d);
-	} else if (st == ST_SUBST) {
+	} else if (st == ST_CALLBACK) {
 	    const char *sub = NULL;
 	    seq[nseq] = NUL;
 	    assert(nseq >= 2);
-	    if (esp->cb != NULL && seq[2] != NUL) sub = esp->cb(seq+2);
+	    if (esp->cb != NULL && seq[1] != NUL)
+		sub = esp->cb(seq+1);
 	    if (sub != NULL)
 		octetbuf_push_s(dst, sub);
 	    else
@@ -495,7 +515,7 @@ size_t esc_bsubst(esc_state *esp, octetbuf *dst, octetbuf *src)
 	    octetbuf_push_back(dst, seq, nseq);
 	    
 	switch (st) case ST_INVALID: case ST_CODE: 
-	            case ST_SUBST: case ST_OUTSIDE: {
+	            case ST_CALLBACK: case ST_OUTSIDE: {
 	    nseq = 0U;
 	    st = ST_OUTSIDE;
 	    if (ch != NUL)

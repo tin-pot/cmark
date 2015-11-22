@@ -17,7 +17,8 @@ typedef const char *(*esc_cb)(const char *);
 esc_state *esc_create(FILE *);
 void       esc_free(esc_state *);
 
-int     esc_escape(esc_state *, int ch);
+int     esc_set_escape(esc_state *, int ch);
+int     esc_set_subst(esc_state *, int ch);
 
 esc_cb  esc_callback(esc_state *, esc_cb);
 
