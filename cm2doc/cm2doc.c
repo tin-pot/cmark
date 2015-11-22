@@ -218,6 +218,8 @@ char *cmark_strbuf_dup(cmark_strbuf *pbuf)
  */
 #define REPL_DIR_VAR     "REPL_DIR"
 #define REPL_DEFAULT_VAR "REPL_DEFAULT"
+#define DIGRAPH_VAR "DIGRAPHS"
+#define DIGRAPH_PATH "C:\\Projects\\escape\\doc\\digraphs.txt"
 
 /*
  * Optionally make the Git commit ident and the repository URL 
@@ -2210,7 +2212,9 @@ int prep_init(const char *dgrfile)
     FILE *fp = NULL;
     
     if (dgrfile == NULL)
-	dgrfile = getenv("CM2DOC_DIGRAPHS");
+	dgrfile = getenv(DIGRAPH_VAR);
+    if (dgrfile == NULL)
+	dgrfile = DIGRAPH_PATH;
 
     if (dgrfile != NULL && (fp = fopen(dgrfile, "r")) == NULL)
 	error("Can't open \"%s\": %s\n.", dgrfile, strerror(errno));
