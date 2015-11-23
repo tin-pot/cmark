@@ -168,7 +168,7 @@ CommonMark node types:
 <CM.COD-B info notation> 
                     '<PRE><CODE notation="[notation] info="[info]">'
                                   / '</CODE></PRE>'
---
+
 --======= CM.COD =====================================================--
 
 <CM.COD>          '<CODE>'                       / '</CODE>'
