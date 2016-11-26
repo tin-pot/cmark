@@ -4,7 +4,7 @@
 #include <errno.h>
 #include "config.h"
 #include "cmark.h"
-#include "bench.h"
+/*#include "bench.h"*/
 
 extern const char cmark_gitident[];
 extern const char cmark_repourl[];
@@ -211,7 +211,7 @@ int main(int argc, char *argv[]) {
       exit(1);
     }
 
-    start_timer();
+    /*start_timer();*/
     while ((bytes = fread(buffer, 1, sizeof(buffer), fp)) > 0) {
       size_t hbytes = 0U;
       
@@ -226,7 +226,7 @@ int main(int argc, char *argv[]) {
         break;
       }
     }
-    end_timer("processing lines");
+    /*end_timer("processing lines");*/
 
     fclose(fp);
   }
@@ -241,18 +241,18 @@ int main(int argc, char *argv[]) {
     }
   }
 
-  start_timer();
+  /*start_timer();*/
   document = cmark_parser_finish(parser);
-  end_timer("finishing document");
+  /*end_timer("finishing document");*/
   cmark_parser_free(parser);
 
-  start_timer();
+  /*start_timer();*/
   print_document(document, options, css, title, &dc);
-  end_timer("print_document");
+  /*end_timer("print_document");*/
 
-  start_timer();
+  /*start_timer();*/
   cmark_node_free(document);
-  end_timer("free_blocks");
+  /*end_timer("free_blocks");*/
 
   free(files);
 

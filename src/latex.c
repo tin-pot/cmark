@@ -11,6 +11,10 @@
 #include "scanners.h"
 #include "render.h"
 
+#if defined(_MSC_VER) && _MSC_VER <= 1500 /* MSVC 9.0 */
+#define snprintf _snprintf
+#endif
+
 #define OUT(s, wrap, escaping) renderer->out(renderer, s, wrap, escaping)
 #define LIT(s) renderer->out(renderer, s, false, LITERAL)
 #define CR() renderer->cr(renderer)
@@ -155,13 +159,16 @@ static link_type get_link_type(cmark_node *node) {
   char *realurl;
   int realurllen;
   bool isemail = false;
+  const char *url;
+  cmark_chunk url_chunk;
+  const char *title;
 
   if (node->type != CMARK_NODE_LINK) {
     return NO_LINK;
   }
 
-  const char *url = cmark_node_get_url(node);
-  cmark_chunk url_chunk = cmark_chunk_literal(url);
+  url = cmark_node_get_url(node);
+  url_chunk = cmark_chunk_literal(url);
 
   if (url && *url == '#') {
     return INTERNAL_LINK;
@@ -172,7 +179,7 @@ static link_type get_link_type(cmark_node *node) {
     return NO_LINK;
   }
 
-  const char *title = cmark_node_get_title(node);
+  title = cmark_node_get_title(node);
   title_len = strlen(title);
   // if it has a title, we can't treat it as an autolink:
   if (title_len == 0) {

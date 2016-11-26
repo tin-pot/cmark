@@ -9,6 +9,10 @@
 #include "buffer.h"
 #include "houdini.h"
 
+#if defined(_MSC_VER) && _MSC_VER <= 1500 /* MSVC 9.0 */
+#define snprintf _snprintf
+#endif
+
 #define BUFFER_SIZE 100
 
 // Functions to convert cmark_nodes to XML strings.

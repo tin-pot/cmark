@@ -68,7 +68,7 @@ static int S_render_node(cmark_node *node, cmark_event_type ev_type,
       break;
 
     case CMARK_NODE_HEADER:
-      sprintf(buffer, "%d", node->as.header.level);
+      sprintf(buffer, "%d", node->as.heading.level);
       ESIS_Attr(w, "level", buffer, ESIS_NTS);
       ESIS_Start(w, GI[node->type], NULL);
       break;

@@ -10,6 +10,10 @@
 #include "utf8.h"
 #include "render.h"
 
+#if defined(_MSC_VER) && _MSC_VER <= 1500 /* MSVC 9.0 */
+#define snprintf _snprintf
+#endif
+
 #define OUT(s, wrap, escaping) renderer->out(renderer, s, wrap, escaping)
 #define LIT(s) renderer->out(renderer, s, false, LITERAL)
 #define CR() renderer->cr(renderer)
@@ -106,13 +110,13 @@ static int S_render_node(cmark_renderer *renderer, cmark_node *node,
       if (cmark_node_get_list_type(node->parent) == CMARK_BULLET_LIST) {
         LIT("\\[bu] 2");
       } else {
+        char list_number_s[LIST_NUMBER_SIZE];
         list_number = cmark_node_get_list_start(node->parent);
         tmp = node;
         while (tmp->prev) {
           tmp = tmp->prev;
           list_number += 1;
         }
-        char list_number_s[LIST_NUMBER_SIZE];
         snprintf(list_number_s, LIST_NUMBER_SIZE, "\"%d.\" 4", list_number);
         LIT(list_number_s);
       }

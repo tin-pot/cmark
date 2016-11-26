@@ -13,11 +13,14 @@ static const int S_leaf_mask =
     (1 << CMARK_NODE_CODE) | (1 << CMARK_NODE_HTML_INLINE);
 
 cmark_iter *cmark_iter_new(cmark_node *root) {
+  cmark_mem *mem;
+  cmark_iter *iter;
+  
   if (root == NULL) {
     return NULL;
   }
-  cmark_mem *mem = root->content.mem;
-  cmark_iter *iter = (cmark_iter *)mem->calloc(1, sizeof(cmark_iter));
+  mem = root->content.mem;
+  iter = (cmark_iter *)mem->calloc(1, sizeof(cmark_iter));
   iter->mem = mem;
   iter->root = root;
   iter->cur.ev_type = CMARK_EVENT_NONE;
@@ -88,13 +91,16 @@ cmark_event_type cmark_iter_get_event_type(cmark_iter *iter) {
 cmark_node *cmark_iter_get_root(cmark_iter *iter) { return iter->root; }
 
 void cmark_consolidate_text_nodes(cmark_node *root) {
+  cmark_iter *iter;
+  cmark_strbuf buf = { 0, cmark_strbuf__initbuf, 0, 0 };
+  cmark_event_type ev_type;
+  cmark_node *cur, *tmp, *next;
+  
   if (root == NULL) {
     return;
   }
-  cmark_iter *iter = cmark_iter_new(root);
-  cmark_strbuf buf = CMARK_BUF_INIT(iter->mem);
-  cmark_event_type ev_type;
-  cmark_node *cur, *tmp, *next;
+  iter = cmark_iter_new(root);
+  buf.mem = iter->mem;
 
   while ((ev_type = cmark_iter_next(iter)) != CMARK_EVENT_DONE) {
     cur = cmark_iter_get_node(iter);

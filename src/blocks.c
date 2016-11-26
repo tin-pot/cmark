@@ -81,10 +81,12 @@ static cmark_node *make_document(cmark_mem *mem) {
 }
 
 cmark_parser *cmark_parser_new_with_mem(int options, cmark_mem *mem) {
+  cmark_node *document;
   cmark_parser *parser = (cmark_parser *)mem->calloc(1, sizeof(cmark_parser));
+  
   parser->mem = mem;
 
-  cmark_node *document = make_document(mem);
+  document = make_document(mem);
 
   cmark_strbuf_init(mem, &parser->curline, 256);
   cmark_strbuf_init(mem, &parser->linebuf, 0);
@@ -227,6 +229,7 @@ static cmark_node *finalize(cmark_parser *parser, cmark_node *b) {
   cmark_node *item;
   cmark_node *subitem;
   cmark_node *parent;
+  cmark_strbuf *node_content;
 
   parent = b->parent;
   assert(b->flags &
@@ -251,7 +254,7 @@ static cmark_node *finalize(cmark_parser *parser, cmark_node *b) {
     b->end_column = parser->last_line_length;
   }
 
-  cmark_strbuf *node_content = &b->content;
+  node_content = &b->content;
 
   switch (S_type(b)) {
   case CMARK_NODE_PARAGRAPH:
@@ -272,6 +275,7 @@ static cmark_node *finalize(cmark_parser *parser, cmark_node *b) {
       remove_trailing_blank_lines(node_content);
       cmark_strbuf_putc(node_content, '\n');
     } else {
+      cmark_strbuf tmp = { 0, cmark_strbuf__initbuf, 0, 0 };
       // first line of contents becomes info
       for (pos = 0; pos < node_content->size; ++pos) {
         if (S_is_line_end_char(node_content->ptr[pos]))
@@ -279,7 +283,7 @@ static cmark_node *finalize(cmark_parser *parser, cmark_node *b) {
       }
       assert(pos < node_content->size);
 
-      cmark_strbuf tmp = CMARK_BUF_INIT(parser->mem);
+      tmp.mem = parser->mem;
       houdini_unescape_html_f(&tmp, node_content->ptr, pos);
       cmark_strbuf_trim(&tmp);
       cmark_strbuf_unescape(&tmp);
@@ -336,6 +340,8 @@ static cmark_node *finalize(cmark_parser *parser, cmark_node *b) {
 // Add a node as child of another.  Return pointer to child.
 static cmark_node *add_child(cmark_parser *parser, cmark_node *parent,
                              cmark_node_type block_type, int start_column) {
+  cmark_node *child;
+  
   assert(parent);
 
   // if 'parent' isn't the kind of node that can accept this child,
@@ -344,8 +350,7 @@ static cmark_node *add_child(cmark_parser *parser, cmark_node *parent,
     parent = finalize(parser, parent);
   }
 
-  cmark_node *child =
-      make_block(parser->mem, block_type, parser->line_number, start_column);
+  child = make_block(parser->mem, block_type, parser->line_number, start_column);
   child->parent = parent;
 
   if (parent->last_child) {
@@ -795,10 +800,10 @@ static bool parse_html_block_prefix(cmark_parser *parser,
 static cmark_node *check_open_blocks(cmark_parser *parser, cmark_chunk *input,
                                      bool *all_matched) {
   bool should_continue = true;
-  *all_matched = false;
   cmark_node *container = parser->root;
   cmark_node_type cont_type;
 
+  *all_matched = false;
   while (S_last_child_is_open(container)) {
     container = container->last_child;
     cont_type = S_type(container);
@@ -1024,6 +1029,8 @@ static void add_text_to_container(cmark_parser *parser, cmark_node *container,
                                   cmark_node *last_matched_container,
                                   cmark_chunk *input) {
   cmark_node *tmp;
+  cmark_node_type ctype;
+  bool last_line_blank;
   // what remains at parser->offset is a text line.  add the text to the
   // appropriate container.
 
@@ -1036,8 +1043,8 @@ static void add_text_to_container(cmark_parser *parser, cmark_node *container,
   // and we don't count blanks in fenced code for purposes of tight/loose
   // lists or breaking out of lists.  we also don't set last_line_blank
   // on an empty list item.
-  const cmark_node_type ctype = S_type(container);
-  const bool last_line_blank =
+  ctype = S_type(container);
+  last_line_blank =
       (parser->blank && ctype != CMARK_NODE_BLOCK_QUOTE &&
        ctype != CMARK_NODE_HEADING && ctype != CMARK_NODE_THEMATIC_BREAK &&
        !(ctype == CMARK_NODE_CODE_BLOCK && container->as.code.fenced) &&
@@ -1072,9 +1079,10 @@ static void add_text_to_container(cmark_parser *parser, cmark_node *container,
     if (S_type(container) == CMARK_NODE_CODE_BLOCK) {
       add_line(container, input, parser);
     } else if (S_type(container) == CMARK_NODE_HTML_BLOCK) {
+      int matches_end_condition;
+      
       add_line(container, input, parser);
 
-      int matches_end_condition;
       switch (container->as.html_block_type) {
       case 1:
         // </script>, </style>, </pre>

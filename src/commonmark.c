@@ -11,6 +11,10 @@
 #include "scanners.h"
 #include "render.h"
 
+#if defined(_MSC_VER) && _MSC_VER <= 1500 /* MSVC 9.0 */
+#define snprintf _snprintf
+#endif
+
 #define OUT(s, wrap, escaping) renderer->out(renderer, s, wrap, escaping)
 #define LIT(s) renderer->out(renderer, s, false, LITERAL)
 #define CR() renderer->cr(renderer)

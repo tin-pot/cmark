@@ -887,7 +887,7 @@ void repl_Start(ESIS_UserData ud, cmark_node_type nt)
     close_atts(nt);
 
 /* Check if this is in reality a <!NOTATION markup declaration */
-    watch_notation = (nt == NODE_HTML || nt == NODE_INLINE_HTML);
+    watch_notation = (nt == CMARK_NODE_HTML_BLOCK || nt == CMARK_NODE_HTML_INLINE);
 
     if (nt != CMARK_NODE_NONE && (rp = select_rule(nt)) != NULL) {
 	if (rp->repl[0] != NULL) {
@@ -933,7 +933,10 @@ void repl_Cdata(ESIS_UserData ud, const char *cdata, size_t len)
  * the MDO right at the start -- and the "HTML" element is just
  * a *notation declaration* in disguise ... 
  */
-    switch (nt) case NODE_HTML: case NODE_INLINE_HTML: case NODE_MARKUP:
+    switch (nt)
+    case CMARK_NODE_HTML_BLOCK:
+    case CMARK_NODE_HTML_INLINE:
+    case CMARK_NODE_CUSTOM_BLOCK: /* Was NODE_MARKUP */
 	if (watch_notation) {
 	    check_notation(p, len);
 	    watch_notation = false;
@@ -941,7 +944,7 @@ void repl_Cdata(ESIS_UserData ud, const char *cdata, size_t len)
     
     if (!is_cdata) {
         if (!houdini_init) {
-    	    cmark_strbuf_init(&houdini, 1024);
+    	    cmark_strbuf_init(NULL, &houdini, 1024);
     	    houdini_init = 1;
         }
         
@@ -951,8 +954,8 @@ void repl_Cdata(ESIS_UserData ud, const char *cdata, size_t len)
 	
 	for (k = 0U; k < len; ++k)
 	    PUTC(p[k]);
-    } else if (rp != NULL || nt == NODE_HTML ||
-                             nt == NODE_INLINE_HTML) {
+    } else if (rp != NULL || nt == CMARK_NODE_HTML_BLOCK ||
+                             nt == CMARK_NODE_HTML_INLINE) {
 	for (k = 0U; k < len; ++k)
 	    PUTC(p[k]);
     } else {
@@ -1193,13 +1196,13 @@ static int S_render_node_esis(cmark_node *node,
 
   if (entering) {
     switch (node->type) {
-    case NODE_TEXT:
-    case NODE_HTML:
-    case NODE_INLINE_HTML:
-      if (node->type == NODE_HTML || node->type == NODE_INLINE_HTML) {
+    case CMARK_NODE_TEXT:
+    case CMARK_NODE_HTML_BLOCK:
+    case CMARK_NODE_HTML_INLINE:
+      if (node->type == CMARK_NODE_HTML_BLOCK || node->type == CMARK_NODE_HTML_INLINE) {
 	DO_ATTR("type", "HTML", NTS);
 	DO_ATTR("display", 
-	            node->type == NODE_HTML ? "block" : "inline", NTS);
+	            node->type == CMARK_NODE_HTML_BLOCK ? "block" : "inline", NTS);
       }
       DO_START(node->type);
       DO_CDATA(node->as.literal.data, node->as.literal.len);
@@ -1228,7 +1231,7 @@ static int S_render_node_esis(cmark_node *node,
       break;
 
     case NODE_HEADER:
-      sprintf(buffer, "%d", node->as.header.level);
+      sprintf(buffer, "%d", node->as.heading.level);
       DO_ATTR("level", buffer, NTS);
       DO_START(node->type);
       break;
@@ -1971,14 +1974,14 @@ void load_repl_defs(FILE *fp)
     
     COUNT_EOL(EOL); /* Move to start of first line */
     
-    cmark_strbuf_init(&text_buf, 2048U);
+    cmark_strbuf_init(NULL, &text_buf, 2048U);
     cmark_strbuf_putc(&text_buf, NUL); /* NULLIDX is unsused.*/
     
-    cmark_strbuf_init(&attr_buf, ATTSPLEN);
+    cmark_strbuf_init(NULL, &attr_buf, ATTSPLEN);
     cmark_strbuf_putc(&attr_buf, NUL); /* NULLIDX is unsused.*/
     
-    cmark_strbuf_init(&nameidx_buf, ATTCNT * sizeof(nameidx_t));
-    cmark_strbuf_init(&validx_buf,  ATTCNT * sizeof(validx_t));
+    cmark_strbuf_init(NULL, &nameidx_buf, ATTCNT * sizeof(nameidx_t));
+    cmark_strbuf_init(NULL, &validx_buf,  ATTCNT * sizeof(validx_t));
 
     ch = GETC(ch);
     ch = P_repl_defs(ch);
