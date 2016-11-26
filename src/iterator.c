@@ -92,7 +92,7 @@ cmark_node *cmark_iter_get_root(cmark_iter *iter) { return iter->root; }
 
 void cmark_consolidate_text_nodes(cmark_node *root) {
   cmark_iter *iter;
-  cmark_strbuf buf = { 0, cmark_strbuf__initbuf, 0, 0 };
+  cmark_strbuf buf = CMARK_BUF_INIT(NULL);
   cmark_event_type ev_type;
   cmark_node *cur, *tmp, *next;
   

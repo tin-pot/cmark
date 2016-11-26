@@ -452,7 +452,7 @@ static cmark_node *handle_delim(subject *subj, unsigned char c, bool smart) {
 
 // Assumes we have a hyphen at the current position.
 static cmark_node *handle_hyphen(subject *subj, bool smart) {
-  cmark_strbuf buf = { 0, cmark_strbuf__initbuf, 0, 0 };
+  cmark_strbuf buf = CMARK_BUF_INIT(NULL);
   int startpos = subj->pos;
   int en_count = 0;
   int em_count = 0;
@@ -470,7 +470,7 @@ static cmark_node *handle_hyphen(subject *subj, bool smart) {
   }
 
   numhyphens = subj->pos - startpos;
-  buf.mem = subj->mem; /*CMARK_BUF_INIT(subj->mem); */
+  buf.mem = subj->mem;
 
   if (numhyphens % 3 == 0) { // if divisible by 3, use all em dashes
     em_count = numhyphens / 3;

@@ -275,7 +275,7 @@ static cmark_node *finalize(cmark_parser *parser, cmark_node *b) {
       remove_trailing_blank_lines(node_content);
       cmark_strbuf_putc(node_content, '\n');
     } else {
-      cmark_strbuf tmp = { 0, cmark_strbuf__initbuf, 0, 0 };
+      cmark_strbuf tmp = CMARK_BUF_INIT(parser->mem);
       // first line of contents becomes info
       for (pos = 0; pos < node_content->size; ++pos) {
         if (S_is_line_end_char(node_content->ptr[pos]))
@@ -283,7 +283,6 @@ static cmark_node *finalize(cmark_parser *parser, cmark_node *b) {
       }
       assert(pos < node_content->size);
 
-      tmp.mem = parser->mem;
       houdini_unescape_html_f(&tmp, node_content->ptr, pos);
       cmark_strbuf_trim(&tmp);
       cmark_strbuf_unescape(&tmp);

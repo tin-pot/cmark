@@ -105,6 +105,7 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 /*
  * CommonMark library
  */
+#define CMARK_NO_SHORT_NAMES 1
 #include "config.h"
 #include "cmark.h"
 #include "cmark_ctype.h"
@@ -123,6 +124,12 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 void error(const char *msg, ...);
 void syntax_error(const char *msg, ...);
+
+/*
+ * Help cmark's string buffer.
+ */
+
+static cmark_mem stdmem = { calloc, realloc, free };
 
 /*== ESIS API ========================================================*/
 
@@ -339,6 +346,7 @@ static const char* const nodename[NODE_NUM+1] = {
     "CM.LI",
     "CM.COD-B",
     "CM.HTM-B",
+    "CM.CUS-B",
     "CM.PAR",
     "CM.HDR",
     "CM.HR",
@@ -347,6 +355,7 @@ static const char* const nodename[NODE_NUM+1] = {
     "CM.LN-BR",
     "CM.COD",
     "CM.HTM",
+    "CM.CUS",
     "CM.EMPH",
     "CM.STRN",
     "CM.LNK",
@@ -909,7 +918,7 @@ void repl_Start(ESIS_UserData ud, cmark_node_type nt)
 
 void repl_Cdata(ESIS_UserData ud, const char *cdata, size_t len)
 {
-    static cmark_strbuf houdini = { 0 };
+    static cmark_strbuf houdini = CMARK_BUF_INIT(NULL);
     static int          houdini_init = 0;
     
     cmark_node_type     nt = current_nt();
@@ -926,7 +935,7 @@ void repl_Cdata(ESIS_UserData ud, const char *cdata, size_t len)
     p = cdata;
     
     is_cdata = rp == NULL || rp->is_cdata;
-    if (nt == NODE_TEXT && rp == NULL) is_cdata = false;
+    if (nt == CMARK_NODE_TEXT && rp == NULL) is_cdata = false;
     
 /*
  * The *first* CDATA line in a CommonMark "HTML" element would contain
@@ -944,7 +953,7 @@ void repl_Cdata(ESIS_UserData ud, const char *cdata, size_t len)
     
     if (!is_cdata) {
         if (!houdini_init) {
-    	    cmark_strbuf_init(NULL, &houdini, 1024);
+    	    cmark_strbuf_init(&stdmem, &houdini, 1024);
     	    houdini_init = 1;
         }
         
@@ -1209,14 +1218,14 @@ static int S_render_node_esis(cmark_node *node,
       DO_END(node->type);
       break;
 
-    case NODE_LIST:
+    case CMARK_NODE_LIST:
       switch (cmark_node_get_list_type(node)) {
-      case ORDERED_LIST:
+      case CMARK_ORDERED_LIST:
         DO_ATTR("type", "ordered", NTS); 
         sprintf(buffer, "%d", cmark_node_get_list_start(node));
         DO_ATTR("start", buffer, NTS);
         delim = cmark_node_get_list_delim(node);
-        DO_ATTR("delim", (delim == PAREN_DELIM) ?
+        DO_ATTR("delim", (delim == CMARK_PAREN_DELIM) ?
                               "paren" : "period", NTS);
         break;
       case CMARK_BULLET_LIST:
@@ -1230,19 +1239,19 @@ static int S_render_node_esis(cmark_node *node,
       DO_START(node->type);
       break;
 
-    case NODE_HEADER:
+    case CMARK_NODE_HEADING:
       sprintf(buffer, "%d", node->as.heading.level);
       DO_ATTR("level", buffer, NTS);
       DO_START(node->type);
       break;
 
-    case NODE_CODE:
-    case NODE_CODE_BLOCK:
+    case CMARK_NODE_CODE:
+    case CMARK_NODE_CODE_BLOCK:
       {
 	cmark_node_type nt = node->type;
 	const char     *info, *data, *name;
 	size_t          ilen,  dlen,  nmlen = 0U;
-	const bool      is_inline = (nt == NODE_CODE);
+	const bool      is_inline = (nt == CMARK_NODE_CODE);
 	
 	if (is_inline) {
 	    data  = node->as.code.info.data;
@@ -1300,7 +1309,7 @@ static int S_render_node_esis(cmark_node *node,
 		}
 		
 		if (nmlen > 0U && is_notation(name, nmlen)) {
-		    const char *display = (nt == NODE_CODE) ?
+		    const char *display = (nt == CMARK_NODE_CODE) ?
 			"inline" : "block";
 		    nt = NODE_MARKUP;
 		    DO_ATTR("notation", name,    nmlen);
@@ -1321,8 +1330,8 @@ static int S_render_node_esis(cmark_node *node,
       }
       break;
 
-    case NODE_LINK:
-    case NODE_IMAGE:
+    case CMARK_NODE_LINK:
+    case CMARK_NODE_IMAGE:
       DO_ATTR("destination",
 	                 node->as.link.url.data, node->as.link.url.len);
       DO_ATTR("title", node->as.link.title.data,
@@ -1330,14 +1339,14 @@ static int S_render_node_esis(cmark_node *node,
       DO_START(node->type);
       break;
 
-    case NODE_HRULE:
-    case NODE_SOFTBREAK:
-    case NODE_LINEBREAK:
+    case CMARK_NODE_HRULE:
+    case CMARK_NODE_SOFTBREAK:
+    case CMARK_NODE_LINEBREAK:
       DO_START(node->type);
       DO_END(node->type);
       break;
 
-    case NODE_DOCUMENT:
+    case CMARK_NODE_DOCUMENT:
     default:
       DO_START(node->type);
       break;
@@ -1681,10 +1690,8 @@ int P_string(int ch, cmark_strbuf *pbuf, const char lit, int is_repl,
 
 int P_repl_text(int ch, char *repl_text[1], char *lastchrp)
 {
-    static cmark_strbuf repl = { NULL, 0, 0 };
+    static cmark_strbuf repl = CMARK_BUF_INIT(&stdmem);
     unsigned nstrings = 0U;
-    
-    /* cmark_strbuf_init(&repl, 16); */
     
     P_S(ch);
     
@@ -1974,14 +1981,14 @@ void load_repl_defs(FILE *fp)
     
     COUNT_EOL(EOL); /* Move to start of first line */
     
-    cmark_strbuf_init(NULL, &text_buf, 2048U);
+    cmark_strbuf_init(&stdmem, &text_buf, 2048U);
     cmark_strbuf_putc(&text_buf, NUL); /* NULLIDX is unsused.*/
     
-    cmark_strbuf_init(NULL, &attr_buf, ATTSPLEN);
+    cmark_strbuf_init(&stdmem, &attr_buf, ATTSPLEN);
     cmark_strbuf_putc(&attr_buf, NUL); /* NULLIDX is unsused.*/
     
-    cmark_strbuf_init(NULL, &nameidx_buf, ATTCNT * sizeof(nameidx_t));
-    cmark_strbuf_init(NULL, &validx_buf,  ATTCNT * sizeof(validx_t));
+    cmark_strbuf_init(&stdmem, &nameidx_buf, ATTCNT * sizeof(nameidx_t));
+    cmark_strbuf_init(&stdmem, &validx_buf,  ATTCNT * sizeof(validx_t));
 
     ch = GETC(ch);
     ch = P_repl_defs(ch);
