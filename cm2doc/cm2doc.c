@@ -334,7 +334,7 @@ static char default_creator[81] = "N.N.";
 
 /* How many node types there are, and what the name length limit is. */
 #define NODE_NUM       (CMARK_NODE_LAST_INLINE+2)
-#define NODE_MARKUP     CMARK_NODE_LAST_INLINE+1
+#define NODE_MARKUP    (CMARK_NODE_LAST_INLINE+1)
 #define NODENAME_LEN    NAMELEN
 
 static const char* const nodename[NODE_NUM+1] = {
@@ -536,7 +536,7 @@ static const size_t NULLIDX = 0U; /* Common NULL value for indices. */
 /*
  * Attribute names and values of current node(s).
  */
-static cmark_strbuf attr_buf;
+static cmark_strbuf attr_buf = CMARK_BUF_INIT(&stdmem);
 
 /*
  * We "misuse" a `cmark_strbuf` here to store a growing array
@@ -547,8 +547,8 @@ static cmark_strbuf attr_buf;
  * An attribute name index of 0U marks the end of the attribute
  * list (of the currently active node).
  */
-static cmark_strbuf nameidx_buf;
-static cmark_strbuf validx_buf;
+static cmark_strbuf nameidx_buf = CMARK_BUF_INIT(&stdmem);
+static cmark_strbuf validx_buf = CMARK_BUF_INIT(&stdmem);
 #define NATTR ( nameidx_buf.size / sizeof NAMEIDX[0] )
 
 /*
@@ -945,7 +945,7 @@ void repl_Cdata(ESIS_UserData ud, const char *cdata, size_t len)
     switch (nt)
     case CMARK_NODE_HTML_BLOCK:
     case CMARK_NODE_HTML_INLINE:
-    case CMARK_NODE_CUSTOM_BLOCK: /* Was NODE_MARKUP */
+    case NODE_MARKUP:
 	if (watch_notation) {
 	    check_notation(p, len);
 	    watch_notation = false;
@@ -2284,11 +2284,12 @@ int parse_cmark(FILE *from, ESIS_Port *to, cmark_option_t options,
 		in_header = false;
 	    }
 
+	    assert(hbytes <= bytes);
+	    
 	    if (hbytes < bytes)
 		cmark_parser_feed(parser, buffer + hbytes, 
 		                                        bytes - hbytes);
-
-	    if (bytes < sizeof(buffer))
+	    else
 		break;
 	}
     else {
