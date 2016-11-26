@@ -38,8 +38,8 @@ def out(str):
 def print_test_header(headertext, example_number, start_line, end_line):
     out("Example %d (lines %d-%d) %s\n" % (example_number,start_line,end_line,headertext))
 
-def do_test(test, normalize, result_counts):
-    [retcode, actual_html, err] = cmark.to_html(test['markdown'])
+def do_test(converter, test, normalize, result_counts):
+    [retcode, actual_html, err] = converter(test['markdown'])
     if retcode == 0:
         expected_html = test['html']
         unicode_error = None
@@ -87,32 +87,36 @@ def get_tests(specfile):
 
     header_re = re.compile('#+ ')
 
-    with open(specfile, 'r', encoding='utf-8') as specf:
+    with open(specfile, 'r', encoding='utf-8', newline='\n') as specf:
         for line in specf:
             line_number = line_number + 1
-            if state == 0 and re.match(header_re, line):
-                headertext = header_re.sub('', line).strip()
-            if line.strip() == ".":
-                state = (state + 1) % 3
-                if state == 0:
-                    example_number = example_number + 1
-                    end_line = line_number
-                    tests.append({
-                        "markdown":''.join(markdown_lines).replace('→',"\t"),
-                        "html":''.join(html_lines).replace('→',"\t"),
-                        "example": example_number,
-                        "start_line": start_line,
-                        "end_line": end_line,
-                        "section": headertext})
-                    start_line = 0
-                    markdown_lines = []
-                    html_lines = []
+            l = line.strip()
+            if l == "`" * 32 + " example":
+                state = 1
+            elif l == "`" * 32:
+                state = 0
+                example_number = example_number + 1
+                end_line = line_number
+                tests.append({
+                    "markdown":''.join(markdown_lines).replace('→',"\t"),
+                    "html":''.join(html_lines).replace('→',"\t"),
+                    "example": example_number,
+                    "start_line": start_line,
+                    "end_line": end_line,
+                    "section": headertext})
+                start_line = 0
+                markdown_lines = []
+                html_lines = []
+            elif l == ".":
+                state = 2
             elif state == 1:
                 if start_line == 0:
                     start_line = line_number - 1
                 markdown_lines.append(line)
             elif state == 2:
                 html_lines.append(line)
+            elif state == 0 and re.match(header_re, line):
+                headertext = header_re.sub('', line).strip()
     return tests
 
 if __name__ == "__main__":
@@ -131,12 +135,9 @@ if __name__ == "__main__":
         exit(0)
     else:
         skipped = len(all_tests) - len(tests)
-        cmark = CMark(prog=args.program, library_dir=args.library_dir)
+        converter = CMark(prog=args.program, library_dir=args.library_dir).to_html
         result_counts = {'pass': 0, 'fail': 0, 'error': 0, 'skip': skipped}
         for test in tests:
-            do_test(test, args.normalize, result_counts)
+            do_test(converter, test, args.normalize, result_counts)
         out("{pass} passed, {fail} failed, {error} errored, {skip} skipped\n".format(**result_counts))
-        if result_counts['fail'] == 0 and result_counts['error'] == 0:
-            exit(0)
-        else:
-            exit(1)
+        exit(result_counts['fail'] + result_counts['error'])

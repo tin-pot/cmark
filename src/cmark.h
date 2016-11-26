@@ -29,8 +29,9 @@ typedef int cmark_option_t;       /* Current "official" default. */
 #endif
 
 /** Convert 'text' (assumed to be a UTF-8 encoded string with length
- * 'len' from CommonMark Markdown to HTML, returning a null-terminated,
- * UTF-8-encoded string.
+ * 'len') from CommonMark Markdown to HTML, returning a null-terminated,
+ * UTF-8-encoded string. It is the caller's responsibility
+ * to free the returned buffer.
  */
 CMARK_EXPORT
 char *cmark_markdown_to_html(const char *text, size_t len, cmark_option_t options);
@@ -48,20 +49,22 @@ typedef enum {
   CMARK_NODE_LIST,
   CMARK_NODE_ITEM,
   CMARK_NODE_CODE_BLOCK,
-  CMARK_NODE_HTML,
+  CMARK_NODE_HTML_BLOCK,
+  CMARK_NODE_CUSTOM_BLOCK,
   CMARK_NODE_PARAGRAPH,
-  CMARK_NODE_HEADER,
-  CMARK_NODE_HRULE,
+  CMARK_NODE_HEADING,
+  CMARK_NODE_THEMATIC_BREAK,
 
   CMARK_NODE_FIRST_BLOCK = CMARK_NODE_DOCUMENT,
-  CMARK_NODE_LAST_BLOCK = CMARK_NODE_HRULE,
+  CMARK_NODE_LAST_BLOCK = CMARK_NODE_THEMATIC_BREAK,
 
   /* Inline */
   CMARK_NODE_TEXT,
   CMARK_NODE_SOFTBREAK,
   CMARK_NODE_LINEBREAK,
   CMARK_NODE_CODE,
-  CMARK_NODE_INLINE_HTML,
+  CMARK_NODE_HTML_INLINE,
+  CMARK_NODE_CUSTOM_INLINE,
   CMARK_NODE_EMPH,
   CMARK_NODE_STRONG,
   CMARK_NODE_LINK,
@@ -70,6 +73,12 @@ typedef enum {
   CMARK_NODE_FIRST_INLINE = CMARK_NODE_TEXT,
   CMARK_NODE_LAST_INLINE = CMARK_NODE_IMAGE,
 } cmark_node_type;
+
+/* For backwards compatibility: */
+#define CMARK_NODE_HEADER CMARK_NODE_HEADING
+#define CMARK_NODE_HRULE CMARK_NODE_THEMATIC_BREAK
+#define CMARK_NODE_HTML CMARK_NODE_HTML_BLOCK
+#define CMARK_NODE_INLINE_HTML CMARK_NODE_HTML_INLINE
 
 typedef enum {
   CMARK_NO_LIST,
@@ -87,12 +96,18 @@ typedef struct cmark_node cmark_node;
 typedef struct cmark_parser cmark_parser;
 typedef struct cmark_iter cmark_iter;
 
-typedef enum {
-  CMARK_EVENT_NONE,
-  CMARK_EVENT_DONE,
-  CMARK_EVENT_ENTER,
-  CMARK_EVENT_EXIT
-} cmark_event_type;
+/**
+ * ## Custom memory allocator support
+ */
+
+/** Defines the memory allocation functions to be used by CMark
+ * when parsing and allocating a document tree
+ */
+typedef struct cmark_mem {
+  void *(*calloc)(size_t, size_t);
+  void *(*realloc)(void *, size_t);
+  void (*free)(void *);
+} cmark_mem;
 
 /**
  * ## Creating and Destroying Nodes
@@ -104,7 +119,14 @@ typedef enum {
  */
 CMARK_EXPORT cmark_node *cmark_node_new(cmark_node_type type);
 
-/** Frees the memory allocated for a node.
+/** Same as `cmark_node_new`, but explicitly listing the memory
+ * allocator used to allocate the node.  Note:  be sure to use the same
+ * allocator for every node in a tree, or bad things can happen.
+ */
+CMARK_EXPORT cmark_node *cmark_node_new_with_mem(cmark_node_type type,
+                                                 cmark_mem *mem);
+
+/** Frees the memory allocated for a node and any children.
  */
 CMARK_EXPORT void cmark_node_free(cmark_node *node);
 
@@ -148,7 +170,7 @@ CMARK_EXPORT cmark_node *cmark_node_last_child(cmark_node *node);
  * One natural application is an HTML renderer, where an `ENTER` event
  * outputs an open tag and an `EXIT` event outputs a close tag.
  * An iterator might also be used to transform an AST in some systematic
- * way, for example, turning all level-3 headers into regular paragraphs.
+ * way, for example, turning all level-3 headings into regular paragraphs.
  *
  *     void
  *     usage_example(cmark_node *root) {
@@ -166,21 +188,30 @@ CMARK_EXPORT cmark_node *cmark_node_last_child(cmark_node *node);
  * Iterators will never return `EXIT` events for leaf nodes, which are nodes
  * of type:
  *
- * * CMARK_NODE_HTML
- * * CMARK_NODE_HRULE
+ * * CMARK_NODE_HTML_BLOCK
+ * * CMARK_NODE_THEMATIC_BREAK
  * * CMARK_NODE_CODE_BLOCK
  * * CMARK_NODE_TEXT
  * * CMARK_NODE_SOFTBREAK
  * * CMARK_NODE_LINEBREAK
  * * CMARK_NODE_CODE
- * * CMARK_NODE_INLINE_HTML
+ * * CMARK_NODE_HTML_INLINE
  *
  * Nodes must only be modified after an `EXIT` event, or an `ENTER` event for
  * leaf nodes.
  */
 
+typedef enum {
+  CMARK_EVENT_NONE,
+  CMARK_EVENT_DONE,
+  CMARK_EVENT_ENTER,
+  CMARK_EVENT_EXIT
+} cmark_event_type;
+
 /** Creates a new iterator starting at 'root'.  The current node and event
- * type are undefined until `cmark_iter_next` is called for the first time.
+ * type are undefined until 'cmark_iter_next' is called for the first time.
+ * The memory allocated for the iterator should be released using
+ * 'cmark_iter_free' when it is no longer needed.
  */
 CMARK_EXPORT
 cmark_iter *cmark_iter_new(cmark_node *root);
@@ -242,7 +273,8 @@ CMARK_EXPORT cmark_node_type cmark_node_get_type(cmark_node *node);
 CMARK_EXPORT
 const char *cmark_node_get_type_string(cmark_node *node);
 
-/** Returns the string contents of 'node', or NULL if none.
+/** Returns the string contents of 'node', or an empty
+    string if none is set.
  */
 CMARK_EXPORT const char *cmark_node_get_literal(cmark_node *node);
 
@@ -251,13 +283,17 @@ CMARK_EXPORT const char *cmark_node_get_literal(cmark_node *node);
  */
 CMARK_EXPORT int cmark_node_set_literal(cmark_node *node, const char *content);
 
-/** Returns the header level of 'node', or 0 if 'node' is not a header.
+/** Returns the heading level of 'node', or 0 if 'node' is not a heading.
  */
-CMARK_EXPORT int cmark_node_get_header_level(cmark_node *node);
+CMARK_EXPORT int cmark_node_get_heading_level(cmark_node *node);
 
-/** Sets the header level of 'node', returning 1 on success and 0 on error.
+/* For backwards compatibility */
+#define cmark_node_get_header_level cmark_node_get_heading_level
+#define cmark_node_set_header_level cmark_node_set_heading_level
+
+/** Sets the heading level of 'node', returning 1 on success and 0 on error.
  */
-CMARK_EXPORT int cmark_node_set_header_level(cmark_node *node, int level);
+CMARK_EXPORT int cmark_node_set_heading_level(cmark_node *node, int level);
 
 /** Returns the list type of 'node', or `CMARK_NO_LIST` if 'node'
  * is not a list.
@@ -297,7 +333,7 @@ CMARK_EXPORT int cmark_node_get_list_tight(cmark_node *node);
  */
 CMARK_EXPORT int cmark_node_set_list_tight(cmark_node *node, int tight);
 
-/** Returns the info string from a fenced code block, or NULL if none.
+/** Returns the info string from a fenced code block.
  */
 CMARK_EXPORT const char *cmark_node_get_fence_info(cmark_node *node);
 
@@ -306,7 +342,8 @@ CMARK_EXPORT const char *cmark_node_get_fence_info(cmark_node *node);
  */
 CMARK_EXPORT int cmark_node_set_fence_info(cmark_node *node, const char *info);
 
-/** Gets the URL of a link or image 'node', or NULL if none.
+/** Returns the URL of a link or image 'node', or an empty string
+    if no URL is set.
  */
 CMARK_EXPORT const char *cmark_node_get_url(cmark_node *node);
 
@@ -315,7 +352,8 @@ CMARK_EXPORT const char *cmark_node_get_url(cmark_node *node);
  */
 CMARK_EXPORT int cmark_node_set_url(cmark_node *node, const char *url);
 
-/** Gets the title of a link or image 'node', or NULL if none.
+/** Returns the title of a link or image 'node', or an empty
+    string if no title is set.
  */
 CMARK_EXPORT const char *cmark_node_get_title(cmark_node *node);
 
@@ -323,6 +361,29 @@ CMARK_EXPORT const char *cmark_node_get_title(cmark_node *node);
  * 0 on failure.
  */
 CMARK_EXPORT int cmark_node_set_title(cmark_node *node, const char *title);
+
+/** Returns the literal "on enter" text for a custom 'node', or
+    an empty string if no on_enter is set.
+ */
+CMARK_EXPORT const char *cmark_node_get_on_enter(cmark_node *node);
+
+/** Sets the literal text to render "on enter" for a custom 'node'.
+    Any children of the node will be rendered after this text.
+    Returns 1 on success 0 on failure.
+ */
+CMARK_EXPORT int cmark_node_set_on_enter(cmark_node *node,
+                                         const char *on_enter);
+
+/** Returns the literal "on exit" text for a custom 'node', or
+    an empty string if no on_exit is set.
+ */
+CMARK_EXPORT const char *cmark_node_get_on_exit(cmark_node *node);
+
+/** Sets the literal text to render "on exit" for a custom 'node'.
+    Any children of the node will be rendered before this text.
+    Returns 1 on success 0 on failure.
+ */
+CMARK_EXPORT int cmark_node_set_on_exit(cmark_node *node, const char *on_exit);
 
 /** Returns the line on which 'node' begins.
  */
@@ -358,6 +419,12 @@ CMARK_EXPORT int cmark_node_insert_before(cmark_node *node,
  */
 CMARK_EXPORT int cmark_node_insert_after(cmark_node *node, cmark_node *sibling);
 
+/** Replaces 'oldnode' with 'newnode' and unlinks 'oldnode' (but does
+ * not free its memory).
+ * Returns 1 on success, 0 on failure.
+ */
+CMARK_EXPORT int cmark_node_replace(cmark_node *oldnode, cmark_node *newnode);
+
 /** Adds 'child' to the beginning of the children of 'node'.
  * Returns 1 on success, 0 on failure.
  */
@@ -383,7 +450,7 @@ CMARK_EXPORT void cmark_consolidate_text_nodes(cmark_node *root);
  * Streaming interface:
  *
  *     cmark_parser *parser = cmark_parser_new(CMARK_OPT_DEFAULT);
- *     FILE *fp = fopen("myfile.md", "r");
+ *     FILE *fp = fopen("myfile.md", "rb");
  *     while ((bytes = fread(buffer, 1, sizeof(buffer), fp)) > 0) {
  *     	   cmark_parser_feed(parser, buffer, bytes);
  *     	   if (bytes < sizeof(buffer)) {
@@ -398,6 +465,11 @@ CMARK_EXPORT void cmark_consolidate_text_nodes(cmark_node *root);
  */
 CMARK_EXPORT
 cmark_parser *cmark_parser_new(cmark_option_t options);
+
+/** Creates a new parser object with the given memory allocator
+ */
+CMARK_EXPORT
+cmark_parser *cmark_parser_new_with_mem(int options, cmark_mem *mem);
 
 /** Frees memory allocated for a parser object.
  */
@@ -415,13 +487,16 @@ CMARK_EXPORT
 cmark_node *cmark_parser_finish(cmark_parser *parser);
 
 /** Parse a CommonMark document in 'buffer' of length 'len'.
- * Returns a pointer to a tree of nodes.
+ * Returns a pointer to a tree of nodes.  The memory allocated for
+ * the node tree should be released using 'cmark_node_free'
+ * when it is no longer needed.
  */
 CMARK_EXPORT
 cmark_node *cmark_parse_document(const char *buffer, size_t len, cmark_option_t options);
 
 /** Parse a CommonMark document in file 'f', returning a pointer to
- * a tree of nodes.
+ * a tree of nodes.  The memory allocated for the node tree should be
+ * released using 'cmark_node_free' when it is no longer needed.
  */
 CMARK_EXPORT
 cmark_node *cmark_parse_file(FILE *f, cmark_option_t options);
@@ -430,13 +505,15 @@ cmark_node *cmark_parse_file(FILE *f, cmark_option_t options);
  * ## Rendering
  */
 
-/** Render a 'node' tree as XML.
+/** Render a 'node' tree as XML.  It is the caller's responsibility
+ * to free the returned buffer.
  */
 CMARK_EXPORT
 char *cmark_render_xml(cmark_node *root, cmark_option_t options);
 
 /** Render a 'node' tree as an HTML fragment.  It is up to the user
- * to add an appropriate header and footer.
+ * to add an appropriate header and footer. It is the caller's
+ * responsibility to free the returned buffer.
  */
 CMARK_EXPORT
 char *cmark_render_html(cmark_node *root, cmark_option_t options);
@@ -448,44 +525,42 @@ CMARK_EXPORT
 char *cmark_render_xhtml(cmark_node *root, cmark_option_t options);
 
 /** Render a 'node' tree as a groff man page, without the header.
+ * It is the caller's responsibility to free the returned buffer.
  */
 CMARK_EXPORT
 char *cmark_render_man(cmark_node *root, cmark_option_t options, int width);
 
 /** Render a 'node' tree as a commonmark document.
+ * It is the caller's responsibility to free the returned buffer.
  */
 CMARK_EXPORT
 char *cmark_render_commonmark(cmark_node *root, cmark_option_t options, int width);
 
 /** Render a 'node' tree as a LaTeX document.
+ * It is the caller's responsibility to free the returned buffer.
  */
 CMARK_EXPORT
 char *cmark_render_latex(cmark_node *root, cmark_option_t options, int width);
 
-/** Default writer options.
+/**
+ * ## Options
+ */
+
+/** Default options.
  */
 #define CMARK_OPT_DEFAULT 0
 
+/**
+ * ### Options affecting rendering
+ */
+
 /** Include a `data-sourcepos` attribute on all block elements.
  */
-#define CMARK_OPT_SOURCEPOS 1
+#define CMARK_OPT_SOURCEPOS (1 << 1)
 
 /** Render `softbreak` elements as hard line breaks.
  */
-#define CMARK_OPT_HARDBREAKS 2
-
-/** Normalize tree by consolidating adjacent text nodes.
- */
-#define CMARK_OPT_NORMALIZE 4
-
-/** Convert straight quotes to curly, --- to em dashes, -- to en dashes.
- */
-#define CMARK_OPT_SMART 8
-
-/** Validate UTF-8 in the input before parsing, replacing illegal
- * sequences with the replacement character U+FFFD.
- */
-#define CMARK_OPT_VALIDATE_UTF8 16
+#define CMARK_OPT_HARDBREAKS (1 << 2)
 
 /** Suppress raw HTML and unsafe links (`javascript:`, `vbscript:`,
  * `file:`, and `data:`, except for `image/png`, `image/gif`,
@@ -493,7 +568,28 @@ char *cmark_render_latex(cmark_node *root, cmark_option_t options, int width);
  * by a placeholder HTML comment. Unsafe links are replaced by
  * empty strings.
  */
-#define CMARK_OPT_SAFE 32
+#define CMARK_OPT_SAFE (1 << 3)
+
+/** Render `softbreak` elements as spaces.
+ */
+#define CMARK_OPT_NOBREAKS (1 << 4)
+
+/**
+ * ### Options affecting parsing
+ */
+
+/** Normalize tree by consolidating adjacent text nodes.
+ */
+#define CMARK_OPT_NORMALIZE (1 << 8)
+
+/** Validate UTF-8 in the input before parsing, replacing illegal
+ * sequences with the replacement character U+FFFD.
+ */
+#define CMARK_OPT_VALIDATE_UTF8 (1 << 9)
+
+/** Convert straight quotes to curly, --- to em dashes, -- to en dashes.
+ */
+#define CMARK_OPT_SMART (1 << 10)
 
 /** Generate ISO HTML, eg suppress the `start` attribute in `<ol>`.
  * (Added <mh@tin-pot.net> 2015-10-18.)
@@ -514,13 +610,13 @@ char *cmark_render_latex(cmark_node *root, cmark_option_t options, int width);
  * In hexadecimal format, the number 0x010203 represents version 1.2.3.
  */
 CMARK_EXPORT
-int cmark_version();
+int cmark_version(void);
 
 /** The library version string for runtime checks. Also available as
  * macro CMARK_VERSION_STRING for compile time checks.
  */
 CMARK_EXPORT
-const char *cmark_version_string();
+const char *cmark_version_string(void);
 
 /** # AUTHORS
  *
@@ -533,15 +629,19 @@ const char *cmark_version_string();
 #define NODE_LIST CMARK_NODE_LIST
 #define NODE_ITEM CMARK_NODE_ITEM
 #define NODE_CODE_BLOCK CMARK_NODE_CODE_BLOCK
-#define NODE_HTML CMARK_NODE_HTML
+#define NODE_HTML_BLOCK CMARK_NODE_HTML_BLOCK
+#define NODE_CUSTOM_BLOCK CMARK_NODE_CUSTOM_BLOCK
 #define NODE_PARAGRAPH CMARK_NODE_PARAGRAPH
+#define NODE_HEADING CMARK_NODE_HEADING
 #define NODE_HEADER CMARK_NODE_HEADER
+#define NODE_THEMATIC_BREAK CMARK_NODE_THEMATIC_BREAK
 #define NODE_HRULE CMARK_NODE_HRULE
 #define NODE_TEXT CMARK_NODE_TEXT
 #define NODE_SOFTBREAK CMARK_NODE_SOFTBREAK
 #define NODE_LINEBREAK CMARK_NODE_LINEBREAK
 #define NODE_CODE CMARK_NODE_CODE
-#define NODE_INLINE_HTML CMARK_NODE_INLINE_HTML
+#define NODE_HTML_INLINE CMARK_NODE_HTML_INLINE
+#define NODE_CUSTOM_INLINE CMARK_NODE_CUSTOM_INLINE
 #define NODE_EMPH CMARK_NODE_EMPH
 #define NODE_STRONG CMARK_NODE_STRONG
 #define NODE_LINK CMARK_NODE_LINK

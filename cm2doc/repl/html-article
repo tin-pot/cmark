@@ -102,12 +102,32 @@ CommonMark node types:
 
 --======= MARK-UP ====================================================--
 
-<MARKUP> '<MARKUP display="[display]" notation="[notation]">
-<!\[CDATA\[' / ']]></MARKUP>'
+<MARKUP display="inline">
+      '<SPAN class="markup"><!\[CDATA\['
+    / ']]></SPAN>'
+      
+<MARKUP display="block">
+      '<DIV class="markup"><!\[CDATA\['
+    / ']]></DIV>'
+      
+<MARKUP notation display="inline">
+      '<SPAN class="markup [notation]"><!\[CDATA\['
+    / ']]></SPAN>'
+      
+<MARKUP notation display="block">
+      '<DIV class="markup [notation]">'
+    / '</DIV>'
+      
+<MARKUP notation info display="inline">
+      '<SPAN class="markup [notation]" title="[info]"><!\[CDATA\['
+    / ']]></SPAN>'
+      
+<MARKUP notation info display="block">
+      '<DIV class="markup [notation]" title="[info]"><!\[CDATA\['
+    / ']]></DIV>'
 
-<MARKUP notation="Z"> '<MARKUP display="[display]" notation="Z-email">
-<!\[CDATA\[' / ']]></MARKUP>'
-
+<MARKUP notation="HTML" display="inline">
+      - / -
 --===== CM.DOC =======================================================--
 -- CM.DOC - Maps to HTML <BODY> --
 

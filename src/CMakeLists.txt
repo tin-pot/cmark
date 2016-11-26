@@ -1,4 +1,7 @@
-cmake_minimum_required(VERSION 2.8)
+if(${CMAKE_VERSION} VERSION_GREATER "3.3")
+    cmake_policy(SET CMP0063 NEW)
+endif()
+
 set(LIBRARY "libcmark")
 set(STATICLIBRARY "libcmark_static")
 set(HEADERS
@@ -9,7 +12,6 @@ set(HEADERS
   iterator.h
   chunk.h
   references.h
-  bench.h
   utf8.h
   scanners.h
   inlines.h
@@ -47,6 +49,15 @@ set(PROGRAM_SOURCES
   main.c
   )
 
+# We make LIB_INSTALL_DIR configurable rather than
+# hard-coding lib, because on some OSes different locations
+# are used for different architectures (e.g. /usr/lib64 on
+# 64-bit Fedora).
+if(NOT LIB_INSTALL_DIR)
+  set(LIB_INSTALL_DIR "lib" CACHE STRING
+  "Set the installation directory for libraries." FORCE)
+endif(NOT LIB_INSTALL_DIR)
+
 include_directories(. ${CMAKE_CURRENT_BINARY_DIR})
 
 configure_file(${CMAKE_CURRENT_SOURCE_DIR}/cmark_version.h.in
@@ -55,7 +66,7 @@ configure_file(${CMAKE_CURRENT_SOURCE_DIR}/cmark_version.h.in
 configure_file(${CMAKE_CURRENT_SOURCE_DIR}/libcmark.pc.in
   ${CMAKE_CURRENT_BINARY_DIR}/libcmark.pc @ONLY)
 install(FILES ${CMAKE_CURRENT_BINARY_DIR}/libcmark.pc
-  DESTINATION lib/pkgconfig)
+  DESTINATION ${LIB_INSTALL_DIR}/pkgconfig)
 
 include (GenerateExportHeader)
 
@@ -73,7 +84,7 @@ set(CMAKE_LINKER_DEBUG "${CMAKE_LINKER_FLAGS_DEBUG}")
 set(CMAKE_C_FLAGS_PROFILE "${CMAKE_C_FLAGS_RELEASE} -pg")
 set(CMAKE_LINKER_PROFILE "${CMAKE_LINKER_FLAGS_RELEASE} -pg")
 
-if (${CMAKE_MAJOR_VERSION} GREATER 1 AND ${CMAKE_MINOR_VERSION} GREATER 8)
+if (${CMAKE_VERSION} VERSION_GREATER "1.8")
   set(CMAKE_C_VISIBILITY_PRESET hidden)
   set(CMAKE_VISIBILITY_INLINES_HIDDEN 1)
 elseif(CMAKE_COMPILER_IS_GNUCC OR ${CMAKE_C_COMPILER_ID} STREQUAL "Clang")
@@ -117,9 +128,11 @@ endif(MSVC)
 
 set(CMAKE_INSTALL_SYSTEM_RUNTIME_LIBS_NO_WARNINGS ON)
 include (InstallRequiredSystemLibraries)
-install(TARGETS ${PROGRAM} ${LIBRARY}
+install(TARGETS ${PROGRAM} ${LIBRARY} ${STATICLIBRARY}
+  EXPORT cmark
   RUNTIME DESTINATION bin
-  LIBRARY DESTINATION lib
+  LIBRARY DESTINATION ${LIB_INSTALL_DIR}
+  ARCHIVE DESTINATION ${LIB_INSTALL_DIR}
   )
 
 install(FILES
@@ -128,6 +141,8 @@ install(FILES
   ${CMAKE_CURRENT_BINARY_DIR}/cmark_version.h
   DESTINATION include
   )
+
+install(EXPORT cmark DESTINATION ${LIB_INSTALL_DIR}/cmake)
 
 # Feature tests
 include(CheckIncludeFile)
@@ -160,14 +175,10 @@ elseif(CMAKE_COMPILER_IS_GNUCC OR "${CMAKE_CXX_COMPILER_ID}" STREQUAL "Clang")
   set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Wall -Wextra -std=c99 -pedantic")
 endif()
 
-# Compile as C++ under MSVC
-if(MSVC)
+# Compile as C++ under MSVC older than 12.0
+if(MSVC AND MSVC_VERSION LESS 1800)
   set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} /TP")
 endif()
-
-if($ENV{TIMER})
-  set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -DTIMER=1")
-endif($ENV{TIMER})
 
 if(CMAKE_BUILD_TYPE STREQUAL "Ubsan")
   set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -fsanitize=undefined")

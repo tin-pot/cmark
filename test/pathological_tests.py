@@ -43,7 +43,7 @@ pathological = {
                   re.compile("(\[ a_){50000}")),
     "hard link/emph case":
                  ("**x [a*b**c*](d)",
-                  re.compile("\\*\\*x <a href=\"d\">a<em>b</em><em>c</em></a>")),
+                  re.compile("\\*\\*x <a href=\"d\">a<em>b\\*\\*c</em></a>")),
     "nested brackets":
                  (("[" * 50000) + "a" + ("]" * 50000),
                   re.compile("\[{50000}a\]{50000}")),
@@ -52,7 +52,10 @@ pathological = {
                   re.compile("(<blockquote>\n){50000}")),
     "U+0000 in input":
                  ("abc\u0000de\u0000",
-                  re.compile("abc\ufffd?de\ufffd?"))
+                  re.compile("abc\ufffd?de\ufffd?")),
+    "backticks":
+                 ("".join(map(lambda x: ("e" + "`" * x), range(1,10000))),
+                  re.compile("^<p>[e`]*</p>\n$"))
     }
 
 whitespace_re = re.compile('/s+/')

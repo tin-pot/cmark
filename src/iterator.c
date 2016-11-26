@@ -7,22 +7,18 @@
 #include "iterator.h"
 
 static const int S_leaf_mask =
-    (1 << CMARK_NODE_HTML) | (1 << CMARK_NODE_HRULE) |
+    (1 << CMARK_NODE_HTML_BLOCK) | (1 << CMARK_NODE_THEMATIC_BREAK) |
     (1 << CMARK_NODE_CODE_BLOCK) | (1 << CMARK_NODE_TEXT) |
     (1 << CMARK_NODE_SOFTBREAK) | (1 << CMARK_NODE_LINEBREAK) |
-    (1 << CMARK_NODE_CODE) | (1 << CMARK_NODE_INLINE_HTML);
+    (1 << CMARK_NODE_CODE) | (1 << CMARK_NODE_HTML_INLINE);
 
 cmark_iter *cmark_iter_new(cmark_node *root) {
-  cmark_iter *iter;
-
   if (root == NULL) {
     return NULL;
   }
-
-  iter = (cmark_iter *)malloc(sizeof(cmark_iter));
-  if (iter == NULL) {
-    return NULL;
-  }
+  cmark_mem *mem = root->content.mem;
+  cmark_iter *iter = (cmark_iter *)mem->calloc(1, sizeof(cmark_iter));
+  iter->mem = mem;
   iter->root = root;
   iter->cur.ev_type = CMARK_EVENT_NONE;
   iter->cur.node = NULL;
@@ -31,7 +27,7 @@ cmark_iter *cmark_iter_new(cmark_node *root) {
   return iter;
 }
 
-void cmark_iter_free(cmark_iter *iter) { free(iter); }
+void cmark_iter_free(cmark_iter *iter) { iter->mem->free(iter); }
 
 static bool S_is_leaf(cmark_node *node) {
   return ((1 << node->type) & S_leaf_mask) != 0;
@@ -92,8 +88,11 @@ cmark_event_type cmark_iter_get_event_type(cmark_iter *iter) {
 cmark_node *cmark_iter_get_root(cmark_iter *iter) { return iter->root; }
 
 void cmark_consolidate_text_nodes(cmark_node *root) {
+  if (root == NULL) {
+    return;
+  }
   cmark_iter *iter = cmark_iter_new(root);
-  cmark_strbuf buf = GH_BUF_INIT;
+  cmark_strbuf buf = CMARK_BUF_INIT(iter->mem);
   cmark_event_type ev_type;
   cmark_node *cur, *tmp, *next;
 
@@ -111,7 +110,7 @@ void cmark_consolidate_text_nodes(cmark_node *root) {
         cmark_node_free(tmp);
         tmp = next;
       }
-      cmark_chunk_free(&cur->as.literal);
+      cmark_chunk_free(iter->mem, &cur->as.literal);
       cur->as.literal = cmark_chunk_buf_detach(&buf);
     }
   }

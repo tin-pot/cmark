@@ -14,6 +14,7 @@
 #define LIT(s) renderer->out(renderer, s, false, LITERAL)
 #define CR() renderer->cr(renderer)
 #define BLANKLINE() renderer->blankline(renderer)
+#define LIST_NUMBER_SIZE 20
 
 // Functions to convert cmark_nodes to groff man strings.
 static void S_outc(cmark_renderer *renderer, cmark_escaping escape, int32_t c,
@@ -70,10 +71,11 @@ static void S_outc(cmark_renderer *renderer, cmark_escaping escape, int32_t c,
 }
 
 static int S_render_node(cmark_renderer *renderer, cmark_node *node,
-                         cmark_event_type ev_type, cmark_option_t options) {
+                         cmark_event_type ev_type, int options) {
   cmark_node *tmp;
   int list_number;
   bool entering = (ev_type == CMARK_EVENT_ENTER);
+  bool allow_wrap = renderer->width > 0 && !(CMARK_OPT_NOBREAKS & options);
 
   // avoid unused parameter error:
   (void)(options);
@@ -104,15 +106,14 @@ static int S_render_node(cmark_renderer *renderer, cmark_node *node,
       if (cmark_node_get_list_type(node->parent) == CMARK_BULLET_LIST) {
         LIT("\\[bu] 2");
       } else {
-        char list_number_s[20];
-
         list_number = cmark_node_get_list_start(node->parent);
         tmp = node;
         while (tmp->prev) {
           tmp = tmp->prev;
           list_number += 1;
         }
-        sprintf(list_number_s, "\"%d.\" 4", list_number);
+        char list_number_s[LIST_NUMBER_SIZE];
+        snprintf(list_number_s, LIST_NUMBER_SIZE, "\"%d.\" 4", list_number);
         LIT(list_number_s);
       }
       CR();
@@ -121,10 +122,10 @@ static int S_render_node(cmark_renderer *renderer, cmark_node *node,
     }
     break;
 
-  case CMARK_NODE_HEADER:
+  case CMARK_NODE_HEADING:
     if (entering) {
       CR();
-      LIT(cmark_node_get_header_level(node) == 1 ? ".SH" : ".SS");
+      LIT(cmark_node_get_heading_level(node) == 1 ? ".SH" : ".SS");
       CR();
     } else {
       CR();
@@ -140,10 +141,17 @@ static int S_render_node(cmark_renderer *renderer, cmark_node *node,
     CR();
     break;
 
-  case CMARK_NODE_HTML:
+  case CMARK_NODE_HTML_BLOCK:
     break;
 
-  case CMARK_NODE_HRULE:
+  case CMARK_NODE_CUSTOM_BLOCK:
+    CR();
+    OUT(entering ? cmark_node_get_on_enter(node) : cmark_node_get_on_exit(node),
+        false, LITERAL);
+    CR();
+    break;
+
+  case CMARK_NODE_THEMATIC_BREAK:
     CR();
     LIT(".PP\n  *  *  *  *  *");
     CR();
@@ -166,7 +174,7 @@ static int S_render_node(cmark_renderer *renderer, cmark_node *node,
     break;
 
   case CMARK_NODE_TEXT:
-    OUT(cmark_node_get_literal(node), true, NORMAL);
+    OUT(cmark_node_get_literal(node), allow_wrap, NORMAL);
     break;
 
   case CMARK_NODE_LINEBREAK:
@@ -175,20 +183,28 @@ static int S_render_node(cmark_renderer *renderer, cmark_node *node,
     break;
 
   case CMARK_NODE_SOFTBREAK:
-    if (renderer->width == 0) {
+    if (options & CMARK_OPT_HARDBREAKS) {
+      LIT(".PD 0\n.P\n.PD");
+      CR();
+    } else if (renderer->width == 0 && !(CMARK_OPT_NOBREAKS & options)) {
       CR();
     } else {
-      OUT(" ", true, LITERAL);
+      OUT(" ", allow_wrap, LITERAL);
     }
     break;
 
   case CMARK_NODE_CODE:
     LIT("\\f[C]");
-    OUT(cmark_node_get_literal(node), true, NORMAL);
+    OUT(cmark_node_get_literal(node), allow_wrap, NORMAL);
     LIT("\\f[]");
     break;
 
-  case CMARK_NODE_INLINE_HTML:
+  case CMARK_NODE_HTML_INLINE:
+    break;
+
+  case CMARK_NODE_CUSTOM_INLINE:
+    OUT(entering ? cmark_node_get_on_enter(node) : cmark_node_get_on_exit(node),
+        false, LITERAL);
     break;
 
   case CMARK_NODE_STRONG:
@@ -210,7 +226,7 @@ static int S_render_node(cmark_renderer *renderer, cmark_node *node,
   case CMARK_NODE_LINK:
     if (!entering) {
       LIT(" (");
-      OUT(cmark_node_get_url(node), true, URL);
+      OUT(cmark_node_get_url(node), allow_wrap, URL);
       LIT(")");
     }
     break;
@@ -231,6 +247,6 @@ static int S_render_node(cmark_renderer *renderer, cmark_node *node,
   return 1;
 }
 
-char *cmark_render_man(cmark_node *root, cmark_option_t options, int width) {
+char *cmark_render_man(cmark_node *root, int options, int width) {
   return cmark_render(root, options, width, S_outc, S_render_node);
 }
