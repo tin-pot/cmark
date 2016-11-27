@@ -31,6 +31,11 @@ bufsize_t _scan_at(bufsize_t (*scanner)(const unsigned char *), cmark_chunk *c, 
 
   spacechar = [ \t\v\f\r\n];
 
+  nmstart = [A-Za-z_:];
+  nmchar = nmstart | [0-9.-];
+  name = nmstart nmchar*;
+  nmtoken = nmchar+;
+
   reg_char     = [^\\()\x00-\x20];
 
   escaped_char = [\\][!"#$%&'()*+,./:;<=>?@[\\\]^_`{|}~-];
@@ -39,9 +44,9 @@ bufsize_t _scan_at(bufsize_t (*scanner)(const unsigned char *), cmark_chunk *c, 
 
   blocktagname = 'address'|'article'|'aside'|'base'|'basefont'|'blockquote'|'body'|'caption'|'center'|'col'|'colgroup'|'dd'|'details'|'dialog'|'dir'|'div'|'dl'|'dt'|'fieldset'|'figcaption'|'figure'|'footer'|'form'|'frame'|'frameset'|'h1'|'h2'|'h3'|'h4'|'h5'|'h6'|'head'|'header'|'hr'|'html'|'iframe'|'legend'|'li'|'link'|'main'|'menu'|'menuitem'|'meta'|'nav'|'noframes'|'ol'|'optgroup'|'option'|'p'|'param'|'section'|'source'|'title'|'summary'|'table'|'tbody'|'td'|'tfoot'|'th'|'thead'|'title'|'tr'|'track'|'ul';
 
-  attributename = [a-zA-Z_:][a-zA-Z0-9:._-]*;
+  attributename = name;
 
-  unquotedvalue = [a-zA-Z0-9:._-]+;
+  unquotedvalue = nmtoken;
   singlequotedvalue = ['][^'\x00]*['];
   doublequotedvalue = [\"][^\"\x00]*[\"];
 
@@ -49,7 +54,7 @@ bufsize_t _scan_at(bufsize_t (*scanner)(const unsigned char *), cmark_chunk *c, 
 
   attributevaluespec = spacechar* [=] spacechar* attributevalue;
 
-  attribute = spacechar+ attributename attributevaluespec?;
+  attribute = spacechar+ (attributename attributevaluespec? | nmtoken);
 
   opentag = ">" | tagname attribute* spacechar* ([/]? ">" | "/");
   closetag = "/>" | [/] tagname spacechar* [>];
