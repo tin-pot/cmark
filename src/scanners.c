@@ -26061,6 +26061,7 @@ yy703:
 	case 0: 	goto yy695;
 	case 1: 	goto yy698;
 	}
+	return 0; /* Make lint/cc happy */
 }
 #line 194 "scanners.re"
 
