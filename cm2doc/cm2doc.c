@@ -424,18 +424,9 @@ static const char *rn_repl[RN_NUM]; /* Replacement texts for RNs. */
 
 #define MSSCHAR      '\\'          /* Markup-scan-suppress character. */
 
-#define LIT          "\""
-#define LITA         "\'"
+#define LIT          '\"'
+#define LITA         '\''
 
-#define STAGO        "<"
-#define ETAGO        "</"
-#define TAGC         ">"
-#define PLUS         "+"
-#define COM          "--"
-#define RNI          "#"
-#define VI           "="        
-#define DSO          "["
-#define DSC          "]"
 
 #define ISDIGIT(C)   ( '0' <= (C) && (C) <= '9' )
 #define ISHEX(C)     ( ISDIGIT(C) || \
@@ -749,7 +740,7 @@ const char *put_subst(const char *p)
     } else
 	error("Undefined attribute '%s'\n", name);
     
-    return p+1U;
+    return p;
 }
 
 void put_repl(const char *repl)
@@ -1549,11 +1540,12 @@ do {									\
  * An _attribute substitution_ in the _replacement text_ gets encoded
  * like this:
  *
- *     attrib subst = "[" , [ prefix ] , nmstart , { nmchar } , "]" ;
+ *     attrib subst = "${" , [ prefix ] , nmstart , { nmchar } , "}"
+ *                  | "$"  , [ prefix ] , nmstart , { nmchar } ;
  *
  *     encoded form:  SO ,  precode   ,  char   , {  char  } ,  NUL , SI 
  *
- * The (optional) prefix character "." or **Digit** is encoded like
+ * The (optional) prefix character ":" or **Digit** is encoded like
  * this (using SP for "no prefix"):
  *
  *     prefix  precode
@@ -1579,14 +1571,19 @@ do {									\
 int P_attr_subst(int ch, cmark_strbuf *pbuf, const char lit)
 {
     int code = 0;
+    int brace = 0;
        
-    assert(ch == '[');
+    assert(ch == '$');
     ch = GETC(ch);
+    if (ch == '{') {
+        brace = ch;
+        ch = GETC(ch);
+    }
     
     if (ISNMSTART(ch))
 	code = SP;
-    else if (ISDIGIT(ch) || ch == '.') {
-	static const char in_ [] = ".0123456789";
+    else if (ISDIGIT(ch) || ch == ':') {
+	static const char in_ [] = ":0123456789";
 	static const char out_[] = "\xFF\0x01\0x02\0x03\0x04\0x05"
 	                               "\0x06\0x07\0x08\0x09\0x0A";
 	ptrdiff_t idx = strchr(in_, ch) - in_;
@@ -1594,7 +1591,7 @@ int P_attr_subst(int ch, cmark_strbuf *pbuf, const char lit)
 	code = out_[idx];
 	ch = GETC(ch);
     } else {
-	syntax_error("Expected NMSTART or '.' or Digit, got '%c'\n",
+	syntax_error("Expected NMSTART or ':' or Digit, got '%c'\n",
 	                                                            ch);
 	return ch;
     }
@@ -1609,21 +1606,39 @@ int P_attr_subst(int ch, cmark_strbuf *pbuf, const char lit)
         ch = GETC(ch);
     }
     
-    while (ch != EOF && ch != DSC[0]) {
+    while (ch != EOF) {
 	if (ISNMCHAR(ch)) {
 	    cmark_strbuf_putc(pbuf, ch);
-	} else if (ch == lit) { /* Hit the string delimiter! */
-	    syntax_error("Unclosed attribute reference "
-		"(missing '" DSC "').\n");
+	} else if (ch == lit) {
+	    if (brace) { /* Hit the string delimiter! */
+	        syntax_error("Unclosed attribute reference "
+			"(missing '}').\n");
+	    }
 	    break;
 	} else if (ISSPACE(ch)) {
-	    syntax_error("SPACE in attribute name discarded.\n");
+	    if (brace) {
+                syntax_error("SPACE in attribute name discarded.\n");
+            } else {
+                break;
+            }
 	} else if (ch == MSSCHAR) {
-	    syntax_error("You can't use '%c' in attribute names.\n", ch);
-	} else {
+	    if (brace) {
+	        syntax_error("You can't use '%c' in attribute names.\n", ch);
+            } else {
+                break;
+            }
+	} else if (brace && ch == '}') {
+	    break;
+        } else if (brace) {
 	    syntax_error("Expected NMCHAR, got '%c'.\n", ch);
-	}
+	    break;
+	} else {
+	    break;
+        }
 	ch = GETC(ch);
+    }
+    if (brace && ch == '}') {
+        ch = GETC(ch);
     }
     
     /*
@@ -1636,19 +1651,19 @@ int P_attr_subst(int ch, cmark_strbuf *pbuf, const char lit)
     return ch;
 }
 
-#define P_repl_string(CH, P, L, LCP)  P_string((CH), (P), (L), 1, LCP)
-#define P_attr_val_lit(CH, P, L)  P_string((CH), (P), (L), 0, NULL)
+#define P_repl_string(CH, P, D, LCP)  P_string((CH), (P), (D), 1, LCP)
+#define P_attr_val_lit(CH, P, D)  P_string((CH), (P), (D), 0, NULL)
 
-int P_string(int ch, cmark_strbuf *pbuf, const char lit, int is_repl,
-                                                         char *lastchrp)
+int P_string(int ch, cmark_strbuf *pbuf, char delim, int is_repl,
+                                                   char *lastchrp)
 {
     char last = NUL;
     
-    assert(ch == lit);
-    assert(ch == '"' || ch == '\'');
-    
-    ch = GETC(ch);
-    while (ch != lit && (last = ch) != NUL) {
+    if (ch == '"' || ch == '\'') {
+        assert(delim == ch);
+        ch = GETC(ch);
+    }
+    while (ch != delim && (last = ch) != NUL) {
 	if (ch == MSSCHAR) {
 	
 	    switch (ch = GETC(ch)) {
@@ -1657,18 +1672,20 @@ int P_string(int ch, cmark_strbuf *pbuf, const char lit, int is_repl,
 	    case  'r': ch = '\r';  break;
 	    case  's': ch =  SP ;  break;
 	    case  't': ch = '\t';  break;
-	    case  '[': ch = '[' ;  break;
-	    case '\"': ch = '\"' ; break;
-	    case '\'': ch = '\'' ; break;
+	    case  '$': ch = '$' ;  break;
+	    case  '{': ch = '{' ;  break;
+	    case  '}': ch = '}' ;  break;
+	    case  LIT: ch = LIT ; break;
+	    case LITA: ch = LITA ; break;
 	    default:   cmark_strbuf_putc(pbuf, MSSCHAR);
 	    }
 	    if (ch != EOF)
 		cmark_strbuf_putc(pbuf, ch);
 	    last = ch, ch = GETC(ch);
 	    
-	} else if (ch == DSO[0] && is_repl) {
+	} else if (ch == '$' && is_repl) {
 	
-	    ch = P_attr_subst(ch, pbuf, lit);
+	    ch = P_attr_subst(ch, pbuf, delim);
 	    
 	} else if (ch == EOL) {
 	    cmark_strbuf_putc(pbuf, ch);
@@ -1681,7 +1698,7 @@ int P_string(int ch, cmark_strbuf *pbuf, const char lit, int is_repl,
     if (!is_repl)
 	cmark_strbuf_putc(pbuf, NUL);
     
-    assert(ch == lit);
+    assert(ch == delim);
     if (lastchrp != NULL) *lastchrp = last;
     ch = GETC(ch);
     return ch;
@@ -1695,7 +1712,7 @@ int P_repl_text(int ch, char *repl_text[1], char *lastchrp)
     
     P_S(ch);
     
-    if (ch == PLUS[0]) {
+    if (ch == '+') {
         cmark_strbuf_putc(&repl, VT);
         ch = GETC(ch);
     }
@@ -1704,10 +1721,8 @@ int P_repl_text(int ch, char *repl_text[1], char *lastchrp)
 
 	P_S(ch);
 	
-	if (ch == LIT[0])
-	    ch = P_repl_string(ch, &repl, LIT[0], lastchrp);
-	else if (ch == LITA[0])
-	    ch = P_repl_string(ch, &repl, LITA[0], lastchrp);
+	if (ch == LIT || ch == LITA || ch == '{')
+	    ch = P_repl_string(ch, &repl, (ch == '{') ? '}' : ch, lastchrp);
 	else
 	    break;
 	++nstrings;
@@ -1715,7 +1730,7 @@ int P_repl_text(int ch, char *repl_text[1], char *lastchrp)
     
     P_S(ch);
     
-    if (ch == PLUS[0]) {
+    if (ch == '+') {
         cmark_strbuf_putc(&repl, VT);
         ch = GETC(ch);
     }
@@ -1807,7 +1822,7 @@ int P_rni_name(int ch, enum rn_ *prn, char name[NAMELEN+1])
     char *p = name;
     enum rn_ rn;
  
-    assert(ch == RNI[0]);
+    assert(ch == '@');
     
     ch = GETC(ch);
     ch = P_name(ch, NULL, name, 1);
@@ -1832,40 +1847,45 @@ int P_rni_name(int ch, enum rn_ *prn, char name[NAMELEN+1])
     return ch;
 }
 
-int P_tag(int ch, struct taginfo_ taginfo[1])
+int P_sel(int ch, struct taginfo_ taginfo[1])
 {
     char name[NAMELEN+1];
     cmark_node_type nt;
     const int fold = 1;
     unsigned nattr = 0U;
-    int is_etag = 0;
     
-    assert(ch == STAGO[0]);
+    assert(ISNMSTART(ch));
     
-    ch = GETC(ch);
-    if (ch == '/') {
-	is_etag = 1;
-	ch = GETC(ch);
-    } 
-	
     ch = P_name(ch, &nt, name, fold);
     taginfo->nt = nt;
     
-    P_S(ch);
-    while (ch != TAGC[0]) {
+    while (ch == '[') {
 	bufsize_t name_idx = 0, val_idx = 0;
 	
+	ch = GETC(ch);
+        P_S(ch);
 	ch = P_name(ch, NULL, name, 0);
 	P_S(ch);
-	if (ch == VI[0]) {
+	if (ch == '=') {
 	    ch = GETC(ch);
 	    P_S(ch);
-	    if (ch == LIT[0] || ch == LITA[0]) {
+	    if (ch == LIT || ch == LITA) {
 		val_idx = text_buf.size;
 		ch = P_attr_val_lit(ch, &text_buf, ch);
-	    }   
+	    } else if (ISNMSTART(ch)) {
+	        char val[NAMELEN+1];
+	        ch = P_name(ch, NULL, val, 0);
+	        val_idx = text_buf.size;
+	        cmark_strbuf_puts(&text_buf, val);
+	    } else {
+                syntax_error("Expected name or string, got '%c'\n", ch);
+	    }
+	    P_S(ch);
 	}
-	P_S(ch);
+	if (ch != ']') {
+            syntax_error("Expected ']', got '%c'\n", ch);
+	}
+	ch = GETC(ch);
 	
 	name_idx = text_buf.size;
 	cmark_strbuf_puts(&text_buf, name);
@@ -1876,22 +1896,22 @@ int P_tag(int ch, struct taginfo_ taginfo[1])
     }
     taginfo->atts[2*nattr+0] = NULLIDX;
     
-    if (ch != TAGC[0])
-	syntax_error("Expected \'%c\'.\n", TAGC[0]);
-    else
-	ch = GETC(ch);
     return ch;
 }
 
-int P_tag_rule(int ch)
+int P_sel_rule(int ch)
 {
     struct taginfo_ taginfo[1];
     char *repl_texts[2];
     char lastch;
 
-    assert(ch == STAGO[0]);
+    if (!ISNMSTART(ch)) {
+        syntax_error("Expected name, got '%c'\n", ch);
+        ch = GETC(ch);
+        return ch;
+    }
 
-    ch = P_tag(ch, taginfo);
+    ch = P_sel(ch, taginfo);
     P_S(ch);
     ch = P_repl_text_pair(ch, repl_texts, &lastch);
 
@@ -1906,7 +1926,7 @@ int P_rn_rule(int ch)
     char *repl_text[1];
     enum rn_ rn;
     
-    assert(ch == RNI[0]);
+    assert(ch == '@');
     
     ch = P_rni_name(ch, &rn, name);
     
@@ -1917,25 +1937,19 @@ int P_rn_rule(int ch)
 
 int P_comment(int ch, const char lit)
 {
-    assert(ch == '%' || ch == '-');
-    assert(lit == EOL || lit == '-'); /* TODO "--" vs EOL */
-    assert(ch == '%' || ch == lit);
+    assert(ch == '/' && lit == '*');
        
-    if (ch == '-') {
-	ch = GETC(ch);
-	assert(ch == '-');
-    }
+    ch = GETC(ch);
+    assert(ch == '*');
     
     while ((ch = GETC(ch)) != EOF)
-	if (ch == lit) {
-	    if (lit == '-' && PEEK() == '-') {
-		ch = GETC(ch);
-		break;
-	    } else if (lit == EOL)
-		break;
+	if (ch == '*' && PEEK() == '/') {
+	    break;
 	}
 
-    assert(ch == lit || ch == EOF);
+    assert(ch == '*' || ch == EOF);
+    ch = GETC(ch);
+    assert(ch == '/' || ch == EOF);
     ch = GETC(ch);
 	    
     return ch;
@@ -1949,18 +1963,12 @@ int P_repl_defs(int ch)
 	if (ch == EOF)
 	    break;
 
-	if (ch == STAGO[0])
-	    ch = P_tag_rule(ch);
-	else if (ch == RNI[0])
+	if (ch == '@')
 	    ch = P_rn_rule(ch);
-	else if (ch == '%')
-	    ch = P_comment(ch, '\n');
-	else if (ch == '-' && PEEK() == '-')
-	    ch = P_comment(ch, '-');
-	else {
-	    syntax_error("Unexpected character \'%c\'.\n", ch);
-	    ch = GETC(ch);
-	}
+	else if (ch == '/' && PEEK() == '*')
+	    ch = P_comment(ch, '*');
+	else
+	    ch = P_sel_rule(ch);
     }
     return ch;
 }
