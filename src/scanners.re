@@ -41,7 +41,7 @@ bufsize_t _scan_at(bufsize_t (*scanner)(const unsigned char *), cmark_chunk *c, 
 
   attributename = [a-zA-Z_:][a-zA-Z0-9:._-]*;
 
-  unquotedvalue = [^\"'=<>`\x00]+;
+  unquotedvalue = [a-zA-Z0-9:._-]+;
   singlequotedvalue = ['][^'\x00]*['];
   doublequotedvalue = [\"][^\"\x00]*[\"];
 
@@ -51,8 +51,8 @@ bufsize_t _scan_at(bufsize_t (*scanner)(const unsigned char *), cmark_chunk *c, 
 
   attribute = spacechar+ attributename attributevaluespec?;
 
-  opentag = tagname attribute* spacechar* [/]? [>];
-  closetag = [/] tagname spacechar* [>];
+  opentag = ">" | tagname attribute* spacechar* ([/]? ">" | "/");
+  closetag = "/>" | [/] tagname spacechar* [>];
 
   htmlcomment = "!---->" | ("!--" ([-]? [^\x00>-]) ([-]? [^\x00-])* "-->");
 

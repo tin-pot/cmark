@@ -957,7 +957,7 @@ void repl_Cdata(ESIS_UserData ud, const char *cdata, size_t len)
     	    houdini_init = 1;
         }
         
-	houdini_escape_html(&houdini, (uint8_t*)cdata, len);
+	houdini_escape_html0(&houdini, (uint8_t*)cdata, len, 0);
 	p   = cmark_strbuf_cstr(&houdini);
 	len = cmark_strbuf_len(&houdini);
 	
