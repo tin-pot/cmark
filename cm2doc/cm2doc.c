@@ -1,52 +1,90 @@
 /*== cm2doc.c =========================================================*
 
 NAME
-    cm2doc -
-	    .
-            .
+    cm2doc - CommonMark to document processor
 
 SYNOPSIS
-    cm2doc [ cmark-opts ] [(--title | -t) string] [(--css | -c) url]
-           [ --rast | { ( --repl | -r ) replfile } ] file ...
+    cm2doc [ --version ] [ -h | --help ]
+           [ --rast | { ( --repl | -r ) replfile } ]
+           [ (--title | -t) string]
+           [ (--css | -c) url]
+           [ --sourcepos ] [ --hardbreaks ] [ --smart ] [ --safe ]
+           [ --normalize ] [ --validate-utf8 ]
+           file ...
 
 DESCRIPTION
-	...
-	...
-	...
-
-	 1. ...
-
-	 2. ...
-	    ...
-
+	A CommonMark parser based on `cmark` which produces output
+	documents controlled by "replacement files".
 
 OPTIONS
+    --version
+        Displays `cmark` version and copyright information and exits.
+        
+    --help
+    -h
+	Displays `cm2doc` usage information and diplays which 
+	environment variables are accessed.
+    
     --rast
-	...
-
+    --rasta
+        Produces RAST output. This precludes all use of "replacement
+        files". The `--rasta` option also outputs the internal root 
+        element which contains the document element.
+        
+    --digr
+    -d
+	Specifies a "digraph file" for use in preprocessing.
+	
     --repl
     -r
+	Specifies a "replacement file" to use. If this option occurs
+	multiple time, the corresponding "replacements files" are
+	read and processed as if concatenated in this order.
+
 
     --title
     -t
-	...
+	Specifies a document title (`DC.title`); this overrides 
+	the title given in an input file metadata bock, if there is
+	one.
 
     --css
     -c
-	...
+	Specifies a CSS style file (`CM.css`).
 
-EXIT STATUS
-	...
-	...
-
+    --sourcepos
+        Includes source position information in CommonMark elements.
+        
+    --hardbreaks
+        Treats line breaks in input as "hard" line breaks.
+        
+    --smart
+        Uses smart punctuation for quotation marks, dashes, and 
+        ellipsis.
+        
+    --safe
+        Suppresses rendering of raw HTML.
+        
+    --normalize
+        Joins adjacent text nodes in the generated element structure.
+        
+    --validate-utf8
+        Checks and sanitizes UTF-8 encoding of input files.
+        
 ENVIRONMENT
-	XXX	...
-		...
-
+    DIGRAPHS
+        Names the default "digraph file".
+    REPL_DIR
+        Names the directory where "replacement files" (given through
+        the option `-r` or the `REPL_DEFAULT` variable) are searched.
+        
+    REPL_DEFAULT
+        Names the "replacement file" to use if no `-r` option was
+        given.
+        
 BUGS
-	...
-	...
-	...
+    Certainly many. Please report bugs and issues on the GitHub
+    page for this project, <https://github.com/tin-pot/cmark>.
 
 
 ------------------------------------------------------------------------
@@ -225,8 +263,8 @@ char *cmark_strbuf_dup(cmark_strbuf *pbuf)
  */
 #define REPL_DIR_VAR     "REPL_DIR"
 #define REPL_DEFAULT_VAR "REPL_DEFAULT"
-#define DIGRAPH_VAR "DIGRAPHS"
-#define DIGRAPH_PATH "C:\\Projects\\escape\\doc\\digraphs.txt"
+#define DIGRAPH_VAR      "DIGRAPHS"
+#define DIGRAPH_PATH     "C:\\Projects\\escape\\doc\\digraphs.txt"
 
 /*
  * Optionally make the Git commit ident and the repository URL 
@@ -247,7 +285,7 @@ static const char cmark_repourl[]  = "https://github.com/tin-pot/cmark";
 
 /*
  * Predefined "pseudo-attribute" names, usable in the "replacement" text
- * for #PROLOG (and for the document element), eg to set <META> ele-
+ * for @prolog (and for the document element), eg to set <META> ele-
  * ments in an HTML <HEAD>.
  *
  * At compile time, these names are accessible through META_... macros.
@@ -271,11 +309,12 @@ static const char cmark_repourl[]  = "https://github.com/tin-pot/cmark";
  *     % foo-val: Foo value
  *     % bar.val: Bar value
  *
- * *but* you can't use COLON ":" **in** the attribute name for obvious
+ * *but* you can't use COLON ":" **in** these attribute name for obvious
  * reasons. (Maybe ending the attribute name at (the first) COLON
  * followed by SPACE would be a more reasonable approach ...).
  */
- /*TODO: Colon in meta attribute names `% bar:val: Bar value` */
+ 
+ /* TODO: Colon in meta attribute names `% bar:val: Bar value` */
  
 #define META_DC_TITLE   "DC.title"
 #define META_DC_CREATOR "DC.creator"
@@ -2061,6 +2100,7 @@ FILE *open_repl_file(const char *repl_filename, FILE *verbose)
     FILE *fp;
     bool is_rel;
     
+    
     if (repl_dir == NULL)     repl_dir = getenv(REPL_DIR_VAR);
     if (repl_default == NULL) repl_default = getenv(REPL_DEFAULT_VAR);
     
@@ -2322,6 +2362,8 @@ int parse_cmark(FILE *from, ESIS_Port *to, cmark_option_t options,
 
 void usage()
 {
+    const char *dgrfile = getenv(DIGRAPH_VAR);
+    
     printf("Usage:   cm2doc [FILE*]\n\n");
     printf("Options:\n");
     printf("  -t --title TITLE Set the document title\n");
@@ -2337,6 +2379,16 @@ void usage()
     printf("  --help, -h       Print usage information\n");
     printf("  --version        Print version\n");
     
+    printf("\nDigraph file:\n\n");
+    printf("%s =\n\t\"%s\"\n", DIGRAPH_VAR,
+		(dgrfile != NULL) ? dgrfile : "<not set>");
+    if (dgrfile != NULL) {
+        FILE *fp = fopen(dgrfile, "r");
+        
+        printf("\nTrying \"%s\" ... %s.\n", dgrfile,
+                (fp != NULL) ? (fclose(fp), "ok") : "failed");
+    }
+
     printf("\nReplacement files:\n");
     open_repl_file(NULL, stdout);
 }
@@ -2375,11 +2427,10 @@ int main(int argc, char *argv[])
 	    
     for (argi = 1; argi < argc && argv[argi][0] == '-'; ++argi) {
 	if (strcmp(argv[argi], "--version") == 0) {
-	    printf("cmark %s", CMARK_VERSION_STRING
-		" ( %s %s )\n",
-		cmark_repourl, cmark_gitident);
-	    printf(" - CommonMark converter\n"
-	                            "(C) 2014, 2015 John MacFarlane\n");
+	    printf("cmark %s", CMARK_VERSION_STRING);
+	    printf(" ( %s %s )\n", cmark_repourl, cmark_gitident);
+	    printf(" cmark:  (C) 2014, 2015 John MacFarlane\n");
+	    printf(" cm2doc: (C) 2016 M. Hofmann\n");
 	    exit(EXIT_SUCCESS);
 	} else if ((strcmp(argv[argi], "--repl") == 0) ||
 	    (strcmp(argv[argi], "-r") == 0)) {
