@@ -478,21 +478,27 @@ static const char *rn_repl[RN_NUM]; /* Replacement texts for RNs. */
 /*
  * NOTATION_DELIM is (currently pre-defined to be) 
  *
- *     U+00B4 ACUTE ACCENT (decimal 180)
+ *     U+007C VERTICAL BAR (decimal 124) `|`
  *
  * It is used to put an "info string" into an *inline* code span
  * like this:
  *
- *     dolor sit amet, `ZÂ´x %e %N` consectetuer adipiscing elit. 
- *
- * The ACUTE ACCENT was chosen to match the GRAVE ACCENT, as the
- * "backtick" is officially called, and to make for a relatively
- * unobtrusive syntax.
+ *     dolor sit amet, `Z|x %e %N` consectetuer adipiscing elit. 
  *
  * This *inline* "info string" has the exact same meaning as the
  * standard "info string" on a code block fence:
  *
- *     ~~~ Z
+ *     ~~~ Z|
+ *     x %e %N
+ *     ~~~
+ *
+ * NOTE that the trailing `|` is needed, otherwise this would be
+ *  a "regular" info string on a code block!
+ *
+ * In an info string, the `|` can be used to separate the notation
+ * name from other info (which ends up in the `info` attribute):
+ *
+ *     ~~~ Z|informative
  *     x %e %N
  *     ~~~
  *
@@ -502,20 +508,12 @@ static const char *rn_repl[RN_NUM]; /* Replacement texts for RNs. */
  *
  * but the *inline* code span produces the attribute `display="inline"`,
  * while the fenced code *block* gives `display="block"` as the second
- * attribute in the `<MARKUP>` element.
- *
- * NOTE: A convenient way to enter ACUTE ACCENT using an US keyboard
- * layout in Vim is to enter the *digraph* ( Ctrl-K , "'" , "'" ) for
- * it.
+ * attribute in the `<MARKUP>` element. (And the second block example
+ * has also an attribute `info="informative"` ...)
  */
  
-#if 0
-#define NOTA_DELIM_0 '\xC2' /* UTF-8[0] of U+00B4 ACUTE ACCENT (180) */
-#define NOTA_DELIM_1 '\xB4' /* UTF-8[1] of U+00B4 ACUTE ACCENT (180) */
-#else
 #define NOTA_DELIM_0 '|'
-#define NOTA_DELIM_1 NUL
-#endif
+#define NOTA_DELIM_1 '|'
 
 /*== Replacement Definitions =========================================*/
 
@@ -1222,6 +1220,45 @@ ESIS_Port* generate_rast(FILE *to, unsigned options)
  */
  
 
+struct infosplit {
+    const char  *name, *suffix;
+    size_t       nlen,  slen;
+};
+
+static int infosplit(struct infosplit *ps, const char *s, size_t n)
+{
+    const char *t, *u;
+    bool suppress = false, found = false;
+    
+    while (n > 0U && (*s == SP || *s == HT)) {
+        ++s, --n;
+    }
+    t = s;
+    ps->suffix = s;
+    ps->slen   = n;
+    if (n > 0U && *t == '|') {
+        ++t, --n;
+        suppress = true;
+    }
+    for (u = t; n > 0U && ISNMCHAR(*u); ++u, --n)
+        ;
+    if (t < u && n > 0U && *u == '|') {
+        ps->name = t;
+        ps->nlen = (size_t)(u - t);
+        found = is_notation(ps->name, ps->nlen); 
+        if (found) {
+            if (suppress) {
+                ++ps->suffix;
+                --ps->slen;
+            } else {
+                ps->suffix = (n > 1) ? u + 1 : NULL;
+                ps->slen   = (n > 1) ? n - 1 : 0U;
+            }
+        }
+    }
+    return found && !suppress;
+}
+
 static int S_render_node_esis(cmark_node *node,
                               cmark_event_type ev_type,
                               ESIS_Port *to)
@@ -1277,83 +1314,65 @@ static int S_render_node_esis(cmark_node *node,
 
     case CMARK_NODE_CODE:
     case CMARK_NODE_CODE_BLOCK:
+      /*
+       * If the info string (for code block) rsp the data string (for
+       * inline code) has the form:
+       *
+       *     ( { S } , name , "|" , suffix )
+       *
+       * where *S* is `SP` or `TAB`, *name* is the name of a known
+       * notation, and *suffix* any string, then we convert the
+       * code element into a custom element.
+       *
+       * What if the info/data string is nevertheless the intended
+       * content and this conversion should not take place?
+       *
+       *     ( { S } , "|", name , "|" , suffix )
+       */
       {
-	cmark_node_type nt = node->type;
-	const char     *info, *data, *name;
-	size_t          ilen,  dlen,  nmlen = 0U;
-	const bool      is_inline = (nt == CMARK_NODE_CODE);
+	cmark_node_type    nt = node->type;
+	struct infosplit   split;
+	const char        *info, *data;
+	size_t             ilen,  dlen;
+	const bool         is_inline = (nt == CMARK_NODE_CODE);
 	
-	if (is_inline) {
-	    data  = node->as.code.info.data;
-	    dlen  = node->as.code.info.len;
-	    info  = data;
-	    ilen  = dlen;
-	} else {
-	    data  = node->as.code.literal.data;
-	    dlen  = node->as.code.literal.len;
-	    info  = node->as.code.info.data;
-	    ilen  = node->as.code.info.len;
-        }
+        info = node->as.code.info.data;
+        ilen = node->as.code.info.len;
         
-	assert(info != NULL || ilen == 0U);
-	assert(data != NULL || dlen == 0U);
-	assert(dlen < 0xFFFFU);
-	assert(ilen < 0xFFFFU);
-
-	if (ilen > 0U) {
-	    static const char  stop[] = { NOTA_DELIM_0, 
-		CR, LF, SP, HT, NUL };
-	    const size_t delimlen = 1U + !!(NOTA_DELIM_1);
-	    size_t k;
-
-	    for (k = 0U; k < ilen; ++k) {
-		char ch = info[k];
-		const char *p = strchr(stop, info[k]);
-		if (p != NULL)
-		    break;
-	    }
-
-	    if (k > 0U && k < ilen + 1) {
-		const char *suf    = "";
-		size_t      suflen = 0U;
-		if (   info[k+0U] == NOTA_DELIM_0
-#                     if NOTA_DELIM_1
-		    && info[k+1U] == NOTA_DELIM_1
-#		      endif
-		   ) {
-		    nmlen = k;
-		    name  = info;
-		    if (is_inline) {
-			data  += nmlen + delimlen;
-			dlen  -= nmlen + delimlen;
-		    } else {
-		        suf    = info + nmlen + delimlen;
-		        suflen = ilen - nmlen - delimlen;
-		    }
-		} else if (is_inline) {
-		    nmlen = 0U;
-		    name  = "";
-		} else {
-		    nmlen = ilen;
-		    name  = info;
-		}
-		
-		if (nmlen > 0U && is_notation(name, nmlen)) {
-		    const char *display = (nt == CMARK_NODE_CODE) ?
-			"inline" : "block";
-		    nt = NODE_MARKUP;
-		    DO_ATTR("notation", name,    nmlen);
-		    DO_ATTR("display",  display, NTS);
-		    info = suf;
-		    ilen = suflen;
-		} else if (is_inline) {
-		    info = name;
-		    ilen = nmlen;
-		}
-	    }
+	if (infosplit(&split, info, ilen)) {
+	    /*
+	     * Use split.name as notation name,
+	     * and if inline, split.suffix as content or (if block)
+	     * suffix as extra info.
+	     */
+	    nt = NODE_MARKUP;
+	    DO_ATTR("notation", split.name, split.nlen);
+	    DO_ATTR("display",  (is_inline) ? "inline" : "block", NTS);
+	    if (is_inline) {
+	        data = split.suffix;
+	        dlen = split.slen;
+            } else {
+                data = node->as.code.literal.data;
+                dlen = node->as.code.literal.len;
+	        if (split.slen > 0U)
+	            DO_ATTR("info", split.suffix, split.slen);
+            }
+	} else {
+	    /*
+	     * Regular code element, if inline use info as content,
+	     * if block it is the info attribute.
+	     */
+            if (is_inline) {
+                data = split.suffix;
+                dlen = split.slen;
+            } else {
+                data = node->as.code.literal.data;
+                dlen = node->as.code.literal.len;
+                if (split.slen > 0U)
+                    DO_ATTR("info", split.suffix, split.slen);
+            }
 	}
-	if (ilen > 0U)
-	    DO_ATTR("info", info, ilen);
+
 	DO_START(nt);
 	DO_CDATA(data, dlen);
 	DO_END(nt);
