@@ -1720,6 +1720,10 @@ int P_string(int ch, cmark_strbuf *pbuf, char delim, int is_repl,
     if (ch == '"' || ch == '\'') {
         assert(delim == ch);
         ch = GETC(ch);
+    } else {
+        assert(ch == '{');
+        assert(delim == '}');
+        ch = GETC(ch);
     }
     while (ch != delim && (last = ch) != NUL) {
 	if (ch == MSSCHAR) {
@@ -1810,6 +1814,7 @@ int P_repl_text_pair(int ch, char *repl_text[2], char *lastchrp)
 {
     repl_text[0] = repl_text[1] = NULL;
     
+    P_S(ch);
     if (ch == '-') {
 	ch = GETC(ch);
     } else if (ch == '/') {
@@ -1970,7 +1975,7 @@ int P_sel_rule(int ch)
     }
 
     ch = P_sel(ch, taginfo);
-    P_S(ch);
+    /*P_S(ch);*/
     ch = P_repl_text_pair(ch, repl_texts, &lastch);
 
     set_repl(taginfo, repl_texts, lastch == '[');
@@ -1987,7 +1992,7 @@ int P_rn_rule(int ch)
     assert(ch == '@');
     
     ch = P_rni_name(ch, &rn, name);
-    
+    /*P_S(ch);*/
     ch = P_repl_text(ch, repl_text, NULL);
     rn_repl[rn] = repl_text[0];
     return ch;
