@@ -893,8 +893,7 @@ void check_notation(const char *data, size_t len)
  * from the start-tag handler to the subsequent cdata handler ...
  */
 bool watch_notation = false;
-const struct repl_ *current_rp_ = NULL;
-#define current_rp() current_rp_
+bool is_cdata = false;
 
 void repl_Attr(ESIS_UserData ud,
                           const char *name, const char *val, size_t len)
@@ -928,10 +927,10 @@ void repl_Start(ESIS_UserData ud, cmark_node_type nt)
     }
     
     /*
-     * HACK: Let the cdata handler know about the currently active
-     * replacement definition ...
+     * HACK: Let the cdata handler know if the current
+     * replacement definition dictates literal cdata output ...
      */
-    current_rp_ = rp;
+    is_cdata = rp != NULL && rp->is_cdata;
     
     /*
      * If no matching definition was found, or no start string was
@@ -953,12 +952,9 @@ void repl_Cdata(ESIS_UserData ud, const char *cdata, size_t len)
     static cmark_strbuf houdini      = CMARK_BUF_INIT(NULL);
     static int          houdini_init = 0;
     
-    cmark_node_type     nt = current_nt();
-    const struct repl_ *rp = current_rp();
-    
+    const cmark_node_type nt = current_nt();
     size_t      k;
     const char *p;
-    bool is_cdata;
     
     if (len == NTS) len = strlen(cdata);
     p = cdata;
@@ -972,9 +968,6 @@ void repl_Cdata(ESIS_UserData ud, const char *cdata, size_t len)
      * corresponding `struct repl_`.
      */
      
-    assert(rp == NULL || rp->taginfo.nt == nt);
-    is_cdata = rp != NULL && rp->is_cdata;
-    
 /*
  * TODO: "Recognizing" <!NOTATION ...> declarations in _CommonMark_
  * text is an ugly hack. We need something simpler and hopefully
@@ -989,11 +982,11 @@ void repl_Cdata(ESIS_UserData ud, const char *cdata, size_t len)
 	watch_notation = false;
     }
     
-    if (rp == NULL && nt == CMARK_NODE_HTML_BLOCK ||
+    if (!is_cdata  && nt == CMARK_NODE_HTML_BLOCK ||
                       nt == CMARK_NODE_HTML_INLINE) {
         /*
-         * HTML inline or block nodes are special: If no replacement
-         * was given, we output their content (which is the actual
+         * HTML inline or block nodes are special:
+         * We output their content (which is the actual
          * HTML markup!) literally.
          */
 	for (k = 0U; k < len; ++k)
@@ -1041,8 +1034,16 @@ void repl_End(ESIS_UserData ud, cmark_node_type nt)
 	if (rp->repl[1] != NULL) {
 	    put_repl(rp->repl[1]);
 	}
-    } else if (nt == NODE_MARKUP)
-	fprintf(outfp, "</MARKUP>");
+    }
+    
+    /*
+     * HACK: Reset the `is_cdata` switch. This will only work
+     * if no other element is nested inside an element for
+     * which the replacement definition indicated `<![CDATA[`
+     * (but this seems a reasonable assumption after all!).
+     */
+     
+    is_cdata = false;
 	
     pop_atts();
 }
