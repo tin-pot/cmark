@@ -163,11 +163,6 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 void error(const char *msg, ...);
 void syntax_error(const char *msg, ...);
 
-/*
- * Help cmark's string buffer.
- */
-
-static cmark_mem stdmem = { calloc, realloc, free };
 
 /*== ESIS API ========================================================*/
 
@@ -235,24 +230,6 @@ ESIS_Port* filter_toc(ESIS_Port*to,              unsigned options);
 #define DO_CDATA(D, L)     esis_cb->cdata(esis_ud, D, L)
 #define DO_END(NT)         esis_cb->end(esis_ud, NT)
 
-
-/*== cmark_strbuf_dup() ==============================================*/
-
-char *cmark_strbuf_dup(cmark_strbuf *pbuf)
-{
-    size_t n = pbuf->size;
-    char *p;
-    
-    if (n == 0U) return NULL;
-    p = malloc(n);
-    if (p != NULL) {
-	memcpy(p, pbuf->ptr, n);
-	cmark_strbuf_clear(pbuf);
-    } else {
-	error("Out of memory! Allocating %lu bytes failed.\n", n);
-    }
-    return p;
-}
 
 /*== Meta-data =======================================================*/
 
@@ -476,7 +453,10 @@ static const char *rn_repl[RN_NUM]; /* Replacement texts for RNs. */
 #define ISNMCHAR(C)  ( ISNMSTART(C) || (C) == '-' || (C) == '.' )
 
 /*
- * NOTATION_DELIM is (currently pre-defined to be) 
+ * Notation indicator in "info string"
+ * ===================================
+ *
+ * NOTA_DELIM is (currently pre-defined to be) 
  *
  *     U+007C VERTICAL BAR (decimal 124) `|`
  *
@@ -492,11 +472,12 @@ static const char *rn_repl[RN_NUM]; /* Replacement texts for RNs. */
  *     x %e %N
  *     ~~~
  *
- * NOTE that the trailing `|` is needed, otherwise this would be
- *  a "regular" info string on a code block!
+ * NOTE that the trailing `|` is needed, otherwise this gets treated
+ * as a "regular" info string on a code block!
  *
- * In an info string, the `|` can be used to separate the notation
- * name from other info (which ends up in the `info` attribute):
+ * In a code block info string, the `|` can be used to separate the 
+ * notation name from other info (which ends up in the `info` 
+ * attribute):
  *
  *     ~~~ Z|informative
  *     x %e %N
@@ -512,8 +493,7 @@ static const char *rn_repl[RN_NUM]; /* Replacement texts for RNs. */
  * has also an attribute `info="informative"` ...)
  */
  
-#define NOTA_DELIM_0 '|'
-#define NOTA_DELIM_1 '|'
+#define NOTA_DELIM '|'
 
 /*== Replacement Definitions =========================================*/
 
@@ -533,7 +513,7 @@ typedef size_t textidx_t;  /* Index into cmark_strbuf text_buf. */
 
 struct taginfo_ {
     cmark_node_type nt;
-    textidx_t atts[2*ATTCNT + 2];
+    textidx_t	    atts[2*ATTCNT + 2];
 };
 
 struct repl_ {
@@ -550,7 +530,7 @@ struct repl_ {
  
 static struct repl_ *repl_tab[NODE_NUM];
 
-cmark_strbuf text_buf;
+static octetbuf text_buf = { 0 };
 
 
 
@@ -564,10 +544,10 @@ static const size_t NULLIDX = 0U; /* Common NULL value for indices. */
 /*
  * Attribute names and values of current node(s).
  */
-static cmark_strbuf attr_buf = CMARK_BUF_INIT(&stdmem);
+static octetbuf attr_buf = { 0 };
 
 /*
- * We "misuse" a `cmark_strbuf` here to store a growing array
+ * We "misuse" a `octetbuf` here to store a growing array
  * of `attridx_t` (not `char`) elements. There are no alignment issues
  * as long as the array stays homogenuous, as the buffer is from
  * `malloc()`, and thus suitably aligned.
@@ -575,25 +555,27 @@ static cmark_strbuf attr_buf = CMARK_BUF_INIT(&stdmem);
  * An attribute name index of 0U marks the end of the attribute
  * list (of the currently active node).
  */
-static cmark_strbuf nameidx_buf = CMARK_BUF_INIT(&stdmem);
-static cmark_strbuf validx_buf = CMARK_BUF_INIT(&stdmem);
-#define NATTR ( nameidx_buf.size / sizeof NAMEIDX[0] )
+static octetbuf nameidx_buf = { 0 };
+static octetbuf validx_buf = { 0 };
+#define NATTR ( octetbuf_size(&nameidx_buf) / sizeof(nameidx_t) )
 
 /*
  * The name index and value index arrays as seen as `nameidx_t *`
  * and `validx_t *` rvalues, ie as "regular C arrays".
  */
-#define NAMEIDX ( (nameidx_t*)nameidx_buf.ptr )
-#define VALIDX  (  (validx_t*)validx_buf.ptr )
+#define NAMEIDX(I) (*(nameidx_t*)octetbuf_elem_at(&nameidx_buf, (I),	\
+                                                     sizeof(nameidx_t)))
+#define VALIDX(I)  (* (validx_t*)octetbuf_elem_at(&validx_buf,  (I),	\
+                                                      sizeof(validx_t)))
 
 /*
  * Append one `nameidx_t` element to the `NAMEIDX` array, and 
  * dito for `validx_t` and the `VALIDX` array.
  */
-#define PUT_NAMEIDX(I) ( cmark_strbuf_put(&nameidx_buf, \
-                              (unsigned char*)&(I), sizeof(nameidx_t)) )
-#define PUT_VALIDX(I)  ( cmark_strbuf_put(&validx_buf, \
-                              (unsigned char*)&(I), sizeof(validx_t)) )
+#define PUT_NAMEIDX(I) ( octetbuf_push_back(&nameidx_buf, \
+                                              &(I), sizeof(nameidx_t)) )
+#define PUT_VALIDX(I)  ( octetbuf_push_back(&validx_buf, \
+                                               &(I), sizeof(validx_t)) )
 
 /*
  * We use NULLIDX to delimit "activation records" for the currently
@@ -604,7 +586,7 @@ static cmark_strbuf validx_buf = CMARK_BUF_INIT(&stdmem);
  */
 #define close_atts(NT)   ( PUT_NAMEIDX(NULLIDX), PUT_VALIDX(NT) )
 #define pop_atts()       POP_ATTS()
-#define current_nt()     ( VALIDX[NATTR-1U] )
+#define current_nt()     ( VALIDX(NATTR-1U) )
 
 void push_att(const char *name, const char *val, size_t len)
 {
@@ -613,13 +595,13 @@ void push_att(const char *name, const char *val, size_t len)
     
     if (len == NTS) len = strlen(val);
     
-    nameidx = attr_buf.size;
-    cmark_strbuf_puts(&attr_buf, name);
-    cmark_strbuf_putc(&attr_buf, NUL);
+    nameidx = octetbuf_size(&attr_buf);
+    octetbuf_push_s(&attr_buf, name);
+    octetbuf_push_c(&attr_buf, NUL);
     
-    validx = attr_buf.size;
-    cmark_strbuf_put (&attr_buf, val, len);
-    cmark_strbuf_putc(&attr_buf, NUL);
+    validx = octetbuf_size(&attr_buf);
+    octetbuf_push_back(&attr_buf, val, len);
+    octetbuf_push_c(&attr_buf, NUL);
     
     PUT_NAMEIDX(nameidx);
     PUT_VALIDX(validx);
@@ -633,13 +615,13 @@ void push_att(const char *name, const char *val, size_t len)
 do {									\
     size_t top = NATTR;							\
     if (top > 0U) {							\
-	nameidx_t nameidx = NAMEIDX[--top];				\
+	nameidx_t nameidx = NAMEIDX(--top);				\
 	assert(nameidx == NULLIDX);					\
 	do {								\
-	    nameidx_buf.size -= sizeof NAMEIDX[0];			\
-	    validx_buf.size  -= sizeof VALIDX[0];			\
-	    if (nameidx != NULLIDX) attr_buf.size = nameidx;		\
-	} while (top > 0U && (nameidx = NAMEIDX[--top]) != NULLIDX);	\
+	    octetbuf_pop_back(&nameidx_buf, sizeof(nameidx_t));		\
+	    octetbuf_pop_back(&validx_buf,  sizeof(validx_t);		\
+	    if (nameidx != NULLIDX) attr_buf.n = nameidx;		\
+	} while (top > 0U && (nameidx = NAMEIDX(--top)) != NULLIDX);	\
     }									\
     assert(top == NATTR);						\
 } while (0)
@@ -654,14 +636,14 @@ void pop_atts(void)
     
     size_t top = NATTR;
     if (top > 0U) {
-	nameidx           = NAMEIDX[--top];
+	nameidx = NAMEIDX(--top);
 	assert(nameidx == NULLIDX);
 	do {
-	    nameidx_buf.size -= sizeof NAMEIDX[0];
-	    validx_buf.size  -= sizeof VALIDX[0];
+	    octetbuf_pop_back(&nameidx_buf, sizeof(nameidx_t));
+	    octetbuf_pop_back(&validx_buf,  sizeof(validx_t));
 	    assert(top == NATTR);
-	    if (nameidx != NULLIDX) attr_buf.size = nameidx;
-	} while (top > 0U && (nameidx = NAMEIDX[--top]) != NULLIDX);
+	    if (nameidx != NULLIDX) attr_buf.n = nameidx;
+	} while (top > 0U && (nameidx = NAMEIDX(--top)) != NULLIDX);
     }
 }
 
@@ -676,7 +658,7 @@ const char* att_val(const char *name, unsigned depth)
     size_t k;
     
     assert ((k = NATTR) > 0U);
-    assert (NAMEIDX[k-1U] == NULLIDX);
+    assert (NAMEIDX(k-1U) == NULLIDX);
     assert (depth > 0U);
 	
     if (depth == 0U) return NULL;
@@ -686,28 +668,25 @@ const char* att_val(const char *name, unsigned depth)
 	validx_t validx;
 	const size_t idx = k-1U;
 	
-	assert(nameidx_buf.size >= 0);
-	assert(nameidx_buf.size == 0 || nameidx_buf.ptr != NULL);
-	assert(idx*sizeof *NAMEIDX < (size_t)nameidx_buf.size);
+	assert(nameidx_buf.n == 0U || nameidx_buf.p != NULL);
+	assert(idx*sizeof(nameidx_t) < nameidx_buf.n);
 	
-	nameidx = NAMEIDX[idx];
+	nameidx = NAMEIDX(idx);
 	
-	assert(attr_buf.size >= 0);
-	assert(attr_buf.size == 0 || attr_buf.ptr != NULL);
-	assert(nameidx < (size_t)attr_buf.size);
+	assert(attr_buf.n == 0U || attr_buf.p != NULL);
+	assert(nameidx < attr_buf.n);
 	
 	if (nameidx == NULLIDX && depth-- == 0U)
 	    break;
 	    
-	assert(validx_buf.size >= 0);
-	assert(validx_buf.size == 0  || validx_buf.ptr != NULL);
-	assert(idx*sizeof *VALIDX < (size_t)validx_buf.size);
+	assert(validx_buf.n == 0U  || validx_buf.p != NULL);
+	assert(idx*sizeof(validx_t) < validx_buf.n);
 	
-	validx = VALIDX[idx];
+	validx = VALIDX(idx);
 	
-	assert(validx  < (size_t)attr_buf.size);
-	if (!strcmp(attr_buf.ptr+nameidx, name))
-	    return attr_buf.ptr+validx;
+	assert(validx  < attr_buf.n);
+	if (!strcmp(octetbuf_at(&attr_buf, nameidx), name))
+	    return octetbuf_at(&attr_buf, validx);
     }
 	    
     return NULL;
@@ -802,17 +781,17 @@ struct repl_ *select_rule(cmark_node_type nt)
     struct repl_ *rp;
     
     for (rp = repl_tab[nt]; rp != NULL; rp = rp->next) {
-	textidx_t *atts = rp->taginfo.atts;
+	const textidx_t *const atts = rp->taginfo.atts;
 	int i;
 	
 	for (i = 0; atts[2*i] != NULLIDX; ++i) {
 	    const char *name, *sel_val = NULL;
 	    const char *cur_val;
 	    
-	    name = text_buf.ptr + atts[2*i+0];
+	    name = octetbuf_at(&text_buf, atts[2*i+0]);
 	    cur_val = att_val(name, 1);
 	    if (atts[2*i+1] != NULLIDX) {
-		sel_val = text_buf.ptr + atts[2*i+1];
+		sel_val = octetbuf_at(&text_buf, atts[2*i+1]);
 	    }
 	    if (sel_val == NULL && cur_val == NULL)
 		break; /* Attribute existence mismatch. */
@@ -909,7 +888,13 @@ void check_notation(const char *data, size_t len)
     register_notation(nmtoken, k - (size_t)(nmtoken - data));
 }
 
+/*
+ * These are both hackish solutions to transmit state information
+ * from the start-tag handler to the subsequent cdata handler ...
+ */
 bool watch_notation = false;
+const struct repl_ *current_rp_ = NULL;
+#define current_rp() current_rp_
 
 void repl_Attr(ESIS_UserData ud,
                           const char *name, const char *val, size_t len)
@@ -919,88 +904,131 @@ void repl_Attr(ESIS_UserData ud,
 
 void repl_Start(ESIS_UserData ud, cmark_node_type nt)
 {
-    const struct repl_ *rp;
+    const struct repl_ *rp = NULL;
     
     close_atts(nt);
 
-/* Check if this is in reality a <!NOTATION markup declaration */
+    /*
+     * HACK:  
+     * Check if this could actually be a NOTATION markup declaration,
+     * and if so, remember this for the time the HTML (block or inline)
+     * character content arrives -- the `<!NOTATION` string would be
+     * at the start ...
+     */
     watch_notation = (nt == CMARK_NODE_HTML_BLOCK || nt == CMARK_NODE_HTML_INLINE);
 
+    /*
+     * Find matching replacement definition, and output the
+     * substituted "start string".
+     */
     if (nt != CMARK_NODE_NONE && (rp = select_rule(nt)) != NULL) {
 	if (rp->repl[0] != NULL) {
 	    put_repl(rp->repl[0]);
 	} 
     }
     
-    if (nt == NODE_MARKUP && rp == NULL) {
-	const char *notation = att_val("notation", 1);
-	const char *display  = att_val("display", 1);
-        
-	assert(notation  != NULL);
-	assert(display != NULL);
-	fprintf(outfp, "<MARKUP notation=\"%s\" display=\"%s\">",
-						  notation, display);
-    }
+    /*
+     * HACK: Let the cdata handler know about the currently active
+     * replacement definition ...
+     */
+    current_rp_ = rp;
+    
+    /*
+     * If no matching definition was found, or no start string was
+     * given there, we're done already.
+     *
+     * This amounts to a "default replacement definition" of
+     *
+     *     * - / -
+     *
+     * (except that the "universal element selector" is not available
+     * in our replacement definition syntax (yet?).
+     */ 
 }
 
 
 void repl_Cdata(ESIS_UserData ud, const char *cdata, size_t len)
 {
-    static cmark_strbuf houdini = CMARK_BUF_INIT(NULL);
+    static cmark_mem stdmem          = { calloc, realloc, free };
+    static cmark_strbuf houdini      = CMARK_BUF_INIT(NULL);
     static int          houdini_init = 0;
     
     cmark_node_type     nt = current_nt();
-    const struct repl_ *rp = repl_tab[nt];
+    const struct repl_ *rp = current_rp();
     
     size_t      k;
     const char *p;
-    
     bool is_cdata;
-    
-    
     
     if (len == NTS) len = strlen(cdata);
     p = cdata;
     
-    is_cdata = rp == NULL || rp->is_cdata;
-    if (nt == CMARK_NODE_TEXT && rp == NULL) is_cdata = false;
+    /*
+     * We do a "houdini" below (to "escape" LESS-THAN SIGN etc)
+     * on the character data string unless the replacement definition
+     * indicated otherwise (using `<![CDATA[` .. `]]>`).
+     *
+     * This fact is recorded in the `is_cdata` member of the 
+     * corresponding `struct repl_`.
+     */
+     
+    assert(rp == NULL || rp->taginfo.nt == nt);
+    is_cdata = rp != NULL && rp->is_cdata;
     
 /*
+ * TODO: "Recognizing" <!NOTATION ...> declarations in _CommonMark_
+ * text is an ugly hack. We need something simpler and hopefully
+ * better. Even <?mkd notation foo> would be nicer, clearer, and better!
+ *
  * The *first* CDATA line in a CommonMark "HTML" element would contain
  * the MDO right at the start -- and the "HTML" element is just
  * a *notation declaration* in disguise ... 
  */
-    switch (nt)
-    case CMARK_NODE_HTML_BLOCK:
-    case CMARK_NODE_HTML_INLINE:
-    case NODE_MARKUP:
-	if (watch_notation) {
-	    check_notation(p, len);
-	    watch_notation = false;
-	}
+    if (watch_notation) {
+	check_notation(p, len);
+	watch_notation = false;
+    }
     
-    if (!is_cdata) {
-        if (!houdini_init) {
-    	    cmark_strbuf_init(&stdmem, &houdini, 1024);
-    	    houdini_init = 1;
-        }
-        
+    if (rp == NULL && nt == CMARK_NODE_HTML_BLOCK ||
+                      nt == CMARK_NODE_HTML_INLINE) {
+        /*
+         * HTML inline or block nodes are special: If no replacement
+         * was given, we output their content (which is the actual
+         * HTML markup!) literally.
+         */
+	for (k = 0U; k < len; ++k)
+	    PUTC(p[k]);
+    } else if (!is_cdata) {
+        /*
+         * The content of every other node is written "escaped",
+         * unless the replacement definion places a CDATA section
+         * around it.
+         */
+         
+	if (!houdini_init) {
+	    cmark_strbuf_init(&stdmem, &houdini, 1024);
+	    houdini_init = 1;
+	}
+
+	/*
+	 * The last argument `0` indicates that SOLIDUS is *not*
+	 * to be escaped -- which would prevent us from using it
+	 * as the SGML NET.
+	 */
+	
 	houdini_escape_html0(&houdini, (uint8_t*)cdata, len, 0);
 	p   = cmark_strbuf_cstr(&houdini);
 	len = cmark_strbuf_len(&houdini);
-	
-	for (k = 0U; k < len; ++k)
-	    PUTC(p[k]);
-    } else if (rp != NULL || nt == CMARK_NODE_HTML_BLOCK ||
-                             nt == CMARK_NODE_HTML_INLINE) {
-	for (k = 0U; k < len; ++k)
-	    PUTC(p[k]);
-    } else {
-	fputs("<![CDATA[", outfp);
-	fwrite(p, 1U, len, outfp);
-	fputs("]]>", outfp);
-	outbol = false;
     }
+
+    /*
+     * Output the character data. We must do this character by
+     * character using `PUTC()` in order to keep track of line
+     * breaks and update the `outbol` flag accordingly.
+     */
+     
+    for (k = 0U; k < len; ++k)
+        PUTC(p[k]);
 	
     cmark_strbuf_clear(&houdini);
 }
@@ -1117,11 +1145,15 @@ void rast_data(FILE *fp, const char *data, size_t len, char delim)
 
 void discard_atts(void)
 {
-    cmark_strbuf_clear(&attr_buf);
-    cmark_strbuf_putc(&attr_buf, NUL); /* Index = 0U is unsused.*/
+    /*
+     * Occupy index 0 position after clearing the buffer, so that 
+     * index == 0U can be used as a sentinel.
+     */
+    octetbuf_clear(&attr_buf);
+    octetbuf_push_c(&attr_buf, NUL);
     
-    cmark_strbuf_clear(&nameidx_buf);
-    cmark_strbuf_clear(&validx_buf);
+    octetbuf_clear(&nameidx_buf);
+    octetbuf_clear(&validx_buf);
 }
 
 void rast_Attr(ESIS_UserData ud, const char *name, const char *val, size_t len)
@@ -1151,10 +1183,10 @@ void rast_Start(ESIS_UserData ud, cmark_node_type nt)
 
 	fprintf(fp, "[%s\n", (GI == NULL) ? "#0" : GI);
 	for (k = nattr; k > 0U; --k) {
-	    nameidx_t nameidx = NAMEIDX[k-1];
-	    nameidx_t validx  = VALIDX[k-1];
-	    const char *name = attr_buf.ptr + nameidx;
-	    const char *val  = attr_buf.ptr + validx;
+	    nameidx_t nameidx = NAMEIDX(k-1);
+	    nameidx_t validx  = VALIDX(k-1);
+	    const char *name = attr_buf.p + nameidx;
+	    const char *val  = attr_buf.p + validx;
 	    fprintf(fp, "%s=\n", name);
 	    rast_data(fp, val, strlen(val), '!');
 	}
@@ -1236,13 +1268,13 @@ static int infosplit(struct infosplit *ps, const char *s, size_t n)
     t = s;
     ps->suffix = s;
     ps->slen   = n;
-    if (n > 0U && *t == '|') {
+    if (n > 0U && *t == NOTA_DELIM) {
         ++t, --n;
         suppress = true;
     }
     for (u = t; n > 0U && ISNMCHAR(*u); ++u, --n)
         ;
-    if (t < u && n > 0U && *u == '|') {
+    if (t < u && n > 0U && *u == NOTA_DELIM) {
         ps->name = t;
         ps->nlen = (size_t)(u - t);
         found = is_notation(ps->name, ps->nlen); 
@@ -1626,7 +1658,7 @@ do {									\
  *     initial SO.
  */
  
-int P_attr_subst(int ch, cmark_strbuf *pbuf, const char lit)
+int P_attr_subst(int ch, octetbuf *pbuf, const char lit)
 {
     int code = 0;
     int brace = 0;
@@ -1657,16 +1689,16 @@ int P_attr_subst(int ch, cmark_strbuf *pbuf, const char lit)
     /*
      * Code the _**atto**_ delimiter and the "prefix char".
      */
-    cmark_strbuf_putc(pbuf, SO);
-    cmark_strbuf_putc(pbuf, code);
+    octetbuf_push_c(pbuf, SO);
+    octetbuf_push_c(pbuf, code);
     if (code == SP) {
-        cmark_strbuf_putc(pbuf, ch); /* The NMSTART char of name */
+        octetbuf_push_c(pbuf, ch); /* The NMSTART char of name */
         ch = GETC(ch);
     }
     
     while (ch != EOF) {
 	if (ISNMCHAR(ch)) {
-	    cmark_strbuf_putc(pbuf, ch);
+	    octetbuf_push_c(pbuf, ch);
 	} else if (ch == lit) {
 	    if (brace) { /* Hit the string delimiter! */
 	        syntax_error("Unclosed attribute reference "
@@ -1703,17 +1735,16 @@ int P_attr_subst(int ch, cmark_strbuf *pbuf, const char lit)
      * Finish the encoded _attribute substitution_.
      */
 	
-    cmark_strbuf_putc(pbuf, NUL); /* Make the name a NTBS. */
-    cmark_strbuf_putc(pbuf, SI);  /* Mark the end of the coded thing. */
+    octetbuf_push_c(pbuf, NUL); /* Make the name a NTBS. */
+    octetbuf_push_c(pbuf, SI);  /* Mark the end of the coded thing. */
     
     return ch;
 }
 
-#define P_repl_string(CH, P, D, LCP)  P_string((CH), (P), (D), 1, LCP)
-#define P_attr_val_lit(CH, P, D)  P_string((CH), (P), (D), 0, NULL)
+#define P_repl_string(CH, P, D)   P_string((CH), (P), (D), 1)
+#define P_attr_val_lit(CH, P, D)  P_string((CH), (P), (D), 0)
 
-int P_string(int ch, cmark_strbuf *pbuf, char delim, int is_repl,
-                                                   char *lastchrp)
+int P_string(int ch, octetbuf *pbuf, char delim, int is_repl)
 {
     char last = NUL;
     
@@ -1739,10 +1770,10 @@ int P_string(int ch, cmark_strbuf *pbuf, char delim, int is_repl,
 	    case  '}': ch = '}' ;  break;
 	    case  LIT: ch = LIT ; break;
 	    case LITA: ch = LITA ; break;
-	    default:   cmark_strbuf_putc(pbuf, MSSCHAR);
+	    default:   octetbuf_push_c(pbuf, MSSCHAR);
 	    }
 	    if (ch != EOF)
-		cmark_strbuf_putc(pbuf, ch);
+		octetbuf_push_c(pbuf, ch);
 	    last = ch, ch = GETC(ch);
 	    
 	} else if (ch == '$' && is_repl) {
@@ -1750,32 +1781,32 @@ int P_string(int ch, cmark_strbuf *pbuf, char delim, int is_repl,
 	    ch = P_attr_subst(ch, pbuf, delim);
 	    
 	} else if (ch == EOL) {
-	    cmark_strbuf_putc(pbuf, ch);
+	    octetbuf_push_c(pbuf, ch);
 	    last = ch, ch = GETC(ch);
 	} else {
-	    cmark_strbuf_putc(pbuf, ch);
+	    octetbuf_push_c(pbuf, ch);
 	    last = ch, ch = GETC(ch);
 	}
     }    
     if (!is_repl)
-	cmark_strbuf_putc(pbuf, NUL);
+	octetbuf_push_c(pbuf, NUL);
     
     assert(ch == delim);
-    if (lastchrp != NULL) *lastchrp = last;
     ch = GETC(ch);
     return ch;
 }
 
 
-int P_repl_text(int ch, char *repl_text[1], char *lastchrp)
+int P_repl_text(int ch, char *repl_text[1])
 {
-    static cmark_strbuf repl = CMARK_BUF_INIT(&stdmem);
+    static octetbuf repl = { 0 };
     unsigned nstrings = 0U;
     
     P_S(ch);
+    octetbuf_clear(&repl);
     
     if (ch == '+') {
-        cmark_strbuf_putc(&repl, VT);
+        octetbuf_push_c(&repl, VT);
         ch = GETC(ch);
     }
     
@@ -1784,7 +1815,7 @@ int P_repl_text(int ch, char *repl_text[1], char *lastchrp)
 	P_S(ch);
 	
 	if (ch == LIT || ch == LITA || ch == '{')
-	    ch = P_repl_string(ch, &repl, (ch == '{') ? '}' : ch, lastchrp);
+	    ch = P_repl_string(ch, &repl, (ch == '{') ? '}' : ch);
 	else
 	    break;
 	++nstrings;
@@ -1793,24 +1824,24 @@ int P_repl_text(int ch, char *repl_text[1], char *lastchrp)
     P_S(ch);
     
     if (ch == '+') {
-        cmark_strbuf_putc(&repl, VT);
+        octetbuf_push_c(&repl, VT);
         ch = GETC(ch);
     }
     
     if (nstrings > 0U) {
 	char *res;
-	cmark_strbuf_putc(&repl, NUL);
-	res = cmark_strbuf_dup(&repl);
+	octetbuf_push_c(&repl, NUL);
+	res = octetbuf_dup(&repl);
 	repl_text[0] = res;
 	return ch;
     } else {
-	cmark_strbuf_clear(&repl);
+	octetbuf_clear(&repl);
 	repl_text[0] = NULL;
 	return ch;
     }
 }
 
-int P_repl_text_pair(int ch, char *repl_text[2], char *lastchrp)
+int P_repl_text_pair(int ch, char *repl_text[2])
 {
     repl_text[0] = repl_text[1] = NULL;
     
@@ -1820,7 +1851,7 @@ int P_repl_text_pair(int ch, char *repl_text[2], char *lastchrp)
     } else if (ch == '/') {
 	;
     } else {
-	ch = P_repl_text(ch, repl_text+0, lastchrp);
+	ch = P_repl_text(ch, repl_text+0);
     }
     
     P_S(ch);
@@ -1831,7 +1862,7 @@ int P_repl_text_pair(int ch, char *repl_text[2], char *lastchrp)
 	if (ch == '-') {
 	    ch = GETC(ch);
 	} else {
-	    ch = P_repl_text(ch, repl_text+1, NULL);
+	    ch = P_repl_text(ch, repl_text+1);
 	}
     }
     
@@ -1933,13 +1964,14 @@ int P_sel(int ch, struct taginfo_ taginfo[1])
 	    ch = GETC(ch);
 	    P_S(ch);
 	    if (ch == LIT || ch == LITA) {
-		val_idx = text_buf.size;
+		val_idx = octetbuf_size(&text_buf);
 		ch = P_attr_val_lit(ch, &text_buf, ch);
 	    } else if (ISNMSTART(ch)) {
 	        char val[NAMELEN+1];
 	        ch = P_name(ch, NULL, val, 0);
-	        val_idx = text_buf.size;
-	        cmark_strbuf_puts(&text_buf, val);
+	        val_idx = octetbuf_size(&text_buf);
+	        octetbuf_push_s(&text_buf, val);
+	        octetbuf_push_c(&text_buf, NUL);
 	    } else {
                 syntax_error("Expected name or string, got '%c'\n", ch);
 	    }
@@ -1950,9 +1982,9 @@ int P_sel(int ch, struct taginfo_ taginfo[1])
 	}
 	ch = GETC(ch);
 	
-	name_idx = text_buf.size;
-	cmark_strbuf_puts(&text_buf, name);
-	cmark_strbuf_putc(&text_buf, NUL);
+	name_idx = octetbuf_size(&text_buf);
+	octetbuf_push_s(&text_buf, name);
+	octetbuf_push_c(&text_buf, NUL);
 	taginfo->atts[2*nattr+0] = name_idx;
 	taginfo->atts[2*nattr+1] = val_idx;
 	++nattr;
@@ -1966,7 +1998,12 @@ int P_sel_rule(int ch)
 {
     struct taginfo_ taginfo[1];
     char *repl_texts[2];
-    char lastch;
+    bool is_cdata = false;
+    size_t len;
+    static const char cdata_start[] = "<![CDATA[",
+                      cdata_end[]   = "]]>";
+    const size_t len_start = sizeof cdata_start - 1U,
+                 len_end   = sizeof cdata_end - 1U;
 
     if (!ISNMSTART(ch)) {
         syntax_error("Expected name, got '%c'\n", ch);
@@ -1975,10 +2012,25 @@ int P_sel_rule(int ch)
     }
 
     ch = P_sel(ch, taginfo);
-    /*P_S(ch);*/
-    ch = P_repl_text_pair(ch, repl_texts, &lastch);
+    ch = P_repl_text_pair(ch, repl_texts);
 
-    set_repl(taginfo, repl_texts, lastch == '[');
+    /*
+     * If start replacement text ends in `<![CDATA[` and
+     * end replacement text starts with `]]>` then it looks
+     * like we better produce CDATA ...
+     */
+    if (repl_texts[0] != NULL &&
+            (len = strlen(repl_texts[0])) >= len_start &&
+            strncmp(repl_texts[0] + len - len_start,
+                    cdata_start, len_start) == 0 &&
+            repl_texts[1] != NULL &&
+            strncmp(repl_texts[1],
+                    cdata_end, len_end) == 0)
+    {
+        is_cdata = true;
+    }
+            
+    set_repl(taginfo, repl_texts, is_cdata);
 
     return ch;
 }
@@ -1992,8 +2044,7 @@ int P_rn_rule(int ch)
     assert(ch == '@');
     
     ch = P_rni_name(ch, &rn, name);
-    /*P_S(ch);*/
-    ch = P_repl_text(ch, repl_text, NULL);
+    ch = P_repl_text(ch, repl_text);
     rn_repl[rn] = repl_text[0];
     return ch;
 }
@@ -2050,17 +2101,33 @@ void load_repl_defs(FILE *fp)
     
     replfp = fp;
     
-    COUNT_EOL(EOL); /* Move to start of first line */
+    /*
+     * Move to start of first line.
+     */
+    COUNT_EOL(EOL); /* 
     
-    cmark_strbuf_init(&stdmem, &text_buf, 2048U);
-    cmark_strbuf_putc(&text_buf, NUL); /* NULLIDX is unsused.*/
+    /*
+     * Initializing character buffers. Note that NULLIDX acts as
+     * a sentinel, thus we push a NUL in both buffers so that
+     * index 0 (ie NULLIDX) is occupied and "out of use".
+     */
+    octetbuf_init(&text_buf, 2048U);
+    octetbuf_push_c(&text_buf, NUL);
     
-    cmark_strbuf_init(&stdmem, &attr_buf, ATTSPLEN);
-    cmark_strbuf_putc(&attr_buf, NUL); /* NULLIDX is unsused.*/
+    octetbuf_init(&attr_buf, ATTSPLEN);
+    octetbuf_push_c(&attr_buf, NUL);
     
-    cmark_strbuf_init(&stdmem, &nameidx_buf, ATTCNT * sizeof(nameidx_t));
-    cmark_strbuf_init(&stdmem, &validx_buf,  ATTCNT * sizeof(validx_t));
+    /*
+     * The name-index and value-index buffers are simply empty
+     * at the beginning.
+     */
+    octetbuf_init(&nameidx_buf, ATTCNT * sizeof(nameidx_t));
+    octetbuf_init(&validx_buf,  ATTCNT * sizeof(validx_t));
 
+    /*
+     * Parse and process replacement definitions. All parsing
+     * results are stored in the four buffers initialized above.
+     */
     ch = GETC(ch);
     ch = P_repl_defs(ch);
     assert(ch == EOF);
@@ -2102,7 +2169,9 @@ bool is_relpath(const char *pathname)
     if ( (('A' <= pathname[0] && pathname[0] <= 'Z') || 
           ('a' <= pathname[0] && pathname[0] <= 'z')) && 
          pathname[1] == ':' )
+    {
 	return 0;
+    }
 #endif
     return 1;
 }

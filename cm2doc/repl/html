@@ -66,6 +66,7 @@ CommonMark node types:
          $:CM.doc.v
      )">
  <TITLE>$:DC.title</TITLE>
+ <SCRIPT src="ASCIIMathML.js"></SCRIPT>
 </HEAD>} +
 
 /*===== EPILOG =======================================================*/
@@ -176,7 +177,7 @@ CM.LNK {<A href="$destination" title="$title">} / {</A>}
 CM.IMG {<IMG src="$url" title="$title">} / -
 
 /*======= MARKUP =====================================================*/
-
+/*
 MARKUP[display=inline]
       {<SPAN class="markup"><![CDATA[}
     / {]]></SPAN>}
@@ -203,3 +204,5 @@ MARKUP[notation][info][display=block]
 
 MARKUP[notation=HTML][display=inline]
       - / -
+*/
+MARKUP[notation=Z][display=inline] {<ZED><![CDATA[} / {]]></ZED>}
