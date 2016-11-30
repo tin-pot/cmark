@@ -837,6 +837,9 @@ bool is_notation(const char *nmtoken, size_t len)
     if (nmtoken == NULL || len == 0U)
 	return false;
 	
+    if (len == NTS) len = strlen(nmtoken);
+    assert(len > 0U);
+	
     for (pn = notations; pn != NULL; pn = pn->next)
 	if (strncmp(pn->name, nmtoken, len) == 0)
 	    return true;
@@ -852,6 +855,13 @@ void register_notation(const char *nmtoken, size_t len)
     assert(nmtoken != NULL);
     if (len == NTS) len = strlen(nmtoken);
     assert(len > 0U);
+    
+    if (is_notation(nmtoken, len)) {
+        /*
+         * Name is already known and registered - nothing to do.
+         */
+        return;
+    }
     
     for (k = 0U; k < len; ++k) {
 	if (!ISNMCHAR(nmtoken[k]))
