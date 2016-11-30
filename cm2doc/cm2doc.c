@@ -2465,7 +2465,7 @@ int main(int argc, char *argv[])
     const char *css_arg          = NULL;
     const char *dgr_arg          = NULL;
 
-    cmark_option_t cmark_options = CMARK_OPT_DEFAULT;
+    cmark_option_t cmark_options = CMARK_OPT_NORMALIZE;
     unsigned       rast_options  = 0U;
     bool doing_rast              = false;
     unsigned repl_file_count     = 0U;
