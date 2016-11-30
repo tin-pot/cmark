@@ -1262,148 +1262,152 @@ static int S_render_node_esis(cmark_node *node,
                               cmark_event_type ev_type,
                               ESIS_Port *to)
 {
-  cmark_delim_type delim;
-  bool entering = (ev_type == CMARK_EVENT_ENTER);
-  char buffer[100];
-  
-  const ESIS_CB  *esis_cb = to->cb;
-  ESIS_UserData   esis_ud = to->ud;
+    cmark_delim_type delim;
+    bool entering = (ev_type == CMARK_EVENT_ENTER);
+    char buffer[100];
 
-  if (entering) {
+    const ESIS_CB  *esis_cb = to->cb;
+    ESIS_UserData   esis_ud = to->ud;
+
+    if (!entering) {
+	if (node->first_child) {
+	    DO_END(node->type);
+	}
+	return 1;
+    }
+    
     switch (node->type) {
     case CMARK_NODE_TEXT:
     case CMARK_NODE_HTML_BLOCK:
     case CMARK_NODE_HTML_INLINE:
-      if (node->type == CMARK_NODE_HTML_BLOCK || node->type == CMARK_NODE_HTML_INLINE) {
-	DO_ATTR("type", "HTML", NTS);
-	DO_ATTR("display", 
-	            node->type == CMARK_NODE_HTML_BLOCK ? "block" : "inline", NTS);
-      }
-      DO_START(node->type);
-      DO_CDATA(node->as.literal.data, node->as.literal.len);
-      DO_END(node->type);
-      break;
+	if (node->type != CMARK_NODE_TEXT) {
+	    DO_ATTR("type", "HTML", NTS);
+	    DO_ATTR("display", node->type == CMARK_NODE_HTML_BLOCK ? 
+		    "block" : "inline", NTS);
+	}
+	DO_START(node->type);
+	DO_CDATA(node->as.literal.data, node->as.literal.len);
+	DO_END(node->type);
+	break;
 
     case CMARK_NODE_LIST:
-      switch (cmark_node_get_list_type(node)) {
-      case CMARK_ORDERED_LIST:
-        DO_ATTR("type", "ordered", NTS); 
-        sprintf(buffer, "%d", cmark_node_get_list_start(node));
-        DO_ATTR("start", buffer, NTS);
-        delim = cmark_node_get_list_delim(node);
-        DO_ATTR("delim", (delim == CMARK_PAREN_DELIM) ?
-                              "paren" : "period", NTS);
-        break;
-      case CMARK_BULLET_LIST:
-        DO_ATTR("type", "bullet", NTS);
-        break;
-      default:
-        break;
-      }
-      DO_ATTR("tight", cmark_node_get_list_tight(node) ?
-                                            "true" : "false", NTS);
-      DO_START(node->type);
-      break;
+	switch (cmark_node_get_list_type(node)) {
+	case CMARK_ORDERED_LIST:
+	    DO_ATTR("type", "ordered", NTS); 
+	    sprintf(buffer, "%d", cmark_node_get_list_start(node));
+	    DO_ATTR("start", buffer, NTS);
+	    delim = cmark_node_get_list_delim(node);
+	    DO_ATTR("delim", (delim == CMARK_PAREN_DELIM) ?
+		"paren" : "period", NTS);
+	    break;
+	case CMARK_BULLET_LIST:
+	    DO_ATTR("type", "bullet", NTS);
+	    break;
+	default:
+	    break;
+	}
+	DO_ATTR("tight", cmark_node_get_list_tight(node) ?
+	    "true" : "false", NTS);
+	DO_START(node->type);
+	break;
 
     case CMARK_NODE_HEADING:
-      sprintf(buffer, "%d", node->as.heading.level);
-      DO_ATTR("level", buffer, NTS);
-      DO_START(node->type);
-      break;
+	sprintf(buffer, "%d", node->as.heading.level);
+	DO_ATTR("level", buffer, NTS);
+	DO_START(node->type);
+	break;
 
     case CMARK_NODE_CODE:
     case CMARK_NODE_CODE_BLOCK:
-      /*
-       * If the info string (for code block) rsp the data string (for
-       * inline code) has the form:
-       *
-       *     ( { S } , name , "|" , suffix )
-       *
-       * where *S* is `SP` or `TAB`, *name* is the name of a known
-       * notation, and *suffix* any string, then we convert the
-       * code element into a custom element.
-       *
-       * What if the info/data string is nevertheless the intended
-       * content and this conversion should not take place?
-       *
-       *     ( { S } , "|", name , "|" , suffix )
-       */
-      {
-	cmark_node_type    nt = node->type;
-	struct infosplit   split;
-	const char        *info, *data;
-	size_t             ilen,  dlen;
-	const bool         is_inline = (nt == CMARK_NODE_CODE);
-	
-        info = node->as.code.info.data;
-        ilen = node->as.code.info.len;
-        
-	if (infosplit(&split, info, ilen)) {
-	    /*
-	     * Use split.name as notation name,
-	     * and if inline, split.suffix as content or (if block)
-	     * suffix as extra info.
-	     */
-	    nt = NODE_MARKUP;
-	    DO_ATTR("notation", split.name, split.nlen);
-	    DO_ATTR("display",  (is_inline) ? "inline" : "block", NTS);
-	    if (is_inline) {
-	        data = split.suffix;
-	        dlen = split.slen;
-            } else {
-                data = node->as.code.literal.data;
-                dlen = node->as.code.literal.len;
-	        if (split.slen > 0U)
-	            DO_ATTR("info", split.suffix, split.slen);
-            }
-	} else {
-	    /*
-	     * Regular code element, if inline use info as content,
-	     * if block it is the info attribute.
-	     */
-            if (is_inline) {
-                data = split.suffix;
-                dlen = split.slen;
-            } else {
-                data = node->as.code.literal.data;
-                dlen = node->as.code.literal.len;
-                if (split.slen > 0U)
-                    DO_ATTR("info", split.suffix, split.slen);
-            }
-	}
+	/*
+	 * If the info string (for code block) rsp the data string (for
+	 * inline code) has the form:
+	 *
+	 *     ( { S } , name , "|" , suffix )
+	 *
+	 * where *S* is `SP` or `TAB`, *name* is the name of a known
+	 * notation, and *suffix* any string, then we convert the
+	 * code element into a custom element.
+	 *
+	 * What if the info/data string is nevertheless the intended
+	 * content and this conversion should not take place?
+	 *
+	 *     ( { S } , "|", name , "|" , suffix )
+	 */
+	{
+	    cmark_node_type    nt = node->type;
+	    struct infosplit   split;
+	    const char        *info, *data;
+	    size_t             ilen,  dlen;
+	    const bool         is_inline = (nt == CMARK_NODE_CODE);
 
-	DO_START(nt);
-	DO_CDATA(data, dlen);
-	DO_END(nt);
-      }
-      break;
+	    info = node->as.code.info.data;
+	    ilen = node->as.code.info.len;
+
+	    if (infosplit(&split, info, ilen)) {
+		/*
+		 * Use split.name as notation name,
+		 * and if inline, split.suffix as content or (if block)
+		 * suffix as extra info.
+		 */
+		nt = NODE_MARKUP;
+		DO_ATTR("notation", split.name, split.nlen);
+		if (is_inline) {
+		    DO_ATTR("display", "inline", 6U);
+		    data = split.suffix;
+		    dlen = split.slen;
+		} else {
+		    DO_ATTR("display", "block", 5U);
+		    data = node->as.code.literal.data;
+		    dlen = node->as.code.literal.len;
+		    if (split.slen > 0U)
+			DO_ATTR("info", split.suffix, split.slen);
+		}
+	    } else {
+		/*
+		 * Regular code element, if inline use info as content,
+		 * if block it is the info attribute.
+		 */
+		if (is_inline) {
+		    data = split.suffix;
+		    dlen = split.slen;
+		} else {
+		    data = node->as.code.literal.data;
+		    dlen = node->as.code.literal.len;
+		    if (split.slen > 0U)
+			DO_ATTR("info", split.suffix, split.slen);
+		}
+	    }
+
+	    DO_START(nt);
+	    DO_CDATA(data, dlen);
+	    DO_END(nt);
+	}
+	break;
 
     case CMARK_NODE_LINK:
     case CMARK_NODE_IMAGE:
-      DO_ATTR("destination",
-	                 node->as.link.url.data, node->as.link.url.len);
-      DO_ATTR("title", node->as.link.title.data,
-                                               node->as.link.title.len);
-      DO_START(node->type);
-      break;
+	DO_ATTR("destination",
+	    node->as.link.url.data, node->as.link.url.len);
+	DO_ATTR("title", node->as.link.title.data,
+	    node->as.link.title.len);
+	DO_START(node->type);
+	break;
 
     case CMARK_NODE_HRULE:
     case CMARK_NODE_SOFTBREAK:
     case CMARK_NODE_LINEBREAK:
-      DO_START(node->type);
-      DO_END(node->type);
-      break;
+	DO_START(node->type);
+	DO_END(node->type);
+	break;
 
     case CMARK_NODE_DOCUMENT:
     default:
-      DO_START(node->type);
-      break;
-    } /* entering switch */
-  } else if (node->first_child) { /* NOT entering */
-    DO_END(node->type);
-  }
+	DO_START(node->type);
+	break;
+    } /* switch */
 
-  return 1;
+    return 1;
 }
 
 char *cmark_render_esis(cmark_node *root, ESIS_Port *to)
@@ -2369,8 +2373,8 @@ int parse_cmark(FILE *from, ESIS_Port *to, cmark_option_t options,
     if (from != NULL)
 	while ((bytes = prep(buffer, sizeof buffer,from)) > 0) {
 	    /*
-	    * Read and parse the input file block by block.
-	    */
+	     * Read and parse the input file block by block.
+	     */
 	    size_t hbytes = 0U;
 
 	    if (in_header) {
@@ -2381,9 +2385,9 @@ int parse_cmark(FILE *from, ESIS_Port *to, cmark_option_t options,
 		hbytes = do_meta_lines(buffer, sizeof buffer, to);
 
 		/*
-		* Override meta-data from meta-lines with meta-data
-		* given in command-line option arguments, eg `--title`.
-		*/
+		 * Override meta-data from meta-lines with meta-data
+		 * given in command-line option arguments, eg `--title`.
+		 */
 		if (meta != NULL)
 		    for (imeta = 0; meta[2*imeta] != NULL; ++imeta)
 			cb->attr(ud, meta[2*imeta+0], meta[2*imeta+1],
