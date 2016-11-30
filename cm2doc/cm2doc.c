@@ -721,9 +721,9 @@ void set_repl(struct taginfo_ *pti,
     if (nt == NODE_MARKUP) {
         int i;
         size_t ai, vi;
-        for (i = 0; (ai = pti->atts[2*i]) != 0U; i += 2) {
+        for (i = 0; (ai = pti->atts[i+0]) != 0U; i += 2) {
             if (strcmp(octetbuf_at(&text_buf, ai), "notation") == 0 &&
-                    (vi = pti->atts[2*i+1]) != 0U) {
+                    (vi = pti->atts[i+1]) != 0U) {
                 /*
                  * A rule for the `MARKUP` element mentions a
                  * value for the `notation` attribute.
