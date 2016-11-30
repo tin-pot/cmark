@@ -26,38 +26,7 @@ CommonMark node types:
 /*===== PROLOG -======================================================*/
 
 @prolog
-{<!DOCTYPE  HTML  PUBLIC "ISO/IEC 15445:2000//DTD HTML//EN" [
-
-<!NOTATION HTML  PUBLIC "ISO/IEC 15445:2000//NOTATION
-                         HyperText Markup Language (HTML)//EN">
-<!NOTATION Z     PUBLIC "ISO/IEC 13568:2002//NOTATION
-                         Z formal specification notation -
-                         Syntax, type system and semantics//EN">
-<!NOTATION EBNF  PUBLIC "ISO/IEC 14977:1996//NOTATION
-                         Extended BNF//EN">
-<!NOTATION VDM   PUBLIC "ISO/IEC 13817-1:1996//NOTATION
-                         Vienna Development Method -
-                         Specification Language -
-                         Base Language//EN">
-<!NOTATION C90   PUBLIC "ISO/IEC 9899:1990//NOTATION
-                         Programming languages -
-                         C//EN">
-<!NOTATION C11   PUBLIC "ISO/IEC 9899:2011//NOTATION
-                         Programming languages -
-                         C//EN">
-<!NOTATION ASN.1 PUBLIC "ISO/IEC 8824-1:1995//NOTATION 
-                         Specification of Abstract Syntax Notation One
-                         (ASN.1)//EN">
-<!NOTATION Ada95 PUBLIC "ISO 8652:1995//NOTATION
-                         Programming languages -
-                         Ada//EN">
-
-    <!ELEMENT  MARKUP - - CDATA >
-
-    <!ATTLIST  MARKUP
-      notation NOTATION (HTML|Z|EBNF|VDM|C90|C11|ASN.1|Ada95) #REQUIRED
-      display  (inline|block)    #REQUIRED> ] >
-
+{<!DOCTYPE  HTML  PUBLIC "ISO/IEC 15445:2000//DTD HTML//EN">
 <HTML><HEAD>
  <META http-equiv="Content-Type" content="text/html; charset=UTF-8">
  <LINK rel="stylesheet"       type="text/css" href="$:CM.css">
@@ -66,7 +35,10 @@ CommonMark node types:
          $:CM.doc.v
      )">
  <TITLE>$:DC.title</TITLE>
- <SCRIPT src="ASCIIMathML.js"></SCRIPT>
+ <!-- SCRIPT src="ASCIIMathML.js"></SCRIPT -->
+ <SCRIPT src=
+"https://cdn.mathjax.org/mathjax/latest/MathJax.js?config=AM_HTMLorMML">
+ </SCRIPT>
 </HEAD>} +
 
 /*===== EPILOG =======================================================*/
@@ -205,4 +177,5 @@ MARKUP[notation][info][display=block]
 MARKUP[notation=HTML][display=inline]
       - / -
 */
-MARKUP[notation=Z][display=inline] {<ZED><![CDATA[} / {]]></ZED>}
+MARKUP[notation=M][display=inline] {`} / {`}
+MARKUP[notation=M][display=block] {<P class=center>`} / {`</P>}
