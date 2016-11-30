@@ -905,11 +905,13 @@ void repl_Start(ESIS_UserData ud, cmark_node_type nt)
     }
     
     /*
-     * Let the cdata handler know if the current
+     * Let the cdata handler know if HTML markup or current
      * replacement definition dictates literal cdata output ...
      */
      
-    is_cdata = rp != NULL && rp->is_cdata;
+    is_cdata = (rp != NULL && rp->is_cdata) ||
+               (nt == CMARK_NODE_HTML_BLOCK) ||
+               (nt == CMARK_NODE_HTML_INLINE);
     
     /*
      * If no matching definition was found, or no start string was
@@ -938,30 +940,13 @@ void repl_Cdata(ESIS_UserData ud, const char *cdata, size_t len)
     if (len == NTS) len = strlen(cdata);
     p = cdata;
     
-    /*
-     * We do a "houdini" below (to "escape" LESS-THAN SIGN etc)
-     * on the character data string unless the replacement definition
-     * indicated otherwise (using `<![CDATA[` .. `]]>`).
-     *
-     * This fact is recorded in the `is_cdata` member of the 
-     * corresponding `struct repl_`.
-     */
-    
-    if (!is_cdata  && nt == CMARK_NODE_HTML_BLOCK ||
-                      nt == CMARK_NODE_HTML_INLINE) {
+    if (!is_cdata) {
         /*
-         * HTML inline or block nodes are special:
-         * We output their content (which is the actual
-         * HTML markup!) literally.
-         */
-
-	for (k = 0U; k < len; ++k)
-	    PUTC(p[k]);
-    } else if (!is_cdata) {
-        /*
-         * The content of every other node is written "escaped",
-         * unless the replacement definion places a CDATA section
-         * around it.
+         * For HTML content and elements declared to be CDATA by
+         * the replacement definition, `is_cdata` should be true
+         * here.
+         *
+         * The content of every other node is written "escaped".
          */
          
 	if (!houdini_init) {
