@@ -695,6 +695,7 @@ const char* att_val(const char *name, unsigned depth)
 
 /*== Replacement Definitions =========================================*/
 
+void register_notation(const char *nmtoken, size_t len);
 
 /*
  * Set the replacement text for a node type.
@@ -716,6 +717,22 @@ void set_repl(struct taginfo_ *pti,
     rp->next     = repl_tab[nt];
     
     repl_tab[nt] = rp;
+    
+    if (nt == NODE_MARKUP) {
+        int i;
+        size_t ai, vi;
+        for (i = 0; (ai = pti->atts[2*i]) != 0U; i += 2) {
+            if (strcmp(octetbuf_at(&text_buf, ai), "notation") == 0 &&
+                    (vi = pti->atts[2*i+1]) != 0U) {
+                /*
+                 * A rule for the `MARKUP` element mentions a
+                 * value for the `notation` attribute.
+                 */
+                const char *s = octetbuf_at(&text_buf, vi);
+                register_notation(s, NTS);
+            }
+        }
+    }
 }
 
 /*--------------------------------------------------------------------*/
@@ -848,51 +865,10 @@ void register_notation(const char *nmtoken, size_t len)
     notations = pn;
 }
 
-void check_notation(const char *data, size_t len)
-{
-    static const char mdo[]      = "<!";
-    static const size_t mdolen   = sizeof mdo - 1U;
-    static const char nword[]    = "NOTATION";
-    static const size_t nwordlen = sizeof nword - 1U;
-    
-    size_t k;
-    const char *nmtoken;
-    
-    if (len < mdolen || strncmp(data, mdo, mdolen) != 0)
-	return;
-	
-    for (k = mdolen; k < len; ++k)
-	if (ISSPACE(data[k]))
-	    continue;
-	else if (k + nwordlen >= len || strncmp(data+k, nword,
-	                                                 nwordlen) != 0)
-	    return;
-	else
-	    break;
-
-    if (k + nwordlen >= len)
-	return;
-	
-    for (k += nwordlen; k < len; ++k)
-	if (!ISSPACE(data[k]))
-	    break;
-	    
-    if (k >= len)
-	return;
-	
-    nmtoken = data+k;
-    for ( ; k < len; ++k)
-	if (ISSPACE(data[k]))
-	    break;
-    
-    register_notation(nmtoken, k - (size_t)(nmtoken - data));
-}
-
 /*
- * These are both hackish solutions to transmit state information
+ * The `is_cdata` flag is a rough solution to transmit state information
  * from the start-tag handler to the subsequent cdata handler ...
  */
-bool watch_notation = false;
 bool is_cdata = false;
 
 void repl_Attr(ESIS_UserData ud,
@@ -908,18 +884,10 @@ void repl_Start(ESIS_UserData ud, cmark_node_type nt)
     close_atts(nt);
 
     /*
-     * HACK:  
-     * Check if this could actually be a NOTATION markup declaration,
-     * and if so, remember this for the time the HTML (block or inline)
-     * character content arrives -- the `<!NOTATION` string would be
-     * at the start ...
-     */
-    watch_notation = (nt == CMARK_NODE_HTML_BLOCK || nt == CMARK_NODE_HTML_INLINE);
-
-    /*
      * Find matching replacement definition, and output the
      * substituted "start string".
      */
+     
     if (nt != CMARK_NODE_NONE && (rp = select_rule(nt)) != NULL) {
 	if (rp->repl[0] != NULL) {
 	    put_repl(rp->repl[0]);
@@ -927,9 +895,10 @@ void repl_Start(ESIS_UserData ud, cmark_node_type nt)
     }
     
     /*
-     * HACK: Let the cdata handler know if the current
+     * Let the cdata handler know if the current
      * replacement definition dictates literal cdata output ...
      */
+     
     is_cdata = rp != NULL && rp->is_cdata;
     
     /*
@@ -967,20 +936,6 @@ void repl_Cdata(ESIS_UserData ud, const char *cdata, size_t len)
      * This fact is recorded in the `is_cdata` member of the 
      * corresponding `struct repl_`.
      */
-     
-/*
- * TODO: "Recognizing" <!NOTATION ...> declarations in _CommonMark_
- * text is an ugly hack. We need something simpler and hopefully
- * better. Even <?mkd notation foo> would be nicer, clearer, and better!
- *
- * The *first* CDATA line in a CommonMark "HTML" element would contain
- * the MDO right at the start -- and the "HTML" element is just
- * a *notation declaration* in disguise ... 
- */
-    if (watch_notation) {
-	check_notation(p, len);
-	watch_notation = false;
-    }
     
     if (!is_cdata  && nt == CMARK_NODE_HTML_BLOCK ||
                       nt == CMARK_NODE_HTML_INLINE) {
@@ -989,6 +944,7 @@ void repl_Cdata(ESIS_UserData ud, const char *cdata, size_t len)
          * We output their content (which is the actual
          * HTML markup!) literally.
          */
+
 	for (k = 0U; k < len; ++k)
 	    PUTC(p[k]);
     } else if (!is_cdata) {
@@ -1037,7 +993,7 @@ void repl_End(ESIS_UserData ud, cmark_node_type nt)
     }
     
     /*
-     * HACK: Reset the `is_cdata` switch. This will only work
+     * Reset the `is_cdata` switch. This will only work
      * if no other element is nested inside an element for
      * which the replacement definition indicated `<![CDATA[`
      * (but this seems a reasonable assumption after all!).
@@ -2572,6 +2528,7 @@ int main(int argc, char *argv[])
     
     prep_init(dgr_arg);
     
+#if 0
     {
 	static const char *const notations[] = {
 	    "HTML",	"Z",    "EBNF",	    "VDM",
@@ -2583,6 +2540,7 @@ int main(int argc, char *argv[])
 	for (i = 0; notations[i] != NULL; ++i)
 	    register_notation(notations[i], NTS);
     }
+#endif
     
     /*
      * If no replacement file was mentioned (and processed),
