@@ -1826,7 +1826,7 @@ int P_repl_text_pair(int ch, char *repl_text[2])
 }
 
 
-int P_name(int ch, cmark_node_type *pnt, char name[NAMELEN+1], int fold)
+int P_name(int ch, cmark_node_type *pnt, char name[NAMELEN+1], bool fold)
 {
     char *p = name;
     cmark_node_type nt;
@@ -1875,7 +1875,7 @@ int P_rni_name(int ch, enum rn_ *prn, char name[NAMELEN+1])
     assert(ch == '@');
     
     ch = GETC(ch);
-    ch = P_name(ch, NULL, name, 1);
+    ch = P_name(ch, NULL, name, true);
     
     if (prn == NULL)
 	return ch;
@@ -1914,7 +1914,7 @@ int P_sel(int ch, struct taginfo_ taginfo[1])
 	
 	ch = GETC(ch);
         P_S(ch);
-	ch = P_name(ch, NULL, name, 0);
+	ch = P_name(ch, NULL, name, false);
 	P_S(ch);
 	if (ch == '=') {
 	    ch = GETC(ch);
@@ -1924,7 +1924,7 @@ int P_sel(int ch, struct taginfo_ taginfo[1])
 		ch = P_attr_val_lit(ch, &text_buf, ch);
 	    } else if (ISNMSTART(ch)) {
 	        char val[NAMELEN+1];
-	        ch = P_name(ch, NULL, val, 0);
+	        ch = P_name(ch, NULL, val, false);
 	        val_idx = octetbuf_size(&text_buf);
 	        octetbuf_push_s(&text_buf, val);
 	        octetbuf_push_c(&text_buf, NUL);
@@ -1950,16 +1950,29 @@ int P_sel(int ch, struct taginfo_ taginfo[1])
     return ch;
 }
 
+int P_cdata_flag(int ch, bool *is_cdata)
+{
+    static const char s_cdata[]  = "CDATA",
+                      s_rcdata[] = "RCDATA";
+
+    P_S(ch);
+    if (ISNMSTART(ch)) {
+        char nmbuf[NAMELEN+1];
+
+        ch = P_name(ch, NULL, nmbuf, true);
+        if (strcmp(nmbuf, s_cdata) == 0)
+            *is_cdata = true;
+        else
+            syntax_error("Expected 'CDATA', got '%s'\n", nmbuf);
+    }
+    return ch;
+}
+
 int P_sel_rule(int ch)
 {
     struct taginfo_ taginfo[1];
     char *repl_texts[2];
     bool is_cdata = false;
-    size_t len;
-    static const char cdata_start[] = "<![CDATA[",
-                      cdata_end[]   = "]]>";
-    const size_t len_start = sizeof cdata_start - 1U,
-                 len_end   = sizeof cdata_end - 1U;
 
     if (!ISNMSTART(ch)) {
         syntax_error("Expected name, got '%c'\n", ch);
@@ -1968,23 +1981,8 @@ int P_sel_rule(int ch)
     }
 
     ch = P_sel(ch, taginfo);
+    ch = P_cdata_flag(ch, &is_cdata);
     ch = P_repl_text_pair(ch, repl_texts);
-
-    /*
-     * If start replacement text ends in `<![CDATA[` and
-     * end replacement text starts with `]]>` then it looks
-     * like we better produce CDATA ...
-     */
-    if (repl_texts[0] != NULL &&
-            (len = strlen(repl_texts[0])) >= len_start &&
-            strncmp(repl_texts[0] + len - len_start,
-                    cdata_start, len_start) == 0 &&
-            repl_texts[1] != NULL &&
-            strncmp(repl_texts[1],
-                    cdata_end, len_end) == 0)
-    {
-        is_cdata = true;
-    }
             
     set_repl(taginfo, repl_texts, is_cdata);
 
