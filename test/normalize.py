@@ -1,16 +1,19 @@
 # -*- coding: utf-8 -*-
-from html.parser import HTMLParser
+# from html.parser import HTMLParser
+from HTMLParser import HTMLParser
+
 import urllib
 
 try:
-    from html.parser import HTMLParseError
+    from HTMLParser import HTMLParseError
 except ImportError:
     # HTMLParseError was removed in Python 3.5. It could never be
     # thrown, so we define a placeholder instead.
     class HTMLParseError(Exception):
         pass
 
-from html.entities import name2codepoint
+# from html.entities import name2codepoint
+from htmlentitydefs import name2codepoint
 import sys
 import re
 import cgi
