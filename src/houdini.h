@@ -35,7 +35,8 @@ extern bufsize_t houdini_unescape_ent(cmark_strbuf *ob, const uint8_t *src,
                                       bufsize_t size);
 extern int houdini_escape_html(cmark_strbuf *ob, const uint8_t *src,
                                bufsize_t size);
-extern int houdini_escape_html0(cmark_strbuf *ob, const uint8_t *src,
+/* mh@tin-pot.net - Used by cm2doc (for now) ... */
+extern CMARK_EXPORT int houdini_escape_html0(cmark_strbuf *ob, const uint8_t *src,
                                 bufsize_t size, int secure);
 extern int houdini_unescape_html(cmark_strbuf *ob, const uint8_t *src,
                                  bufsize_t size);

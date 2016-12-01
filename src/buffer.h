@@ -26,12 +26,18 @@ extern unsigned char cmark_strbuf__initbuf[];
 #define CMARK_BUF_INIT(mem)                                                    \
   { mem, cmark_strbuf__initbuf, 0, 0 }
 
+/*
+ * mh@tin-pot.net -
+ * Some exported functions needed for use with houdini (for now).
+ */
+
 /**
  * Initialize a cmark_strbuf structure.
  *
  * For the cases where CMARK_BUF_INIT cannot be used to do static
  * initialization.
  */
+CMARK_EXPORT
 void cmark_strbuf_init(cmark_mem *mem, cmark_strbuf *buf,
                        bufsize_t initial_size);
 
@@ -43,6 +49,7 @@ void cmark_strbuf_grow(cmark_strbuf *buf, bufsize_t target_size);
 void cmark_strbuf_free(cmark_strbuf *buf);
 void cmark_strbuf_swap(cmark_strbuf *buf_a, cmark_strbuf *buf_b);
 
+CMARK_EXPORT
 bufsize_t cmark_strbuf_len(const cmark_strbuf *buf);
 
 int cmark_strbuf_cmp(const cmark_strbuf *a, const cmark_strbuf *b);
@@ -64,6 +71,7 @@ void cmark_strbuf_putc(cmark_strbuf *buf, int c);
 void cmark_strbuf_put(cmark_strbuf *buf, const unsigned char *data,
                       bufsize_t len);
 void cmark_strbuf_puts(cmark_strbuf *buf, const char *string);
+CMARK_EXPORT
 void cmark_strbuf_clear(cmark_strbuf *buf);
 
 bufsize_t cmark_strbuf_strchr(const cmark_strbuf *buf, int c, bufsize_t pos);

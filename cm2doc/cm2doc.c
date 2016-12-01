@@ -930,7 +930,7 @@ void repl_Start(ESIS_UserData ud, cmark_node_type nt)
 void repl_Cdata(ESIS_UserData ud, const char *cdata, size_t len)
 {
     static cmark_mem stdmem          = { calloc, realloc, free };
-    static cmark_strbuf houdini      = CMARK_BUF_INIT(NULL);
+    static cmark_strbuf houdini      = { 0 };
     static int          houdini_init = 0;
     
     const cmark_node_type nt = current_nt();
